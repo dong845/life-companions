@@ -1,0 +1,82 @@
+# Profile & journal schemas
+
+Canonical shapes for the files under `COMPANION_HOME`. **Don't hand-edit these** —
+go through `companion.py` so writes stay atomic and consent-gated. `schema_version`
+gates future migrations. Rule: an unknown/declined field is an explicit `null`
+with a sibling `*_known:false` where relevant, so it is never re-asked.
+
+## `profile.yaml` — slow-changing identity + preferences
+```yaml
+schema_version: 1
+onboarding_complete: true
+created: 2026-07-17
+updated: 2026-07-17          # bumps on every write
+identity:
+  name: 小明                  # example persona (not a real user)
+  pronouns: null             # optional; ask, don't infer
+  timezone: Asia/Shanghai    # drives daily timing + crisis-helpline locale
+  locale: zh                 # output language: zh | en | bilingual
+birth:                       # sensitive — gated by consent.birth
+  date: 1993-04-12           # ISO solar/公历; null if declined
+  time: "07:35"              # local clock time; null if unknown
+  time_known: true           # explicit false ⇒ never re-ask
+  gender: male               # male|female — needed for BaZi 大运 direction (阳男阴女…)
+  place: "Beijing, CN"
+  lat: 39.9042
+  lon: 116.4074
+  tz_at_birth: "Asia/Shanghai"
+  conventions:               # frozen so charts regenerate identically
+    true_solar_time: false   # default civil time; TST is an offered toggle
+    zishi_rule: late         # 早/晚子时 for 23:00–24:00 births
+preferences:
+  tone: warm-direct
+  advice_style: options      # prefer AskUserQuestion selectable options
+  skepticism: high           # keep "reflective, not predictive" explicit
+  checkin_cadence: daily
+context:                     # free-form, model-maintained, sensitive
+  career: "在读研究生;在想毕业后的方向"
+  values: ["honesty", "craft"]
+modules_enabled: [journal, destiny]
+```
+
+## `consent.yaml` — per-category, revocable
+```yaml
+birth:         {granted: true,  date: 2026-07-17}
+relationships: {granted: null,  date: null}     # null = not yet asked
+mood:          {granted: true,  date: 2026-07-17}
+```
+
+## `journal/YYYY-MM.md` — human-readable (one file per month)
+```markdown
+## 2026-07-17  (Thu) · mood 6/10 · energy: low
+tags: career, interview-anxiety
+
+这周有点累。散步之后好一些。明天有场面试，有点紧张。
+
+> companion: Second time this month movement reset your afternoon. Front-load it?
+```
+The `> companion:` line records the reflection you gave, so continuity is
+auditable and you don't repeat yourself.
+
+## `journal/index.jsonl` — machine mirror (written atomically with the prose)
+```json
+{"date":"2026-07-17","mood":6,"energy":"low","tags":["career"],"themes":["rejection","recovery-via-movement"],"module_touch":["career"],"people":[],"crisis_flag":false,"file":"journal/2026-07.md","offset":142}
+```
+`mood` is `null` for text-only entries or when `consent.mood` is false;
+`crisis_flag` lets `safety_scan`/`trends` scan cheaply; `people` powers
+relationship pattern-tracking; `offset` points back into the prose.
+
+## `state/continuity.yaml` — loaded first every turn
+```yaml
+rolling_summary: "最近在准备面试；散步能稳定情绪；…"
+open_threads:
+  - {thread: "周四的面试", opened: 2026-07-17, status: open}
+recent_moods: [6, 4, 7]
+updated: 2026-07-17
+```
+
+## `state/modules/*.yaml` — per-module cache
+Each module **reads** `profile.yaml`+`continuity.yaml` but **writes only its own**
+file (`destiny.yaml` = cached natal chart computed once; `career.yaml` = vectors;
+`relationships.yaml` = tracked patterns). This ownership rule prevents modules
+from clobbering each other.

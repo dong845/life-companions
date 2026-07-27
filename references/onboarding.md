@@ -35,8 +35,18 @@ Then collect:
 - **Birth time** (HH:MM) — offer "know it exactly / roughly / don't know". If
   unknown, that's fine: BaZi still works; Western rising/houses won't. Store
   `time_known` explicitly so it's never re-asked.
-- **Birthplace** (city) — for longitude (True Solar Time toggle) and any Western
-  chart. Approximate is OK.
+- **Birthplace** (city) — store the name in `birth.place`, **and immediately derive
+  and store `birth.lat`, `birth.lon`, and `birth.tz_at_birth`** from it. A city's
+  coordinates and its UTC offset are stable public reference facts (not fabrication,
+  not prediction — this is a lookup, like knowing Beijing is ~39.9°N/116.4°E, UTC+8),
+  so fill them rather than leaving them null. **`tz_at_birth` must be the offset
+  actually in effect at that date and place** — mind historical DST and timezone
+  changes (e.g. China has had no DST since 1991 → +8; a summer birth in Europe/US is
+  usually +1h from the standard offset; some countries shifted their zone over the
+  decades). Without these three, **the full Western natal chart can never compute the
+  Ascendant/houses and BaZi can't offer True Solar Time** — so this is the step that
+  makes those features actually work. If you're unsure of the exact offset (DST edge,
+  an obscure place), store what you can and note `tz_at_birth` needs confirming.
 - **Gender** (male/female) — needed for BaZi 大运 direction (阳男阴女顺行…). Ask
   plainly; store `birth.gender`.
 

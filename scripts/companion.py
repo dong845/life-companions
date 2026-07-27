@@ -222,16 +222,30 @@ def cmd_consent(args):
 
 
 def cmd_continuity(args):
-    """Read or merge into state/continuity.yaml (the always-loaded working memory)."""
+    """Read, merge into, or replace keys of state/continuity.yaml (the working memory).
+
+    --merge-json  deep-merges (lists append-UNION) — use to ACCRETE: add a thread,
+                  append a mood. It cannot edit or remove an existing list item.
+    --replace-json OVERWRITES each given top-level key outright — use to CORRECT or
+                  PRUNE: fix a stale open_thread, drop a resolved one, rewrite the
+                  rolling_summary. Send the full intended value of each key you touch.
+    Both bump `updated`. Replace wins if somehow both are given for a key."""
     home = home_dir(args.home)
     p = _paths(home)
     cont = _load_yaml(p["continuity"], {})
+    touched = []
     if args.merge_json:
         patch = json.loads(args.merge_json)
         _deep_merge(cont, patch)
+        touched += list(patch.keys())
+    if getattr(args, "replace_json", None):
+        rep = json.loads(args.replace_json)
+        cont.update(rep)                       # overwrite top-level keys wholesale
+        touched += list(rep.keys())
+    if touched:
         cont["updated"] = _today()
         _save_yaml(p["continuity"], cont)
-        print(json.dumps({"ok": True, "updated_keys": list(patch.keys())}, ensure_ascii=False))
+        print(json.dumps({"ok": True, "updated_keys": touched}, ensure_ascii=False))
     else:
         print(yaml.dump(cont, allow_unicode=True, sort_keys=False))
 
@@ -266,7 +280,8 @@ def cmd_followups(args):
     print(json.dumps({"due": due, "count": len(due),
                       "_note": "Gently follow up on these (nudge, don't nag); after "
                                "following up, set last_nudged=today (or status=done) via "
-                               "`continuity --merge-json` re-sending the full open_threads list."},
+                               "`continuity --replace-json` with the full edited open_threads "
+                               "list (NOT --merge-json, which would duplicate the thread)."},
                      ensure_ascii=False, indent=2))
 
 
@@ -498,7 +513,9 @@ def main():
 
     ct = sub.add_parser("continuity")
     ct.add_argument("--merge-json", default=None,
-                    help="merge a JSON patch into continuity.yaml; omit to print current")
+                    help="deep-merge a JSON patch (lists append-union); to ACCRETE. Omit both to print.")
+    ct.add_argument("--replace-json", default=None,
+                    help="overwrite the given top-level keys wholesale; to CORRECT/PRUNE (e.g. edit open_threads)")
     ct.set_defaults(func=cmd_continuity)
 
     fu = sub.add_parser("followups")

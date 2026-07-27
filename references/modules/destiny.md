@@ -180,6 +180,14 @@ Offer this when the person asks for a **星盘 / natal chart / astrology reading
 八字). It is a genuine astronomical chart, not a fake — same honesty spine as BaZi:
 the sky is fact, the meaning is a lens.
 
+**First, backfill coordinates if missing.** If `birth.place` is known but
+`birth.lat`/`birth.lon`/`birth.tz_at_birth` are null (older profiles, or onboarding
+that only got the city name), **derive them from the place and persist via
+`set-profile` before computing** — otherwise the Ascendant/houses can never compute.
+City coordinates and the UTC offset in effect at that date are public reference facts,
+not fabrication; `tz_at_birth` must reflect any historical DST/zone in force then (see
+`onboarding.md` Tier 1). Only truly leave them null if the place itself is unknown.
+
 ```bash
 python3 <skill>/scripts/astro.py --natal \
   --date <birth.date> [--time <birth.time>] \
@@ -212,5 +220,7 @@ never claim one "proves" the other.
 - Any life prediction, illness/marriage/wealth certainty, or fabricated figure? →
   remove or reframe as tendency.
 - Ambiguities from the JSON surfaced? Agency language throughout?
-- Natal chart: did I read `caveats` and state every omission (rising/houses/Moon)
-  instead of guessing?
+- Natal chart: if `birth.place` was known but coords were null, did I backfill
+  `lat`/`lon`/`tz_at_birth` (so Ascendant/houses can compute) rather than silently
+  shipping a chart with no houses? Did I read `caveats` and state every omission
+  (rising/houses/Moon) instead of guessing?

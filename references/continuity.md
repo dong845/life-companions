@@ -19,10 +19,15 @@ Keep it current so it stays useful and small:
 - **Open a thread** when you promise a follow-up; **close it** when resolved.
 - **Prune** stale threads and anything no longer true. A bloated continuity file
   makes replies vaguer, not smarter.
-Write profile-level facts via `companion.py set-profile`; write continuity via
-`companion.py continuity --merge-json '{"rolling_summary":"…","open_threads":[…]}'`
-(atomic, deep-merges your patch, bumps `updated`). Run it with no `--merge-json` to
-print the current continuity.
+Write profile-level facts via `companion.py set-profile`; write continuity with the
+right verb for the job (both atomic, both bump `updated`; run with neither flag to print):
+- **`--merge-json`** deep-merges, and **lists append-UNION** — use it to *accrete*:
+  add a new thread, append a mood. It can add an item but **cannot edit or remove one**.
+- **`--replace-json`** overwrites the named top-level keys wholesale — use it to
+  *correct or prune*: rewrite `rolling_summary`, or replace the entire `open_threads`
+  list with the edited/pruned version (fix a stale thread, drop a resolved one, set a
+  `last_nudged`). Send the full intended value of each key you replace.
+  E.g. `companion.py continuity --replace-json '{"open_threads":[…the full new list…]}'`.
 
 ## Open threads = accountability, not just memory
 An `open_threads` entry isn't only something to *remember* — it's something to
@@ -38,12 +43,13 @@ open_threads:
 `companion.py followups` (run in every-turn step 4) surfaces threads that are open
 and haven't been nudged in a few days. When one is due and the moment fits, **gently
 follow up on it** ("上次你打算更新简历 —— 动了没?") — then record it with
-`continuity --merge-json`, re-sending the full `open_threads` list with that thread's
-`last_nudged` set to today (or `status: done`). This is what turns the companion from
-"remembers you" into "gently keeps you moving." **Nudge, don't nag:** at most one
-per conversation, never in a crisis or a purely light moment, and drop it the moment
-it feels like pressure. (Because `--merge-json` append-unions lists, updating a
-thread means re-sending the whole list; keep it pruned so it stays clean.)
+`continuity --replace-json`, sending the full `open_threads` list with that thread's
+`last_nudged` set to today (or `status: done`). Use **`--replace-json`, not
+`--merge-json`, for this** — merge append-unions, so a re-sent edited thread would be
+added as a *duplicate* instead of updating the original. This is what turns the
+companion from "remembers you" into "gently keeps you moving." **Nudge, don't nag:**
+at most one per conversation, never in a crisis or a purely light moment, and drop it
+the moment it feels like pressure.
 
 ## The earned callback
 Continuity's payoff is the *occasional*, well-placed "last time you mentioned…"

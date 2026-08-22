@@ -11,7 +11,7 @@ Governing rule (see safety.md): **compute honestly, interpret humbly.** The char
 is fact; the meaning is a lens.
 
 ## 1. Preconditions
-- `companion.py status` shows `birth.date` present and `consent.birth` granted?
+- `companion.py brief` shows `birth.date` present and `consent.birth` granted?
   If not → `references/onboarding.md` Tier 1 (ask consent, collect birth block).
   Birth **date** is required; **time** may be unknown (BaZi still works — you just
   omit the hour pillar and flag it).
@@ -20,7 +20,7 @@ is fact; the meaning is a lens.
 Read the birth block, then run the flagship script with the profile's frozen
 conventions:
 ```bash
-python3 <skill>/scripts/bazi.py \
+python3 $D/scripts/bazi.py \
   --date <birth.date> [--time <birth.time>] --gender <m|f> \
   [--lon <birth.lon> --true-solar-time]        # only if conventions.true_solar_time
   [--early-zishi]                               # only if conventions.zishi_rule == early
@@ -32,8 +32,15 @@ It's deterministic and fast — recompute freely (v1 doesn't cache). The JSON sp
 boundary, or a TST shift all change the read and the user deserves to know.
 
 The `cross_check_sxtwl` field is an independent confirmation of the year pillar
-(立春 boundary). If it ever disagrees with the main engine, say so and treat the
-chart as uncertain rather than papering over it.
+(立春 boundary). **Read its `agrees` field — don't compare the two ganzhi by eye.**
+It can disagree for a benign reason: sxtwl works at date granularity, so on the 立春 day
+itself it cannot know which side of the boundary a birth *time* falls on. The payload
+labels that case (`_disagreement: expected …`) and the main engine, which uses the exact
+立春 moment, stands. An **unexpected** disagreement (not on the 立春 day) is pushed into
+`ambiguities` as well — when you see it there, say so and treat the chart as uncertain
+rather than papering over it. A birth within a day of 立春 also raises its own
+`ambiguities` entry: the year pillar hinges on the minute, so the birth time matters
+more than usual — surface that.
 
 ## 3. Ground the interpretation
 Two curated, school-tagged content files back the reading — read the one you need:
@@ -124,6 +131,11 @@ demoted out of the body):
 
 **🕰️ L3 · 分阶段** *(the life-arc timeline — second comprehensiveness block; the
 piece the old output missed entirely)*
+
+> The worked example below is **illustrative formatting only** — its decade pillars are
+> not the ones any real chart will produce. Always walk the actual
+> `luck_pillars.pillars[]` from the JSON, including the direction (顺/逆行), which
+> depends on year polarity × gender.
 Walk **every** 大运 decade from `luck_pillars.pillars[]` as a table:
 `年龄·干支(白话标签) → 基调一句话 → 最吃重的1–2层面`. Mark the current decade
 `👉 当前`. Use the row's `ten_god` for the label and `favor` for valence — **but if
@@ -189,11 +201,14 @@ not fabrication; `tz_at_birth` must reflect any historical DST/zone in force the
 `onboarding.md` Tier 1). Only truly leave them null if the place itself is unknown.
 
 ```bash
-python3 <skill>/scripts/astro.py --natal \
+python3 $D/scripts/astro.py --natal \
   --date <birth.date> [--time <birth.time>] \
-  [--lat <birth.lat> --lon <birth.lon> --tz <utc_offset_hours>]   # for 上升/宫位
+  [--lat <birth.lat> --lon <birth.lon> --tz <birth.tz_at_birth>]   # for 上升/宫位
   --format json      # or text for a quick human view
 ```
+`--tz` takes the **IANA zone name** straight from the profile (`Asia/Shanghai`) — it
+resolves the historical offset for that birth moment itself and records how in
+`caveats`. A bare hour offset still works. Don't compute the DST offset by hand.
 
 **What it computes (facts):** all ten bodies + North Node in sign & degree, natal
 retrogrades, the major natal aspects, and — **only when birth time + place + tz are
@@ -224,3 +239,6 @@ never claim one "proves" the other.
   `lat`/`lon`/`tz_at_birth` (so Ascendant/houses can compute) rather than silently
   shipping a chart with no houses? Did I read `caveats` and state every omission
   (rising/houses/Moon) instead of guessing?
+- Did I read `cross_check_sxtwl.agrees` (not eyeball the two ganzhi), and surface any
+  立春-proximity ambiguity?
+- **Machine backstop:** `python3 $D/scripts/selfcheck.py --module destiny --file draft.md` — exit 1 means a blocker; fix it before sending. Passing is not proof it's honest, only that it's free of the known bad shapes.

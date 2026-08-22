@@ -12,9 +12,10 @@ one clean page and writes it for you. The tiered chat flow below is the **fallba
 when the user can't open a browser or would rather just talk. Either way the tiers
 and consent rules are the same.
 
-When you do use chat: use **AskUserQuestion selectable options** wherever there's a
-choice (this user strongly prefers picking over typing); keep free-text for names
-and dates only.
+When you do use chat: give **selectable options** wherever there's a choice — this
+person strongly prefers picking over typing. Use `AskUserQuestion` if your harness has
+it; otherwise a short **numbered list** they answer with numbers. Keep free text for
+names and dates only.
 
 ## Tier 0 — identity (always, ~4 quick things)
 Collect once, up front, before any reading:
@@ -37,16 +38,18 @@ Then collect:
   `time_known` explicitly so it's never re-asked.
 - **Birthplace** (city) — store the name in `birth.place`, **and immediately derive
   and store `birth.lat`, `birth.lon`, and `birth.tz_at_birth`** from it. A city's
-  coordinates and its UTC offset are stable public reference facts (not fabrication,
-  not prediction — this is a lookup, like knowing Beijing is ~39.9°N/116.4°E, UTC+8),
-  so fill them rather than leaving them null. **`tz_at_birth` must be the offset
-  actually in effect at that date and place** — mind historical DST and timezone
-  changes (e.g. China has had no DST since 1991 → +8; a summer birth in Europe/US is
-  usually +1h from the standard offset; some countries shifted their zone over the
-  decades). Without these three, **the full Western natal chart can never compute the
+  coordinates and its timezone are stable public reference facts (not fabrication, not
+  prediction — this is a lookup, like knowing Beijing is ~39.9°N/116.4°E in
+  Asia/Shanghai), so fill them rather than leaving them null.
+  **Store `tz_at_birth` as an IANA zone NAME** (`Asia/Shanghai`, `Europe/Amsterdam`),
+  not as a number of hours. Pass that name straight to `astro.py --tz` and it resolves
+  the offset actually in force at that birth moment — historical DST and zone changes
+  included. Do **not** work the offset out yourself; that turns a lookup into a guess,
+  and a summer European birth is the case people get wrong. (A plain offset like `8`
+  or `-5` still works if a zone name genuinely isn't determinable.)
+  Without these three, **the full Western natal chart can never compute the
   Ascendant/houses and BaZi can't offer True Solar Time** — so this is the step that
-  makes those features actually work. If you're unsure of the exact offset (DST edge,
-  an obscure place), store what you can and note `tz_at_birth` needs confirming.
+  makes those features actually work.
 - **Gender** (male/female) — needed for BaZi 大运 direction (阳男阴女顺行…). Ask
   plainly; store `birth.gender`.
 

@@ -43,6 +43,8 @@ Rules for the block:
 
 ## Pre-send self-audit (run before you deliver)
 - Did I actually research a live source, or answer from memory? (memory → stop)
+- Did I have web access at all? If not I cannot fill this block — say so and route to
+  the source, rather than reconstructing it from recall.
 - Is every threshold/deadline carrying a dated source?
 - Did I test the rule's conditions against *this* person, and ask the deciding fact
   rather than defaulting yes/no?

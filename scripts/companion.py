@@ -12,13 +12,20 @@ The model NEVER hand-edits these files; it calls this script so writes stay
 atomic, consent-gated and auditable.
 
 Subcommands:
+  doctor                    python + dependency status, and what degrades if missing
+  brief                     THE every-turn call: status + profile + consent +
+                            continuity + due follow-ups + recent entries, in one JSON
   init                      create the private home (idempotent)
-  status                    onboarding state, consent, journal counts
+  status                    onboarding state, consent, journal counts (slim `brief`)
   read-profile [--json]     dump profile.yaml for the model to load
   set-profile --merge-json  deep-merge a JSON patch into profile.yaml
   consent --set k=yes|no    record consent per category (birth/relationships/mood)
   add-entry --text ...      append a journal entry (prose + atomic index line)
+  continuity [--merge-json|--replace-json]   the rolling working memory
+  followups [--days N]      open action-threads due for a gentle nudge
+  cache --module M          per-module private cache (module writes only its own)
   trend [--days N]          descriptive journal trends (delegates to trends.py)
+  journal [--since --tag]   re-read the actual prose entries
   search [--tag --text --since --until]
   forget --birth | --month YYYY-MM | --all --yes
 """
@@ -26,7 +33,6 @@ import argparse
 import datetime
 import json
 import os
-import subprocess
 import sys
 import tempfile
 
@@ -35,14 +41,7 @@ if _HERE not in sys.path:
     sys.path.insert(0, _HERE)
 
 
-def _ensure(pkg, import_name=None):
-    import_name = import_name or pkg
-    try:
-        return __import__(import_name)
-    except ImportError:
-        subprocess.run([sys.executable, "-m", "pip", "install", "--quiet", pkg], check=True)
-        return __import__(import_name)
-
+from _deps import ensure as _ensure, report as _dep_report  # noqa: E402
 
 yaml = _ensure("PyYAML", "yaml")
 from safety_scan import scan_text  # noqa: E402
@@ -99,16 +98,62 @@ def _save_yaml(path, data):
     _atomic_write(path, yaml.dump(data, allow_unicode=True, sort_keys=False))
 
 
+# Stable identity keys for list-of-dict items. A patched item carrying one of these
+# UPDATES the existing item instead of appending a near-duplicate — otherwise editing
+# a continuity thread (set last_nudged, close it) silently produces two copies of it,
+# and the nudge logic then fires on the stale one forever.
+#
+# Deliberately only these two. `date` is NOT identity: two relationship incidents can
+# share a day, and upserting on it would silently eat one. Anything without a key here
+# appends, which is the right default for history.
+_LIST_ITEM_KEYS = ("thread", "id")
+
+
+def _item_key(x):
+    if not isinstance(x, dict):
+        return None
+    for k in _LIST_ITEM_KEYS:
+        if k in x and isinstance(x[k], (str, int)):
+            return (k, x[k])
+    return None
+
+
+def _merge_list(old, new):
+    """Append-UNION with upsert-by-identity-key.
+
+    - identical items are skipped (re-sending the full list is a safe no-op)
+    - a dict carrying a stable key (`thread`/`id`) REPLACES the item with the same
+      key (so `--merge-json` can edit a thread, not just duplicate it)
+    - everything else appends (relationship incidents, moods — history accretes)
+    """
+    out = list(old)
+    index = {}
+    for i, x in enumerate(out):
+        k = _item_key(x)
+        if k is not None and k not in index:
+            index[k] = i
+    for x in new:
+        if x in out:
+            continue
+        k = _item_key(x)
+        if k is not None and k in index:
+            out[index[k]] = x
+        else:
+            if k is not None:
+                index[k] = len(out)
+            out.append(x)
+    return out
+
+
 def _deep_merge(base, patch):
     for k, v in patch.items():
         if isinstance(v, dict) and isinstance(base.get(k), dict):
             _deep_merge(base[k], v)
         elif isinstance(v, list) and isinstance(base.get(k), list):
-            # Append-UNION, not replace: preserves accumulated history (relationship
-            # incidents, continuity threads) instead of silently dropping it. Items
-            # already present are skipped, so re-sending the full list is a safe no-op
-            # and sending just the new item appends it.
-            base[k] = base[k] + [x for x in v if x not in base[k]]
+            # Append-UNION + upsert, not replace: preserves accumulated history
+            # (relationship incidents, continuity threads) instead of silently
+            # dropping it, while letting an edited keyed item update in place.
+            base[k] = _merge_list(base[k], v)
         else:
             base[k] = v
     return base
@@ -188,6 +233,22 @@ def cmd_status(args):
     }, ensure_ascii=False, indent=2))
 
 
+def cmd_doctor(args):
+    """Is this machine able to run the skill? Reports Python + every dependency with
+    the exact install command and what degrades without it. Installs nothing.
+    Run this first on an unfamiliar machine or in a sandbox."""
+    rep = _dep_report()
+    home = home_dir(args.home)
+    rep["home"] = home
+    rep["home_exists"] = os.path.exists(home)
+    if os.name == "nt":
+        rep["platform_note"] = ("Windows: use `python` (or `py -3`) instead of `python3`, "
+                                "and note COMPANION_HOME cannot be chmod 700 here — the "
+                                "'only you can read it' guarantee is POSIX-only. Say so "
+                                "rather than repeating the stronger claim.")
+    print(json.dumps(rep, ensure_ascii=False, indent=2))
+
+
 def cmd_read_profile(args):
     home = home_dir(args.home)
     prof = _load_yaml(_paths(home)["profile"])
@@ -224,11 +285,13 @@ def cmd_consent(args):
 def cmd_continuity(args):
     """Read, merge into, or replace keys of state/continuity.yaml (the working memory).
 
-    --merge-json  deep-merges (lists append-UNION) — use to ACCRETE: add a thread,
-                  append a mood. It cannot edit or remove an existing list item.
-    --replace-json OVERWRITES each given top-level key outright — use to CORRECT or
-                  PRUNE: fix a stale open_thread, drop a resolved one, rewrite the
-                  rolling_summary. Send the full intended value of each key you touch.
+    --merge-json  deep-merges. Lists append, EXCEPT that an item carrying a stable
+                  key (`thread`, `id`) updates the matching item in place — so this
+                  both accretes (a new thread, a mood) and edits (re-send a thread
+                  with last_nudged set, or status: done). It cannot REMOVE an item.
+    --replace-json OVERWRITES each given top-level key outright — use to PRUNE: drop a
+                  resolved thread, rewrite the rolling_summary. Send the full intended
+                  value of each key you touch.
     Both bump `updated`. Replace wins if somehow both are given for a key."""
     home = home_dir(args.home)
     p = _paths(home)
@@ -250,13 +313,18 @@ def cmd_continuity(args):
         print(yaml.dump(cont, allow_unicode=True, sort_keys=False))
 
 
-def cmd_followups(args):
-    """Surface open action-threads DUE for a gentle nudge — turns continuity from
-    passive memory into follow-through. A thread is due if it isn't closed and hasn't
-    been nudged in --days (default 5). Read-only; the model does the warm follow-up,
-    then records it by updating the thread's last_nudged/status via `continuity`.
-    Thread shape: {thread, action, opened, last_nudged, status: open|in_progress|done}."""
-    home = home_dir(args.home)
+_FOLLOWUP_NOTE = ("Gently follow up on at most ONE of these (nudge, don't nag; never in a "
+                  "crisis or a purely light moment). After following up, record it: "
+                  "`continuity --merge-json` with just that thread, its `thread` key "
+                  "unchanged and `last_nudged` set to today (or `status: done`) — the "
+                  "matching thread is updated in place, not duplicated.")
+
+
+def _due_followups(home, days=5):
+    """Open action-threads DUE for a gentle nudge — turns continuity from passive
+    memory into follow-through. A thread is due if it isn't closed and hasn't been
+    nudged in `days`. Thread shape:
+    {thread, action, opened, last_nudged, status: open|in_progress|done}."""
     cont = _load_yaml(_paths(home)["continuity"], {})
     today = datetime.date.today()
 
@@ -273,16 +341,75 @@ def cmd_followups(args):
         if (t.get("status") or "open").lower() in ("done", "closed", "resolved", "dropped"):
             continue
         since = _age(t.get("last_nudged")) if t.get("last_nudged") else None
-        if since is None or since >= args.days:
+        if since is None or since >= days:
             due.append({"thread": t.get("thread"), "action": t.get("action"),
                         "status": t.get("status") or "open", "opened": t.get("opened"),
                         "days_open": _age(t.get("opened")), "days_since_nudge": since})
-    print(json.dumps({"due": due, "count": len(due),
-                      "_note": "Gently follow up on these (nudge, don't nag); after "
-                               "following up, set last_nudged=today (or status=done) via "
-                               "`continuity --replace-json` with the full edited open_threads "
-                               "list (NOT --merge-json, which would duplicate the thread)."},
+    return due
+
+
+def cmd_followups(args):
+    """Read-only; the model does the warm follow-up, then records it via `continuity`."""
+    due = _due_followups(home_dir(args.home), args.days)
+    print(json.dumps({"due": due, "count": len(due), "_note": _FOLLOWUP_NOTE},
                      ensure_ascii=False, indent=2))
+
+
+def cmd_brief(args):
+    """ONE call for the every-turn protocol: state + who they are + working memory +
+    what's due. Replaces status + read-profile + reading continuity.yaml + followups,
+    so the protocol is one command that is hard to half-run.
+
+    Everything here is read-only. `--full-profile` includes the whole profile (the
+    default trims the free-form `context` block, which can be long)."""
+    home = home_dir(args.home)
+    p = _paths(home)
+    if not os.path.exists(p["profile"]):
+        print(json.dumps({
+            "initialized": False, "home": home,
+            "_next": "Not set up yet. Run `init`, then onboard (references/onboarding.md; "
+                     "prefer the HTML form). Never force onboarding during a crisis.",
+        }, ensure_ascii=False, indent=2))
+        return
+
+    prof = _load_yaml(p["profile"], {})
+    consent = _load_yaml(p["consent"], {})
+    cont = _load_yaml(p["continuity"], {})
+    rows = trends_mod._load(p["index"])
+    if not args.full_profile:
+        prof = {k: v for k, v in prof.items() if k != "context"}
+
+    recent = []
+    for r in rows[-args.recent:] if args.recent else []:
+        recent.append({k: r.get(k) for k in ("date", "mood", "tags", "themes", "crisis_flag")})
+
+    due = _due_followups(home, args.days)
+    out = {
+        "initialized": True,
+        "home": home,
+        "onboarding_complete": prof.get("onboarding_complete"),
+        "consent": {k: v.get("granted") for k, v in consent.items()},
+        "profile": prof,
+        "continuity": {
+            "rolling_summary": cont.get("rolling_summary"),
+            "open_threads": cont.get("open_threads") or [],
+            "recent_moods": cont.get("recent_moods") or [],
+            "updated": cont.get("updated"),
+        },
+        "followups_due": due,
+        "journal": {
+            "entries": len(rows),
+            "last_entry": rows[-1]["date"] if rows and rows[-1].get("date") else None,
+            "recent": recent,
+        },
+        "_note": _FOLLOWUP_NOTE if due else
+                 "Nothing due for follow-up. Don't manufacture a callback.",
+    }
+    if any(r.get("crisis_flag") for r in rows[-args.recent:]) if args.recent else False:
+        out["_crisis_recent"] = ("A recent entry carries crisis_flag. Read "
+                                 "references/safety.md §2 before replying; never reopen "
+                                 "it as casual small talk or with a fortune framing.")
+    print(json.dumps(out, ensure_ascii=False, indent=2))
 
 
 def cmd_cache(args):
@@ -318,11 +445,24 @@ def cmd_add_entry(args):
     themes = [t.strip() for t in (args.themes or "").split(",") if t.strip()]
     people = [t.strip() for t in (args.people or "").split(",") if t.strip()]
 
+    # mood is a 0–10 scale (profile-schema.md). Reject out-of-range LOUDLY rather than
+    # storing it: a stray value silently poisons every mood_avg / direction that
+    # `trend` reports, and those are presented to the person as computed FACTS.
+    mood = args.mood
+    if mood is not None and not (0 <= mood <= 10):
+        print(json.dumps({"ok": False, "error": f"--mood must be 0..10 (got {mood})"},
+                         ensure_ascii=False))
+        return
+
     # mood is gated by consent.mood — fail CLOSED: store only when explicitly granted
     # (at init `granted` is None = never asked, so mood must NOT be stored yet).
-    mood = args.mood
+    # Report the drop; a silent one makes the model tell the person it logged a mood
+    # that is not in the file.
+    dropped = []
     if mood is not None and consent.get("mood", {}).get("granted") is not True:
         mood = None
+        dropped.append("mood — consent.mood not granted (ask, then "
+                       "`consent --set mood=yes`); the entry text was still saved")
 
     scan = scan_text(args.text)
     # the model is the real crisis detector; --crisis lets it force the flag when it
@@ -370,9 +510,14 @@ def cmd_add_entry(args):
             existing_index = f.read()
     _atomic_write(p["index"], existing_index + json.dumps(row, ensure_ascii=False) + "\n")
 
-    print(json.dumps({"ok": True, "date": date, "file": row["file"],
-                      "crisis_flag": crisis_flag, "crisis_forced": bool(args.crisis),
-                      "safety_scan": scan}, ensure_ascii=False, indent=2))
+    out = {"ok": True, "date": date, "file": row["file"], "mood": mood,
+           "crisis_flag": crisis_flag, "crisis_forced": bool(args.crisis),
+           "safety_scan": scan}
+    if dropped:
+        out["dropped"] = dropped
+        out["_note"] = ("Something you passed was NOT stored (see `dropped`). Don't tell "
+                        "the person it was logged.")
+    print(json.dumps(out, ensure_ascii=False, indent=2))
 
 
 def cmd_trend(args):
@@ -486,6 +631,15 @@ def main():
 
     sub.add_parser("init").set_defaults(func=cmd_init)
     sub.add_parser("status").set_defaults(func=cmd_status)
+    sub.add_parser("doctor").set_defaults(func=cmd_doctor)
+
+    br = sub.add_parser("brief", help="every-turn snapshot in ONE call "
+                                      "(status + profile + continuity + due follow-ups)")
+    br.add_argument("--days", type=int, default=5, help="follow-up nudge threshold")
+    br.add_argument("--recent", type=int, default=5, help="how many recent journal rows")
+    br.add_argument("--full-profile", action="store_true",
+                    help="include the free-form `context` block too")
+    br.set_defaults(func=cmd_brief)
 
     rp = sub.add_parser("read-profile"); rp.add_argument("--json", action="store_true")
     rp.set_defaults(func=cmd_read_profile)

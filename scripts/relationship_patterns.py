@@ -28,18 +28,12 @@ import datetime
 import json
 import os
 import re
-import subprocess
 import sys
 
 
-def _ensure(pkg, mod=None):
-    mod = mod or pkg
-    try:
-        return __import__(mod)
-    except ImportError:
-        subprocess.run([sys.executable, "-m", "pip", "install", "--quiet", pkg], check=True)
-        return __import__(mod)
-
+if os.path.dirname(os.path.abspath(__file__)) not in sys.path:
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _deps import ensure as _ensure  # noqa: E402
 
 yaml = _ensure("PyYAML", "yaml")
 

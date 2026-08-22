@@ -16,18 +16,13 @@ Usage:
 import argparse
 import datetime
 import json
-import subprocess
 import sys
 
 
-def _ensure(pkg, mod=None):
-    mod = mod or pkg
-    try:
-        return __import__(mod)
-    except ImportError:
-        subprocess.run([sys.executable, "-m", "pip", "install", "--quiet", pkg], check=True)
-        return __import__(mod)
-
+import os
+if os.path.dirname(os.path.abspath(__file__)) not in sys.path:
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _deps import ensure as _ensure  # noqa: E402
 
 swe = _ensure("pyswisseph", "swisseph")
 
@@ -116,6 +111,57 @@ def compute(birth_date, birth_time, on_date):
         "disclaimer": ("以上为真实天文位置(可复现的事实);星座/相位的『意义』是文化性的"
                        "反思视角,非科学预测。"),
     }
+
+
+def _parse_tz(s):
+    """Accept either a UTC offset in hours or an IANA zone name.
+
+    The profile stores `birth.tz_at_birth`, and the natural thing to store there is a
+    zone name ("Asia/Shanghai") — but this script used to take only a float, so the
+    two halves of the skill disagreed and a natal chart just failed. Worse, asking for
+    a raw offset pushes the *historical* DST question onto the model ("was Europe on
+    summer time in July 1993?"), which is a guess dressed as a fact. A zone name lets
+    zoneinfo answer it exactly, for the birth moment.
+    """
+    s = str(s).strip()
+    try:
+        return float(s)
+    except ValueError:
+        pass
+    try:
+        from zoneinfo import ZoneInfo
+        ZoneInfo(s)          # validate now so the error is about --tz, not about JSON
+        return s
+    except Exception as e:
+        raise argparse.ArgumentTypeError(
+            f"--tz must be UTC-offset hours (8, 1, -5) or an IANA zone name "
+            f"(Asia/Shanghai, Europe/Amsterdam); got {s!r} ({e})")
+
+
+def _resolve_tz(tz, date_str, time_str):
+    """Turn a zone name into the offset ACTUALLY in force at that birth moment.
+
+    Returns (offset_hours, note) — the note records how it was resolved so the reply
+    can be honest about it, e.g. a summer birth in Amsterdam being +2, not +1.
+    """
+    if tz is None or isinstance(tz, float):
+        return tz, None
+    from zoneinfo import ZoneInfo
+    y, m, d = (int(x) for x in date_str.split("-"))
+    hh, mm = (int(x) for x in (time_str or "12:00").split(":"))
+    local = datetime.datetime(y, m, d, hh, mm, tzinfo=ZoneInfo(tz))
+    off = local.utcoffset().total_seconds() / 3600.0
+    note = (f"tz {tz} resolved to UTC{off:+g} for {date_str} "
+            f"{time_str or '(time unknown, assumed 12:00)'} — historical DST/zone "
+            f"changes applied by zoneinfo, not guessed.")
+    if y < 1970:
+        # Many platforms ship a "slim"/truncated tzdata that drops pre-1970 transitions
+        # and answers with the modern rule instead. Don't present that as exact — an
+        # hour of error moves the Ascendant by ~15°, i.e. often a whole sign.
+        note += (" NOTE: this is a pre-1970 birth, and some systems' timezone database "
+                 "omits transitions that old — treat the offset as likely-but-unverified "
+                 "and say so; an hour of error shifts the Ascendant by roughly a sign.")
+    return off, note
 
 
 def natal(birth_date, birth_time=None, lat=None, lon=None, tz_offset=None):
@@ -259,13 +305,18 @@ def main():
                     help="compute the full natal chart instead of the daily reading")
     ap.add_argument("--lat", type=float, default=None, help="natal: birth latitude (for houses/ascendant)")
     ap.add_argument("--lon", type=float, default=None, help="natal: birth longitude (for houses/ascendant)")
-    ap.add_argument("--tz", type=float, default=None,
-                    help="natal: birth-place UTC offset in hours (e.g. 8, 1, -5) — needed for ascendant")
+    ap.add_argument("--tz", type=_parse_tz, default=None,
+                    help="natal: birth-place timezone — either an IANA name (Asia/Shanghai, "
+                         "Europe/Amsterdam; PREFERRED, historical DST resolved for you) or a "
+                         "plain UTC offset in hours (8, 1, -5). Needed for the ascendant/houses.")
     ap.add_argument("--format", choices=["json", "text"], default="json")
     args = ap.parse_args()
     try:
         if args.natal:
-            r = natal(args.date, args.time, lat=args.lat, lon=args.lon, tz_offset=args.tz)
+            tz_hours, tz_note = _resolve_tz(args.tz, args.date, args.time)
+            r = natal(args.date, args.time, lat=args.lat, lon=args.lon, tz_offset=tz_hours)
+            if tz_note:
+                r.setdefault("caveats", []).append(tz_note)
             print(_natal_text(r) if args.format == "text"
                   else json.dumps(r, ensure_ascii=False, indent=2))
             return

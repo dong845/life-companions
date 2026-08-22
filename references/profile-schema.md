@@ -24,13 +24,13 @@ birth:                       # sensitive — gated by consent.birth
   place: "Beijing, CN"
   lat: 39.9042
   lon: 116.4074
-  tz_at_birth: "Asia/Shanghai"
+  tz_at_birth: "Asia/Shanghai"   # IANA zone NAME (not an hour offset); pass to astro.py --tz
   conventions:               # frozen so charts regenerate identically
     true_solar_time: false   # default civil time; TST is an offered toggle
     zishi_rule: late         # 早/晚子时 for 23:00–24:00 births
 preferences:
   tone: warm-direct
-  advice_style: options      # prefer AskUserQuestion selectable options
+  advice_style: options      # offer selectable options, not free-text questions
   skepticism: high           # keep "reflective, not predictive" explicit
   checkin_cadence: daily
 context:                     # free-form, model-maintained, sensitive
@@ -62,7 +62,10 @@ auditable and you don't repeat yourself.
 ```json
 {"date":"2026-07-17","mood":6,"energy":"low","tags":["career"],"themes":["rejection","recovery-via-movement"],"module_touch":["career"],"people":[],"crisis_flag":false,"file":"journal/2026-07.md","offset":142}
 ```
-`mood` is `null` for text-only entries or when `consent.mood` is false;
+`mood` is an integer **0–10** (out of range is rejected, not stored — it would poison
+every `trend` average, which is presented as a computed fact). It is `null` for
+text-only entries, and `add-entry` returns a `dropped` list when `consent.mood` is not
+granted so the drop is never silent;
 `crisis_flag` lets `safety_scan`/`trends` scan cheaply; `people` powers
 relationship pattern-tracking; `offset` points back into the prose.
 

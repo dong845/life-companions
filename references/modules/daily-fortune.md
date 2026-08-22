@@ -9,12 +9,11 @@ lucky number. What makes it *yours* rather than a generic horoscope is that it's
 woven with your journal + continuity. Pairs with `references/journaling.md`.
 
 ## Flow
-1. **Safety + continuity first, always.** Load `continuity.yaml` + recent entries
-   (`companion.py trend --days 14`, `journal --since …`). A heavy entry → care, not
-   fortune (safety.md).
+1. **Safety + continuity first, always.** `companion.py brief` gives continuity +
+   the last few entries in one call; add `trend --days 14` / `journal --since …` when
+   you want the fuller picture. A heavy entry → care, not fortune (safety.md).
 2. **Compute the day from real systems** (never hand-compute):
    ```bash
-   D=<skill-dir>
    python3 $D/scripts/bazi.py  --date <birth.date> [--time <birth.time>] --gender <m|f> \
      --on-date today --format json     # → computed.daily: 流年/流月/流日 十神+favor,
                                         #   zodiac_day (生肖 vs 日支), wuxing_tips
@@ -65,3 +64,5 @@ paper over it into a fake single verdict.
 - Close the loop: offer to log the day (`add-entry`, with your reflection), and offer
   a deeper drill-down on any layer. Keep it a daily touch — rich, but not exhausting;
   if they want the quick version, give just 基调 + 宜/忌.
+- **Machine backstop:** `python3 $D/scripts/selfcheck.py --module daily --file draft.md` — exit 1 means a blocker; fix it before sending. Passing is not proof it's honest, only that it's free of the known bad shapes.
+  (Invented 综合运 stars and lucky numbers are the two things it catches most often here.)

@@ -53,7 +53,7 @@ Keep two registers visibly distinct in your wording:
      blogs, or forums, and cross-check rather than trusting one hit.
    - (b) **State the rule's conditions and test them against THIS person** — never
      assume a policy applies. If the deciding fact is unknown to you but knowable by
-     asking, **ask them (AskUserQuestion) before concluding**; never silently
+     asking, **ask them (selectable options) before concluding**; never silently
      default to "yes" *or* "no." If genuinely undeterminable, present both branches
      ("if X then…, if not-X then…").
    - (c) **Enumerate the real options, not just the obvious one** — from the
@@ -67,6 +67,11 @@ Keep two registers visibly distinct in your wording:
    - (f) **If you cannot verify a high-stakes fact, do not assert it.** Say you
      couldn't verify, name exactly what the person must confirm, and route to the
      official source (and, per rule 5, a licensed professional for a binding call).
+     **This includes having no web access at all.** If your harness can't fetch a live
+     source, you cannot complete (a)–(e), so you cannot ship the answer: say plainly
+     that you couldn't check it here, give the person the exact page to look at, and
+     stop. Answering from memory "because there was no other way" is exactly the
+     failure this rule exists to prevent.
    - (g) **Attach the fact-check block.** A high-stakes factual/eligibility answer
      does **not** ship without the required "来源 · 时效 · 你需自己确认" artifact in
      **`references/factcheck.md`** — that block is what makes (a)–(f) checkable
@@ -174,3 +179,10 @@ failure. Safety outranks balance.
 - A high-stakes external fact — a law, visa/tax/benefit/licensing eligibility, an
   employer's or program's current status — answered from memory instead of verified,
   or a threshold/number stated without a dated source? → §1 rule 6.
+
+**Then run the machine backstop**: `python3 $D/scripts/selfcheck.py --module <lens>
+--file draft.md`. It catches fabricated percentages and star ratings, fatalistic
+shapes, clinical labels, an **invented helpline number**, a missing disclaimer,
+unglossed 十神, and a high-stakes claim with no fact-check block. Exit 1 = don't send
+it. Passing is **not** proof the reply is honest — it reads surface patterns, not
+meaning; the list above is still yours to run.

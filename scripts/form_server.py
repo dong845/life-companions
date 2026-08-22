@@ -27,6 +27,7 @@ import os
 import subprocess
 import sys
 import threading
+import time
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
@@ -447,12 +448,39 @@ class Handler(BaseHTTPRequestHandler):
                                  f"可以回到对话，用聊天方式建档。</p>"))
 
 
+def _bind(port, tries=10):
+    """Bind 127.0.0.1:port, walking forward if it's taken.
+
+    A stale server from an earlier run is the NORMAL failure here (this used to be
+    started with `&` and never stopped), and it used to surface as a raw
+    `OSError: Address already in use` traceback. Walk to the next free port instead,
+    and if none is free say what to do about it.
+    """
+    last = None
+    for p in range(port, port + tries):
+        try:
+            return ThreadingHTTPServer(("127.0.0.1", p), Handler), p
+        except OSError as e:
+            last = e
+    print(f"[life-companion] could not bind any port in {port}..{port + tries - 1}: {last}\n"
+          f"  probably a form server left running from an earlier turn.\n"
+          f"  fix: pkill -f form_server.py   (or pass a different --port)\n"
+          f"  or skip the form entirely and collect the same fields in chat "
+          f"(references/onboarding.md).", file=sys.stderr)
+    sys.exit(2)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--form", default="onboarding", choices=["onboarding", "career"])
     ap.add_argument("--home", default=None)
     ap.add_argument("--port", type=int, default=8760)
     ap.add_argument("--no-open", action="store_true")
+    ap.add_argument("--timeout", type=int, default=900,
+                    help="exit if nothing is submitted within N seconds (default 900). "
+                         "0 = wait forever (you must kill it yourself).")
+    ap.add_argument("--keep-alive", action="store_true",
+                    help="stay up after a submit instead of shutting down")
     args = ap.parse_args()
 
     home = os.path.abspath(args.home or os.environ.get("COMPANION_HOME")
@@ -461,15 +489,38 @@ def main():
     Handler.home = home
     Handler.form_type = args.form
 
-    srv = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
-    url = f"http://127.0.0.1:{args.port}/"
-    print(f"SERVING {url} (form={args.form}, home={home})", flush=True)
+    srv, port = _bind(args.port)
+    url = f"http://127.0.0.1:{port}/"
+    print(f"SERVING {url} (form={args.form}, home={home}, "
+          f"auto-exit={'on submit' if not args.keep_alive else 'never'}"
+          f"{f', timeout={args.timeout}s' if args.timeout else ''})", flush=True)
     if not args.no_open:
         threading.Timer(0.4, lambda: webbrowser.open(url)).start()
+
+    # Serve in a background thread so the main thread can own the lifecycle: this
+    # process must NOT outlive the task. It writes private data, and no harness other
+    # than Claude Code reliably lets an agent kill a background job on a later turn —
+    # so it stops itself, on submit or on timeout.
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
     try:
-        srv.serve_forever()
+        if args.keep_alive:
+            Handler.done.wait()
+            submitted = True
+        else:
+            submitted = Handler.done.wait(timeout=args.timeout or None)
     except KeyboardInterrupt:
-        pass
+        submitted = Handler.done.is_set()
+    if submitted and not args.keep_alive:
+        time.sleep(1.5)  # let the browser finish fetching the success page
+    srv.shutdown()
+    if submitted:
+        print("DONE form submitted; server stopped. Read the profile / intake and "
+              "continue with what they came for.", flush=True)
+    else:
+        print(f"TIMEOUT nothing submitted within {args.timeout}s; server stopped. "
+              f"Ask if they'd rather just do it in chat (references/onboarding.md) "
+              f"— that path is fully supported.", flush=True)
+        sys.exit(3)
 
 
 if __name__ == "__main__":

@@ -39,12 +39,13 @@ then spread across all six RIASEC areas. The remaining 120 stay high-point-code-
 form than in chat. On submit it writes `career_intake` (`companion.py cache --module
 career_intake` → `latest.answers` 0–4 per id + `latest.values_rank` + jobs); feed
 that to `career_match.py`. Fall back to the chat flow below only if the user can't use
-a browser. When using chat, always AskUserQuestion with selectable options — never
-free-text for choices.
+a browser — an equally valid path, not a downgrade. When using chat, always give
+**selectable options** (`AskUserQuestion` where the harness has it, otherwise a
+numbered list they answer with numbers) — never free text for a choice.
 
 1. **Interest check first (RIASEC-6).** Present the 21 activity-liking items
    (source: `data/career/assessment_items.json`). Each item is one
-   AskUserQuestion with the 5-point liking options: Strongly dislike / Dislike /
+   one options question with the 5-point liking scale: Strongly dislike / Dislike /
    Neutral / Like / Strongly like (stored 0–4). You may batch items and lean on
    the journal/profile to pre-fill or skip obvious ones, but keep it honest about
    what was inferred.
@@ -133,7 +134,6 @@ When `locale` is `zh`, keep the O\*NET title in English and add a short Chinese 
 don't invent a localized occupation name.
 
 ```bash
-D=<this-skill-dir>
 python3 $D/scripts/career_match.py --selftest   # verify the math
 python3 $D/scripts/career_match.py --demo        # rank shipped occupations for a sample profile
 # In use, import: from career_match import score_person, load_occupations, load_scoring_key
@@ -149,6 +149,7 @@ python3 $D/scripts/career_match.py --demo        # rank shipped occupations for 
 - Not a hiring predictor, not a personality label, not destiny.
 - Occupation data ships with its **CC BY 4.0 O\*NET attribution**
   (`data/career/occupations.json`); keep it intact.
+- **Machine backstop:** `python3 $D/scripts/selfcheck.py --module career --file draft.md` — exit 1 means a blocker; fix it before sending. Passing is not proof it's honest, only that it's free of the known bad shapes.
 
 ## Deep employment / relocation analysis — applying safety.md §1 rule 6
 
@@ -220,5 +221,8 @@ lawyer / tax advisor. Never let optimism outrun what you verified. **Attach the
 
 ## Hand-off
 When the person moves toward a **specific role/application**, route to the
-**`job-application` skill** for CV building/tailoring and motivation letters —
-that skill owns the honest CV work. This module owns fit & direction, not CVs.
+**`job-hunt` skill** (its *apply* mode) for CV building/tailoring and motivation
+letters — that skill owns the honest CV work, and also covers discovering and judging
+postings and rehearsing interviews. (`job-application` is the older, narrower skill
+covering only the apply step; use it if `job-hunt` isn't installed.) This module owns
+fit & direction, not CVs.

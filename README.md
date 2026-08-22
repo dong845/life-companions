@@ -58,15 +58,23 @@
 
 ```
 SKILL.md              路由（始终加载）
-references/           onboarding · profile-schema · journaling · continuity · safety(始终生效)
+AGENTS.md             给非 Claude agent（Codex 等）的入口说明
+references/           onboarding · profile-schema · journaling · continuity · forms · factcheck · safety(始终生效)
   modules/            destiny · daily-fortune · career · relationships
-scripts/              companion.py · bazi.py · career_match.py · safety_scan.py · trends.py
+scripts/              companion.py · bazi.py · astro.py · career_match.py · relationship_patterns.py
+                      safety_scan.py · trends.py · form_server.py · selfcheck.py · _deps.py
 data/content/         bazi-interpretation · bazi-life-arc · relationships（真实框架内容层，可编辑）
 data/career/          occupations.json（188 真实 O*NET，68 带数值兴趣分/62 带价值观，CC BY 4.0）· assessment_items.json（21 题）
+tests/                回归测试（纯 unittest，离线）
 ```
 
-- 依赖：`lunar_python`(MIT) · `sxtwl`(BSD) · `PyYAML` · `numpy`；脚本会在缺失时自动 pip 安装。
-- 自测：`python3 scripts/career_match.py --selftest`；`python3 scripts/bazi.py --date … --format text`。
+- 依赖：`PyYAML` · `lunar-python`(MIT，八字) · `pyswisseph`(星盘) · `sxtwl`(BSD，立春交叉核验，可选)。
+  缺失时脚本会尝试自动 pip 安装；装不上（无网络 / PEP 668 externally-managed）会打印明确的安装
+  命令和「少了它会怎样」，而不是抛栈。`python3 scripts/companion.py doctor` 一次看全。
+- 自测：`python3 tests/test_scripts.py`（45 项，约 7 秒，全离线）；`python3 scripts/career_match.py --selftest`。
+- **发出去之前过一道闸门**：`python3 scripts/selfcheck.py --module destiny --file draft.md`
+  ——机器检查编造的百分比/星级、宿命句式、临床标签、**编造的求助热线号码**、缺失的免责声明、
+  没夹注的十神、以及缺事实核查块的高风险结论。退出码 1 = 别发。
 - 解读内容都在 `data/content/`——想调口吻/加细节，改那里，不用动脚本。
 - 诚实/安全底线在 `references/safety.md`，**优先于任何模块和任何"别加免责声明"的要求**。
 

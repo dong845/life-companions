@@ -27,7 +27,6 @@ import argparse
 import datetime
 import json
 import math
-import subprocess
 import sys
 
 
@@ -35,19 +34,12 @@ import sys
 # Dependency bootstrap — the skill should "just work" on a fresh machine.
 # lunar-python is MIT, sxtwl is BSD; both are pure-offline at compute time.
 # ---------------------------------------------------------------------------
-def _ensure(pkg, import_name=None):
-    import_name = import_name or pkg
-    try:
-        return __import__(import_name)
-    except ImportError:
-        subprocess.run(
-            [sys.executable, "-m", "pip", "install", "--quiet", pkg],
-            check=True,
-        )
-        return __import__(import_name)
+import os
+if os.path.dirname(os.path.abspath(__file__)) not in sys.path:
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _deps import ensure as _ensure  # noqa: E402
 
-
-_ensure("lunar_python", "lunar_python")
+_ensure("lunar-python", "lunar_python")
 from lunar_python import Solar  # noqa: E402
 
 
@@ -394,18 +386,90 @@ def _current_liunian(birth_solar):
     }
 
 
-def _sxtwl_year_boundary_check(y, m, d):
-    """Independent cross-check that we are on the right side of 立春 for the year pillar."""
+def _cross_check(y, m, d, engine_year_ganzhi, on_lichun_day, ambiguities):
+    """Run the sxtwl cross-check, DECIDE whether it agrees, and make a genuine
+    disagreement audible in `ambiguities` — the model must not have to notice a
+    mismatch by eyeballing two separate JSON fields."""
+    res = _sxtwl_year_boundary_check(y, m, d, on_lichun_day=on_lichun_day)
+    other = res.get("year_ganzhi")
+    if not other:
+        res["agrees"] = None
+        return res
+    res["engine_year_ganzhi"] = engine_year_ganzhi
+    res["agrees"] = (other == engine_year_ganzhi)
+    if res["agrees"]:
+        return res
+    if on_lichun_day:
+        # Expected: sxtwl has no birth time, so on the boundary day it cannot agree.
+        # The 立春-proximity ambiguity is already recorded; don't double-warn, and
+        # don't let this masquerade as evidence against the chart.
+        res["_disagreement"] = ("expected — date-granularity check on the 立春 day; "
+                                "the main engine uses the exact 立春 moment and stands.")
+    else:
+        res["_disagreement"] = "UNEXPECTED — not a 立春-day granularity artifact."
+        ambiguities.append(
+            f"年柱交叉核验不一致：本引擎算得 {engine_year_ganzhi}，独立核验(sxtwl)算得 "
+            f"{other}，且出生日不在立春当天——请把这张盘当作不确定，如实告诉本人，"
+            "不要择一而不说。"
+        )
+    return res
+
+
+def _lichun_gap_hours(dt):
+    """Hours from `dt` to the nearest 立春 (negative = born before it).
+
+    立春 is the year-pillar boundary and it is a MOMENT, not a date — a birth a few
+    hours either side of it belongs to a different 年柱. Returns (gap_hours, moment)
+    or (None, None) if the table can't be read.
+    """
+    try:
+        table = Solar.fromYmdHms(dt.year, dt.month, dt.day, 12, 0, 0).getLunar().getJieQiTable()
+    except Exception:  # pragma: no cover
+        return None, None
+    best = None
+    for name, solar in (table or {}).items():
+        if "立春" not in str(name) and str(name).upper() != "LI_CHUN":
+            continue
+        try:
+            moment = datetime.datetime(solar.getYear(), solar.getMonth(), solar.getDay(),
+                                       solar.getHour(), solar.getMinute(), solar.getSecond())
+        except Exception:  # pragma: no cover
+            continue
+        gap = (dt - moment).total_seconds() / 3600.0
+        if best is None or abs(gap) < abs(best[0]):
+            best = (gap, moment)
+    return best if best else (None, None)
+
+
+def _sxtwl_year_boundary_check(y, m, d, on_lichun_day=False):
+    """Independent cross-check of the year pillar (立春 boundary).
+
+    IMPORTANT GRANULARITY CAVEAT: `sxtwl.fromSolar` takes a DATE, not a time, so on
+    the 立春 day itself — the one day this check exists for — it cannot know which
+    side of the boundary a given birth *time* falls on. A disagreement there is
+    therefore expected and is NOT evidence the main engine is wrong; the payload says
+    so explicitly rather than leaving the model to infer it from two bare fields.
+    """
     try:
         import sxtwl
     except ImportError:
-        return {"available": False}
+        return {"available": False,
+                "_note": "sxtwl not installed — the year pillar has no independent "
+                         "cross-check this run. Say so if the birth is near 立春."}
     try:
         day = sxtwl.fromSolar(y, m, d)
-        gz = day.getYearGZ()  # uses 立春 boundary
+        gz = day.getYearGZ()  # uses 立春 boundary, at DATE granularity
         Gan = ["甲", "乙", "丙", "丁", "戊", "己", "庚", "辛", "壬", "癸"]
         Zhi = ["子", "丑", "寅", "卯", "辰", "巳", "午", "未", "申", "酉", "戌", "亥"]
-        return {"available": True, "year_ganzhi": Gan[gz.tg] + Zhi[gz.dz]}
+        out = {"available": True, "year_ganzhi": Gan[gz.tg] + Zhi[gz.dz],
+               "granularity": "date-only (no birth time)"}
+        if on_lichun_day:
+            out["_note"] = ("Birth falls on the 立春 DAY, where this date-granularity "
+                            "check cannot resolve the boundary. If it disagrees with the "
+                            "main engine, the main engine (which uses the exact 立春 "
+                            "moment) is the one to trust — do NOT call the chart "
+                            "unreliable on the strength of this field alone.")
+        return out
     except Exception as e:  # pragma: no cover
         return {"available": True, "error": str(e)}
 
@@ -437,6 +501,21 @@ def compute(date, time, gender, lon=None, true_solar_time=False,
         )
     if not hour_known:
         ambiguities.append("出生时刻未知：时柱不可计算，与时柱相关的十神/藏干省略。")
+
+    # 立春 is a MOMENT: a birth within a few hours of it flips the whole year pillar.
+    # Surface that as an ambiguity — it is exactly the kind of thing the person must be
+    # told, and it is invisible unless the script says it.
+    lichun_gap, lichun_moment = _lichun_gap_hours(dt)
+    on_lichun_day = bool(lichun_moment and lichun_moment.date() == dt.date())
+    if lichun_gap is not None and abs(lichun_gap) <= 24:
+        side = "之后" if lichun_gap >= 0 else "之前"
+        ambiguities.append(
+            f"出生在立春（{lichun_moment.strftime('%Y-%m-%d %H:%M')}）{side}约"
+            f"{abs(lichun_gap):.1f}小时——年柱以立春交节的『时刻』为界，"
+            + ("出生时刻未知时年柱本身就不确定，需要确认出生时间。"
+               if not hour_known else
+               "差几十分钟年柱就会换一柱，请确认出生时刻（含出生地时区）准确。")
+        )
 
     solar = Solar.fromYmdHms(dt.year, dt.month, dt.day, dt.hour, dt.minute, 0)
     lunar = solar.getLunar()
@@ -496,7 +575,8 @@ def compute(date, time, gender, lon=None, true_solar_time=False,
             "upcoming_annual_pillars": _upcoming_annual_pillars(day_gan, favor_sets, y, years=10),
             "daily": (_daily_pillars(day_gan, favor_sets, on_date, ec.getYearZhi())
                       if on_date else None),
-            "cross_check_sxtwl": _sxtwl_year_boundary_check(y, m, d),
+            "cross_check_sxtwl": _cross_check(
+                y, m, d, pillars["year"]["ganzhi"], on_lichun_day, ambiguities),
         },
         "heuristic": {  # ---- clearly labeled, NOT a fact ----
             "strength": strength,

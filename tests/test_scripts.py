@@ -414,6 +414,55 @@ class TestSelfcheck(unittest.TestCase):
         r = self.check("你身弱，用神是金水。", "destiny")
         self.assertTrue(any(x["code"] == "unhedged-strength" for x in r["findings"]))
 
+    # --- the shapes a COMPETENT model actually produces. The blatant ones (命中注定,
+    # ⭐⭐⭐⭐) are easy; these are what a first version of this gate missed 9 times out
+    # of 10, and they are the ones that would reach a real person. ---
+
+    def test_blocks_hedged_prediction(self):
+        for bad in ["你这步大运走完，婚姻大概率是保不住的。",
+                    "这一步十有八九要破财。",
+                    "明年是你的本命年，容易出事。",
+                    "这段感情多半会分手。"]:
+            self.assertFalse(self.check(bad, "destiny")["ok"], bad)
+
+    def test_blocks_forecasts_about_relatives(self):
+        for bad in ["从盘上看，你母亲身体会比较弱。",
+                    "你父亲的健康多半要注意，容易生病。"]:
+            r = self.check(bad, "destiny")
+            self.assertTrue(any(x["code"] == "kin-prediction" for x in r["findings"]), bad)
+
+    def test_allows_kin_read_as_the_persons_own_relational_tendency(self):
+        good = ("👪 家庭/六亲：比劫(同类、手足、同侪)有力——同辈、朋友、合伙人在你的故事里"
+                "戏份重，是助力也需要边界。这是一种读法。")
+        self.assertTrue(self.check(good, "destiny")["ok"], self.check(good, "destiny")["findings"])
+
+    def test_allows_health_framed_as_tendency_plus_doctor(self):
+        good = ("🩺 健康(只谈倾向，不诊断)：你水最旺，最该照看「脑子停不下来」——熬夜、"
+                "反刍容易消耗你。真有担心请找医生。这是一种读法，不是预测。")
+        self.assertTrue(self.check(good, "destiny")["ok"], self.check(good, "destiny")["findings"])
+
+    def test_blocks_almanac_style_prohibitions(self):
+        self.assertFalse(self.check("今天诸事不宜，建议闭门不出。", "daily")["ok"])
+
+    def test_allows_agency_framed_yi_ji(self):
+        good = ("✅ 宜：把上周搁下的那件事推一小步。⛔ 忌：大事先别急着拍板。"
+                "水逆传统上提醒沟通慢一点——不是预测，是一种反思视角。")
+        self.assertTrue(self.check(good, "daily")["ok"], self.check(good, "daily")["findings"])
+
+    def test_blocks_astrology_stated_as_a_cause(self):
+        self.assertFalse(self.check("水逆会导致你这周沟通全面出问题。", "daily")["ok"])
+
+    def test_blocks_hiring_predictions(self):
+        for bad in ["以你的背景，进大厂基本没戏。", "You definitely won't get the job."]:
+            self.assertFalse(self.check(bad, "career")["ok"], bad)
+
+    def test_blocks_precision_faked_in_words(self):
+        self.assertFalse(self.check("这个岗位跟你的契合度大概是八成左右。", "career")["ok"])
+
+    def test_blocks_labelling_and_deciding_for_them(self):
+        r = self.check("她这种行为就是典型的煤气灯操控，你该离开她。", "relationships")
+        self.assertTrue(any(x["code"] == "one-sided-verdict" for x in r["findings"]))
+
     def test_english_output_is_checked_too(self):
         r = self.check("You will definitely get the job — you are destined to succeed.",
                        "career")
@@ -425,6 +474,32 @@ class TestCareerMatch(unittest.TestCase):
         code, out, err = run("career_match.py", "--selftest")
         self.assertEqual(code, 0, out + err)
         self.assertIn("SELFTEST: OK", out)
+
+    def test_title_lookup_maps_everyday_words_to_soc_codes(self):
+        import career_match as cm
+        occs, _ = cm.load_occupations()
+        for query, expect in [("核磁共振技师", "Magnetic Resonance Imaging Technologists"),
+                              ("数据科学家", "Data Scientists"),
+                              ("心理咨询", "Clinical and Counseling Psychologists"),
+                              ("Statisticians", "Statisticians")]:
+            titles = [h["title"] for h in cm.find_occupations(query, occs)]
+            self.assertIn(expect, titles, f"{query} -> {titles[:4]}")
+
+    def test_title_lookup_refuses_rather_than_guessing(self):
+        # The dangerous failure is a confident wrong mapping, not an empty result.
+        import career_match as cm
+        occs, _ = cm.load_occupations()
+        self.assertEqual(cm.find_occupations("屠龙勇士", occs), [])
+        code, out, _ = run("career_match.py", "--find", "屠龙勇士")
+        self.assertIn("NO MATCH", out)
+        self.assertIn("Do NOT substitute", out)
+
+    def test_title_lookup_flags_data_quality_per_hit(self):
+        import career_match as cm
+        occs, _ = cm.load_occupations()
+        hits = cm.find_occupations("Statisticians", occs)
+        self.assertTrue(hits[0]["has_numeric_interests"])
+        self.assertIn("soc_code", hits[0])
 
     def test_onet_attribution_survives(self):
         with open(os.path.join(SKILL, "data", "career", "occupations.json"),

@@ -61,13 +61,92 @@ def _looks_like_a_phone(raw):
 #   blocker — an outright violation of safety.md; do not send
 #   warn    — legitimate sometimes; look at it before sending
 # ---------------------------------------------------------------------------
+# The bad outcomes a reading must never forecast. Kept as one alternation and reused,
+# because the failure mode isn't a fixed phrase — it's ANY hedge attached to one of
+# these. A competent model almost never writes 命中注定; it writes 「大概率保不住」.
+_BAD_EVENT = (r"离婚|分手|离|破产|破财|失业|被裁|失败|没戏|生病|得病|病|出事|受伤|"
+              r"车祸|意外|坐牢|去世|死|绝症|癌|流产|保不住|散伙|翻车|栽")
+
 FATALISM = [
     (r"命中注定|注定[要会]|在劫难逃|逃不掉的?命|命该如此", "命定/宿命句式"),
     (r"血光之灾|大凶之(年|运|兆)|必有(灾|祸|难)|克(夫|妻|父|母|子)", "灾祸/克亲断语"),
-    (r"(一定|必定|肯定|绝对)(会|要)[^。！\n]{0,12}(离|分手|破产|失败|生病|出事|死)", "确定性坏结局"),
+    (r"(一定|必定|肯定|绝对)(会|要)[^。！\n]{0,12}(" + _BAD_EVENT + ")", "确定性坏结局"),
     (r"你(会|将)(在|于)?\s*\d{4}\s*年[^。\n]{0,12}(结婚|离婚|发财|破产|生病|升职)", "指定年份的事件预言"),
+    # --- hedged prediction: the REAL failure shape. A probability attached to a life
+    # event is still a prophecy; hedging it doesn't make it a reflection. ---
+    (r"(大概率|十有八九|八九不离十|多半(会|要)|难免(会|要)|恐怕(会|要)|怕是(要|会)|"
+     r"基本(上)?(会|要|没)|铁定|跑不了)[^。！？\n]{0,14}(" + _BAD_EVENT + ")",
+     "带概率的坏事预言（对冲过的宿命，仍是预言）"),
+    (r"(" + _BAD_EVENT + r")[^。！？\n]{0,8}(是大概率|概率很大|几乎是必然|在所难免)",
+     "带概率的坏事预言"),
+    # --- veiled prediction: "容易X" is fine for a TENDENCY, not for an EVENT ---
+    (r"(容易|难免|小心|当心|注意)[^。！？\n]{0,8}(出事|生病|得病|破财|破产|失业|被裁|"
+     r"离婚|分手|车祸|意外|受伤|坐牢|官司)", "把事件说成「容易发生」——事件预言，不是倾向"),
+    (r"(本命年|犯太岁|冲太岁|流年不利|大运不好)[^。！？\n]{0,16}(" + _BAD_EVENT + ")",
+     "把年份/运势当成坏事的原因"),
+    # --- astrology stated as a CAUSE rather than a traditional framing ---
+    (r"(水逆|逆行|冲|刑|太岁|凶星|煞)[^。！？\n]{0,10}(导致|造成|使你|害得|让你[^。\n]{0,6}"
+     r"(出事|失败|吵|分手))", "把星象说成因果，而不是传统上的提醒"),
     (r"\b(you|you'?ll)\s+(will\s+)?(definitely|certainly|surely)\s+\w+", "English certainty claim"),
     (r"\b(destined|fated)\s+to\b", "English fatalism"),
+    (r"\b(you'?re )?(very )?likely to (get (sick|divorced|fired)|lose|fail)\b",
+     "English hedged prediction"),
+]
+
+# A chart says nothing checkable about a THIRD party's body or fate. 宫位/六亲 describe
+# how the person relates to those roles — not the relatives' actual health. Word order
+# varies too much for one regex ("你母亲身体会偏弱" / "你母亲会容易生病"), so scan per
+# sentence for the combination: a relative + a forecast word + a health/fate noun.
+KIN = r"(父亲|母亲|爸爸|妈妈|爱人|配偶|老公|老婆|伴侣|对象|孩子|子女|儿子|女儿|兄弟|姐妹|父母)"
+KIN_FORECAST = r"(会|将|容易|大概率|多半|难免|恐怕|偏|比较|不太|注定)"
+KIN_SUBJECT = r"(身体|健康|寿|命|婚姻|事业|财|运|" + _BAD_EVENT + r")"
+SENT_SPLIT = re.compile(r"[。！？!?\n；;]")
+
+
+def _kin_claims(text):
+    out = []
+    for sent in SENT_SPLIT.split(text):
+        if not re.search(KIN, sent):
+            continue
+        if re.search(KIN_FORECAST, sent) and re.search(KIN_SUBJECT, sent):
+            out.append(sent.strip()[:120])
+    return out
+
+
+# Fatalistic 宜忌: a daily reading gives agency-framed nudges, never a prohibition.
+TABOO = [
+    (r"诸事不宜|百无禁忌|忌出(门|行)|不宜出门|闭门不出|忌(动土|嫁娶|安葬|开市)",
+     "黄历式禁令（本 skill 的宜忌是有能动性的建议，不是禁令）"),
+    (r"(千万|绝对|务必)(别|不要|不能)[^。！？\n]{0,12}(换工作|辞职|结婚|投资|签|买房|出门)",
+     "替对方下禁令"),
+]
+
+# A reading must never forecast a hiring outcome (career.md: "not a hiring predictor").
+HIRING = [
+    (r"(基本|多半|大概率|肯定|铁定)?(没戏|没希望|进不去|拿不到|录不上|够不着|白搭)",
+     "预测录用结果"),
+    (r"(肯定|一定|必然|铁定)[^。！？\n]{0,8}(能进|录取|拿到\s*offer|被录用)", "预测录用结果"),
+    (r"\b(you )?(won'?t|will never|definitely won'?t) (get|land) (the )?(job|offer|role)\b",
+     "predicting a hiring outcome"),
+]
+
+# Precision faked in WORDS rather than digits — dodges every \d+% pattern.
+WORD_PRECISION = [
+    (r"(契合度|匹配度|吻合度|准确度|把握)[^。！？\n]{0,6}"
+     r"(一成|两成|三成|四成|五成|六成|七成|八成|九成|十成|大半|八九成)",
+     "用汉字说的假精度"),
+    (r"(八成|九成|七成|一半)[^。！？\n]{0,4}(契合|匹配|吻合|准|靠谱)", "用汉字说的假精度"),
+]
+
+# The relationship module holds ≥2 perspectives and never labels the absent partner.
+RELATIONSHIP_VERDICT = [
+    (r"(他|她|对方|你男朋友|你女朋友|你老公|你老婆)(就)?是(个)?(典型的)?"
+     r"(PUA|煤气灯|自恋(型|狂)|反社会|渣男|渣女|控制狂|巨婴|妈宝)",
+     "给不在场的一方贴临床/人格标签"),
+    (r"(你(就)?该|建议你(马上|赶紧)?|趁早|果断)(离开|分手|离婚|甩)",
+     "替对方下决定（且在虐待情境里「直接走」可能升高危险）"),
+    (r"\b(he|she|they)('s| is| are) (a )?(narcissist|sociopath|gaslighter|abuser)\b",
+     "clinical label on the absent partner"),
 ]
 
 DIAGNOSIS = [
@@ -151,6 +230,31 @@ def check(text, module="none", locale=None):
     f += _find(text, FAKE_PRECISION, "fabrication", "blocker",
                "safety.md §1 rule 4: no invented score, percentage, salary, percentile "
                "or authority. Keep it qualitative, or cite a real source.")
+    f += _find(text, WORD_PRECISION, "fabrication", "blocker",
+               "safety.md §1 rule 4: 「八成契合」 is a fabricated number wearing a word. "
+               "Give the band (低/中/高) and its confidence note, nothing sharper.")
+    f += _find(text, TABOO, "fatalism", "blocker",
+               "daily-fortune.md: 宜/忌 are 2–3 agency-framed nudges ("
+               "「今天适合…」「大事先别拍板」), never a 黄历 prohibition or an order.")
+    f += _find(text, HIRING, "hiring-prediction", "blocker",
+               "career.md: this is a fit-and-direction lens, explicitly NOT a hiring "
+               "predictor. Say what the role feeds and what the gap is; never whether "
+               "they'd get it.")
+    for sent in _kin_claims(text):
+        f.append({
+            "code": "kin-prediction", "severity": "blocker",
+            "why": "a forecast about a relative's health or fate",
+            "evidence": sent,
+            "fix": "bazi-life-arc.md §2: 宫位/六亲 describe how THIS person relates to "
+                   "those roles (closeness, reliance, friction) — the chart says nothing "
+                   "checkable about someone else's body or life. Rewrite as their own "
+                   "relational tendency, and never forecast a third party.",
+        })
+    f += _find(text, RELATIONSHIP_VERDICT, "one-sided-verdict", "blocker",
+               "relationships.md §G + safety.md §3: hold ≥2 perspectives, voice the "
+               "absent partner fairly, tendencies not labels. If it IS abuse, route to "
+               "specialist DV help and respect their timing — never 'just leave', which "
+               "can escalate danger.")
 
     # Any percentage at all is suspect in a reflective reading — the specific shapes
     # above are the common ones, but a number can be invented in a shape nobody listed.

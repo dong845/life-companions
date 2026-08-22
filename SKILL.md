@@ -128,10 +128,12 @@ coherent, safe, and non-repetitive.
    ```bash
    python3 $D/scripts/selfcheck.py --module <destiny|daily|career|relationships|crisis> --file draft.md
    ```
-   It's a deterministic backstop for the rules below — fabricated percentages and star
-   ratings, fatalistic shapes, clinical labels, an **invented helpline number**, a
-   missing disclaimer, un-glossed 十神, and a high-stakes fact shipped without the
-   fact-check block. Exit 1 = a blocker; fix it, don't send it. **Passing is not proof
+   It's a deterministic backstop for the rules below — fabricated precision (in digits
+   **or in words**: 「八成契合」), fatalism *including hedged forms* (「大概率保不住」,
+   「本命年容易出事」), forecasts about a relative's health, 黄历-style prohibitions,
+   hiring predictions, clinical labels on an absent partner, an **invented helpline
+   number**, a missing disclaimer, un-glossed 十神, and a high-stakes fact shipped
+   without the fact-check block. Exit 1 = a blocker; fix it, don't send it. **Passing is not proof
    the reply is honest** — it matches surface patterns and cannot see a calmly-worded
    fabrication or a chart read off the wrong pillars. The module checklists still apply.
 
@@ -258,12 +260,14 @@ python3 $D/scripts/companion.py add-entry --text "…" --mood 6 --tags "career" 
 python3 $D/scripts/companion.py add-entry --text "…" --crisis   # force crisis flag if scan missed it
 python3 $D/scripts/companion.py continuity --merge-json '{"rolling_summary":"…","open_threads":[…]}'
 python3 $D/scripts/companion.py followups       # threads due for a gentle nudge
+python3 $D/scripts/companion.py cache --module destiny   # what reading you already gave them
 python3 $D/scripts/companion.py trend --days 30
 python3 $D/scripts/companion.py journal --since 2026-07-01   # re-read prose entries
 python3 $D/scripts/companion.py forget --birth        # real deletion
 python3 $D/scripts/bazi.py --date 1993-04-12 --time 07:35 --gender m --on-date today --format json  # +daily: 生肖/五行tips
 python3 $D/scripts/astro.py --date 1993-04-12 --time 07:35 --on-date today --format json   # real 星座 daily
 python3 $D/scripts/astro.py --date 1993-04-12 --time 07:35 --natal --lat 52.16 --lon 4.49 --tz Europe/Amsterdam --format json  # full natal chart (星盘)
+python3 $D/scripts/career_match.py --find "产品经理"   # map their WORDS to a real O*NET occupation first
 python3 $D/scripts/career_match.py --selftest   # career-fit engine; --demo to rank shipped occupations
 python3 $D/scripts/relationship_patterns.py --format text   # base-rate over logged relationship incidents
 python3 $D/scripts/selfcheck.py --module destiny --file draft.md   # ★ honesty gate on your draft

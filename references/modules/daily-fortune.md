@@ -25,6 +25,17 @@ woven with your journal + continuity. Pairs with `references/journaling.md`.
    journal + a general seasonal note; never fake a chart. `favor` is `平` for a
    near-balanced chart → read the 十神 theme, don't manufacture 宜/忌 or 五行 tips.
 
+3. **Read yesterday before writing today.** This is the one module that runs *daily*,
+   so its real failure mode isn't inaccuracy — it's **saying the same thing again**, at
+   which point it becomes the cookie it was designed not to be. `companion.py brief`
+   already returns the recent entries; the `> companion:` line in each one records what
+   you actually said. Skim the last 2–3 before drafting, then:
+   - don't reuse yesterday's 基调 wording, its 宜/忌 pair, or the same callback;
+   - if the computed layers genuinely repeat (流日 十神 often does within a week), say
+     so honestly — 「跟前天是同一路的日子」 — and change what you *do* with it (a
+     different dimension, a shorter card, a question instead of advice);
+   - if you nudged the same open thread yesterday, don't nudge it again today.
+
 ## Deliver — the daily card (rich but scannable; ~a screen, not an essay)
 Open with a one-line disclaimer note once, then, in the person's `locale`/`tone`:
 

@@ -78,7 +78,22 @@ current role's occupation vector from the shipped data.
   "quit/stay".
 
 ### Mode B — Aspiration-job fit + honest gap sketch
-Two separate outputs, never merged into one number:
+
+**First, map their words to an actual occupation — don't eyeball it.** They say
+「产品经理」/「MRI 重建算法」/"something in UX"; the engine scores against a SOC code.
+Guessing that mapping is a wrong answer that looks right, because every downstream
+number is then about a job they didn't mean.
+```bash
+python3 $D/scripts/career_match.py --find "产品经理"        # ranked candidates + data quality
+```
+Show the top candidates, **confirm with them** («你说的X，我按 O*NET 的「<title>」来算，
+行吗?»), and note whether the chosen one carries numeric interests or is code-only —
+that sets the confidence you may claim. If it returns **no match**, say the role isn't
+in the 188-occupation dataset: ask which shipped occupation is closest in *day-to-day
+work* (not job title), or give an interests-only read with **no** occupation congruence
+at all. Never substitute the nearest-looking title.
+
+Then, two separate outputs, never merged into one number:
 1. **Fit** — congruence band of the person against the aspiration occupation
    vector (same engine), with confidence note.
 2. **Gap sketch** — an *honest, qualitative* list of what typically stands

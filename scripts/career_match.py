@@ -348,6 +348,86 @@ def rank_occupations(responses, scoring_key, occupations, top_n=10, **kw):
     return score_person(responses, scoring_key, occupations, **kw)[:top_n]
 
 
+# ------------------------------------------------------------------ title lookup
+# Mode B (aspiration-job fit) starts from what the person SAYS — "产品经理", "MRI
+# 算法工程师", "I want to do UX". Nothing connected those words to a SOC code, so the
+# mapping happened by eyeballing a 3000-line JSON, and its failure mode was silent:
+# score them against a plausible-looking wrong occupation and never mention it.
+# This makes the mapping explicit, ranked, and refusable.
+
+# Words that carry no signal for matching a job title.
+_STOP = {"the", "a", "an", "of", "and", "or", "for", "in", "at", "to", "&",
+         "工作", "职业", "岗位", "工程师", "师", "员", "人员", "专家", "做"}
+
+# A small bridge from everyday words (incl. Chinese) to O*NET title vocabulary. It is
+# deliberately small and visible rather than a fuzzy black box — an unmatched query
+# must come back empty so the model asks, instead of quietly picking something near.
+_ALIASES = {
+    "产品经理": "product manager", "程序员": "programmer software developer",
+    "软件工程师": "software developer", "算法": "data scientist research computer",
+    "机器学习": "data scientist computer research", "人工智能": "computer research scientist",
+    "数据": "data scientist statistician database", "数据分析": "data scientist operations research",
+    "医生": "physician", "护士": "nurse", "老师": "teacher", "教师": "teacher",
+    "律师": "lawyer", "会计": "accountant", "设计师": "designer",
+    "记者": "reporter journalist", "翻译": "interpreters translators",
+    "心理咨询": "counselor psychologist", "社工": "social worker",
+    "厨师": "chef cook", "摄影": "photographer", "建筑师": "architect",
+    "护理": "nurse", "影像": "imaging radiologic", "放射": "radiologic imaging",
+    "核磁": "magnetic resonance imaging", "磁共振": "magnetic resonance imaging",
+    "理疗": "physical therapist", "药剂": "pharmacist", "销售": "sales",
+    "市场": "marketing market research", "人力资源": "human resources",
+    "运营": "operations management", "研究员": "research scientist",
+    "教授": "professor teacher postsecondary", "咨询顾问": "management analyst",
+    "ux": "web digital designer", "ui": "web digital designer",
+    "product manager": "management analyst project management",
+}
+
+
+def _tokens(s):
+    s = s.lower()
+    for zh, en in _ALIASES.items():
+        if zh in s:
+            s += " " + en
+    parts = re.split(r"[^a-z0-9一-鿿]+", s)
+    return {p for p in parts if p and p not in _STOP and not p.isdigit()}
+
+
+def find_occupations(query, occupations, limit=8):
+    """Rank shipped occupations by how well their title matches `query`.
+
+    Returns [{soc_code, title, job_zone, has_numeric_interests, has_work_values,
+    score}], best first, and **an empty list when nothing matches** — that is the
+    honest answer, not a reason to reach for the nearest title.
+    """
+    q = _tokens(query)
+    if not q:
+        return []
+    out = []
+    for o in occupations:
+        title = o.get("title", "")
+        t = _tokens(title)
+        if not t:
+            continue
+        overlap = q & t
+        if not overlap:
+            # allow a prefix hit so "statistic" finds "Statisticians"
+            overlap = {a for a in q for b in t if len(a) > 3 and (b.startswith(a) or a.startswith(b))}
+            if not overlap:
+                continue
+        score = len(overlap) / len(q | t)
+        if query.strip().lower() == title.lower():
+            score = 1.0
+        out.append({
+            "soc_code": o.get("soc_code"), "title": title,
+            "job_zone": o.get("job_zone"),
+            "has_numeric_interests": o.get("riasec") is not None,
+            "has_work_values": o.get("work_values") is not None,
+            "score": round(score, 3),
+        })
+    out.sort(key=lambda r: (-r["score"], r["title"]))
+    return out[:limit]
+
+
 # ------------------------------------------------------------------ data loading
 def load_occupations(path=DATA_PATH_DEFAULT):
     with open(path, "r", encoding="utf-8") as f:
@@ -481,9 +561,40 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser(description="Honest career interest/values/traits matcher")
     ap.add_argument("--selftest", action="store_true", help="run internal checks")
     ap.add_argument("--demo", action="store_true", help="rank shipped occupations for a demo profile")
+    ap.add_argument("--find", default=None, metavar="TITLE",
+                    help="map what the person CALLS a job ('产品经理', 'MRI 技师') to the "
+                         "shipped O*NET occupations, before scoring anything against it")
+    ap.add_argument("--json", action="store_true", help="machine-readable output")
     args = ap.parse_args()
     if args.selftest:
         raise SystemExit(0 if _selftest() else 1)
+    if args.find:
+        occs, _ = load_occupations()
+        hits = find_occupations(args.find, occs)
+        payload = {
+            "query": args.find, "matches": hits,
+            "_note": (
+                "Confirm the mapping with the person before scoring — «你说的X，我按 O*NET "
+                "的「<title>」来算，行吗?» Scoring them against a title they didn't mean is "
+                "a wrong answer that looks right."
+                if hits else
+                "NO MATCH in the 188 shipped occupations. Do NOT substitute the nearest "
+                "title. Say the role isn't in the dataset, ask which of the shipped ones "
+                "is closest in day-to-day WORK (not job title), or give an interests-only "
+                "read with no occupation congruence at all."),
+        }
+        if args.json:
+            print(json.dumps(payload, ensure_ascii=False, indent=2))
+        else:
+            if not hits:
+                print(f"no match for {args.find!r} among the 188 shipped occupations.")
+            for h in hits:
+                flags = ("numeric-interests" if h["has_numeric_interests"] else "code-only") + \
+                        (" +values" if h["has_work_values"] else "")
+                print(f"  {h['score']:.2f}  {h['title']} ({h['soc_code']}) "
+                      f"[zone {h['job_zone']}, {flags}]")
+            print("\n" + payload["_note"])
+        raise SystemExit(0)
     if args.demo:
         _demo()
     else:

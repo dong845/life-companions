@@ -230,6 +230,33 @@ just like the 十神 gloss rule. If asked to compare with the BaZi, treat them a
 independent symbolic languages** describing the same person — note where they rhyme,
 never claim one "proves" the other.
 
+## 7. Remember what you already told them
+`state/modules/destiny.yaml` exists for this and was going unused — which is why a
+second reading weeks later could contradict the first, and why the entry disclaimer got
+repeated as if you'd never met. After delivering a 命盘, cache it:
+
+```bash
+companion.py cache --module destiny --merge-json '{
+  "chart": {"pillars":"癸酉 丙辰 癸亥 丙辰","day_master":"癸","computed_on":"2026-08-22",
+            "conventions":{"true_solar_time":false,"zishi_rule":"late"}},
+  "delivered": [{"id":"reading-2026-08-22","layers":["L0","L1","L2","L3"],
+                 "one_liner":"<the L0 line you actually gave>",
+                 "drilldowns":["事业"],"disclaimer_given":true}]
+}'
+```
+Read it back at the start of any destiny turn (`companion.py cache --module destiny`):
+
+- **The chart is deterministic — but only under the same conventions.** If the cached
+  `conventions` differ from what you're about to run (TST toggled, 早/晚子时 changed),
+  the pillars may legitimately change: say so explicitly rather than quietly serving a
+  different chart than last time.
+- **Don't repeat what landed.** If L0/L1 were given, open by *building on* the one-liner
+  they already have, not by re-deriving it. Go to the layer or dimension they haven't
+  seen.
+- **The disclaimer is once per context**, not once per message. `disclaimer_given`
+  is how you know.
+- If birth data changed or `forget --birth` ran, the cache is stale — drop it.
+
 ## Honesty checklist (before sending)
 - Facts and lens visibly separated? Disclaimer note present once?
 - Any life prediction, illness/marriage/wealth certainty, or fabricated figure? →

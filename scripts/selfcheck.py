@@ -585,7 +585,7 @@ def check(text, module="none", locale=None):
 
     # --- invented helplines -------------------------------------------------
     # Strip ISO datetimes first. A destiny reading states the birth moment
-    # ("1993-04-12 16:00") on essentially every run, and to PHONE_RE that is a
+    # ("1993-04-12 07:35") on essentially every run, and to PHONE_RE that is a
     # 12-digit string with hyphens. Left in, this rule would fire on every chart
     # reading the skill produces — the fastest way to make its most important check
     # get ignored.

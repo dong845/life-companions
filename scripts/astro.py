@@ -10,7 +10,7 @@ a scientific prediction. It fabricates nothing: if birth time is unknown, it omi
 the Moon/rising rather than guessing.
 
 Usage:
-  python3 astro.py --date 1993-04-12 [--time 16:00] --on-date today --format json
+  python3 astro.py --date 1993-04-12 [--time 07:35] --on-date today --format json
   python3 astro.py --date 1993-04-12 --on-date 2026-07-18 --format text
 """
 import argparse

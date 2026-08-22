@@ -620,9 +620,9 @@ class TestSelfcheck(unittest.TestCase):
 
     def test_a_birth_datetime_is_not_a_phone_number(self):
         # Found in real use: every destiny reading states the birth moment, and
-        # "1993-04-12 16:00" is a hyphenated 12-digit string. Left unfixed, the most
+        # "1993-04-12 07:35" is a hyphenated 12-digit string. Left unfixed, the most
         # important check in this gate would have cried wolf on every single chart.
-        for t in ["起盘设定：1993-04-12 16:00 · Beijing", "生于 1993-04-12 07:35",
+        for t in ["起盘设定：1993-04-12 07:35 · 北京", "生于 1993-04-12 07:35",
                   "2026-08-22T14:30 的流日", "时效: as of 2026-08"]:
             r = self.check(t, "destiny")
             self.assertFalse(any(x["code"] == "unknown-helpline" for x in r["findings"]), t)
@@ -752,6 +752,33 @@ class TestSelfcheck(unittest.TestCase):
         r = self.check("You will definitely get the job — you are destined to succeed.",
                        "career")
         self.assertFalse(r["ok"])
+
+
+class TestNoRealUserDataInRepo(unittest.TestCase):
+    """This repo is public. Birth data is the exact category the skill treats as
+    sensitive, consent-gated and 'never leaves your machine' — so it must never end up
+    in a docstring, a comment or a fixture. It did: a real birth date and city got used
+    as the handy example while fixing an unrelated bug, and again in the very first
+    commit. Examples come from the synthetic persona instead."""
+
+    # the only birth data allowed in the tree, matching profile-schema.md's example
+    SYNTHETIC = {"1993-04-12", "1995-08-30", "1930-06-15", "1993-07-15", "2020-05",
+                 "1993-02-04", "1993-02-03", "2030-01-01", "1900-01-15"}
+
+    def test_no_birth_dates_outside_the_synthetic_set(self):
+        import re
+        offenders = []
+        for dp, dn, fn in os.walk(SKILL):
+            dn[:] = [d for d in dn if d not in (".git", "__pycache__", "tests")]
+            for f in fn:
+                if not f.endswith((".py", ".md", ".json")):
+                    continue
+                path = os.path.join(dp, f)
+                text = open(path, encoding="utf-8", errors="ignore").read()
+                for m in re.finditer(r"\b(19[0-9]{2}|200[0-9])-\d{2}-\d{2}\b", text):
+                    if m.group(0) not in self.SYNTHETIC:
+                        offenders.append((os.path.relpath(path, SKILL), m.group(0)))
+        self.assertEqual(offenders, [], f"real-looking birth dates in the repo: {offenders}")
 
 
 class TestVoice(unittest.TestCase):

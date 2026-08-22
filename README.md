@@ -25,8 +25,10 @@
 
 ### 四个模块
 
-- **命理命盘（八字）** — 真实算四柱/日主/五行/十神/大运/流年（`lunar_python` 计算 + `sxtwl`
-  独立核验立春边界）。解读是**分层**的：一句话画像 → 大白话性格 → 分层面（事业/财/感情/
+- **命理命盘（八字 · 星盘 · 紫微 · 合婚）** — 真实算四柱/日主/五行/十神/大运/流年（`lunar_python`
+  计算 + `sxtwl` 独立核验立春边界）；西洋本命盘走真实星历；**紫微斗数**按标准安星法起盘（十二宫/
+  命身宫/五行局/十四主星/六吉六煞/生年四化——但没有第二个引擎可交叉核验，会如实说明）；
+  **合婚**只算传统的地支关系，**刻意不给「合/不合」的结论、分数或建议**。解读是**分层**的：一句话画像 → 大白话性格 → 分层面（事业/财/感情/
   健康/家庭/学业/性格）→ 分阶段人生时间轴（每步大运）。术语第一次出现就用大白话解释。
 - **每日运势 + 日记** — 结合今天的流年/流月/流日 + 你的日记，给一段**短**的、贴着你近况的
   当天基调 + 一个温柔的宜/忌。不给幸运数字/颜色/评分。顺手把当天记进日记。
@@ -61,8 +63,9 @@ SKILL.md              路由（始终加载）
 AGENTS.md             给非 Claude agent（Codex 等）的入口说明
 references/           onboarding · profile-schema · journaling · continuity · forms · factcheck · safety(始终生效)
   modules/            destiny · daily-fortune · career · relationships
-scripts/              companion.py · bazi.py · astro.py · career_match.py · relationship_patterns.py
-                      safety_scan.py · trends.py · form_server.py · selfcheck.py · _deps.py
+scripts/              companion.py · bazi.py · astro.py · ziwei.py · synastry.py · career_match.py
+                      relationship_patterns.py · safety_scan.py · trends.py · form_server.py
+                      selfcheck.py · _deps.py
 data/content/         bazi-interpretation · bazi-life-arc · relationships（真实框架内容层，可编辑）
 data/career/          occupations.json（188 真实 O*NET，68 带数值兴趣分/62 带价值观，CC BY 4.0）· assessment_items.json（21 题）
 tests/                回归测试（纯 unittest，离线）

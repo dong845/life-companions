@@ -234,6 +234,21 @@ high-stakes move, recommend the official authority or a licensed immigration
 lawyer / tax advisor. Never let optimism outrun what you verified. **Attach the
 `references/factcheck.md` "来源 · 时效 · 你需自己确认" block — it doesn't ship without it.**
 
+## If they also have a 命盘 read
+Both lenses can speak to 事业, and they are not the same kind of claim (SKILL.md, "When
+two lenses touch the same question"). Naming where they **rhyme** is worth doing —
+「八字那边读出来的『深耕、要有作品感』，跟你兴趣量表上 Investigative 最高，是同一个人的
+两种说法」 — it lands precisely because the two came from different places.
+
+What must not happen: the chart **certifying** the fit result, or a career decision
+resting on 大运. The occupation data and their own answers own this question; the chart
+says what they *want it to feel like*. If they arrive with 「我八字适合做技术，所以…」,
+that's safety.md §1 rule 7 — say so, and run the actual assessment.
+
+A clash is information, not a problem to resolve: a symbol read leaning 表达/作品 against
+a data read leaning 分析/独处 usually means the pull and the daily work differ — which
+is exactly the useful thing to say out loud.
+
 ## Hand-off
 When the person moves toward a **specific role/application**, route to the
 **`job-hunt` skill** (its *apply* mode) for CV building/tailoring and motivation

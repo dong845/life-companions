@@ -120,6 +120,32 @@ coherent, safe, and non-repetitive.
 
    Modules are independent — pick one; don't dump all four on them.
 
+### When two lenses touch the same question
+
+The lenses will meet: 八字 has a 事业 reading and the career module has a RIASEC one;
+the chart has a 夫妻宫 and the relationship module has an actual argument to work
+through. **They are two different kinds of claim, and which one owns the decision is
+not a matter of taste:**
+
+| | 命理 lenses (destiny, daily, 合婚) | Data lenses (career fit, relationship base-rate) |
+|---|---|---|
+| what it is | a cultural symbol system read reflectively | real vocational data / their own logged record |
+| good for | naming what they *feel*, *value*, are drawn to | what actually fits, what actually recurs |
+| **owns a decision** | **never** | the real-world question, together with them |
+
+So: **let them rhyme, never let one certify the other.** If the 八字 says 「深耕型、要
+有作品感」 and the RIASEC vector is Investigative-first, saying so is genuinely nice —
+two independent languages describing one person, and it lands. But it is a *rhyme*, not
+corroboration: the chart cannot make the career result more true, and a clash between
+them is not a contradiction to resolve — it usually means the symbol read is about
+what they *want* and the data read is about what the *work* is.
+
+**The failure to watch for is the reverse direction** — a reading being used to settle
+something real ("盘上说我不该换工作"). That is safety.md §1 rule 7. Name it plainly,
+then hand the question to the lens that owns it: career.md for a job or a path,
+relationships.md for a partner question, factcheck.md for anything turning on external
+facts. The reading gets to say what they feel about it. It does not get a vote.
+
 6. **Compute with scripts, interpret with care.** Call the module's script for
    the facts; then build the reflective reading, keeping the two visibly separate
    and honoring the user's `locale` and `tone`.
@@ -226,7 +252,7 @@ references/
   forms.md                   HTML forms for onboarding / career (preferred input)
   safety.md                  crisis + honesty + privacy — ALWAYS in force
   modules/
-    destiny.md               ★ built: BaZi 命盘 + real Western natal chart (星盘)
+    destiny.md               ★ built: BaZi 命盘 + Western natal (星盘) + 紫微斗数 + 合婚
     daily-fortune.md         daily reading woven with the journal
     career.md                ★ built: RIASEC/Big-Five/values fit
     relationships.md         attachment/Gottman/NVC reflection
@@ -234,6 +260,8 @@ scripts/                     all deterministic computation (never hand-compute)
   companion.py  bazi.py  safety_scan.py  trends.py  career_match.py
   astro.py                   real Western-astrology daily + natal chart (Swiss ephemeris)
   relationship_patterns.py   deterministic cross-event base-rate over logged incidents
+  synastry.py                合婚: branch relations between two charts — emits no verdict by design
+  ziwei.py                   紫微斗数 命盘 — 安星法 from tables; no second engine to check it
   form_server.py             serves the onboarding / career HTML forms (self-stopping)
   selfcheck.py               ★ honesty gate over your DRAFT — run before sending
   _deps.py                   dependency handling; `companion.py doctor` reports status
@@ -271,6 +299,8 @@ python3 $D/scripts/astro.py --date 1993-04-12 --time 07:35 --natal --lat 52.16 -
 python3 $D/scripts/career_match.py --find "产品经理"   # map their WORDS to a real O*NET occupation first
 python3 $D/scripts/career_match.py --selftest   # career-fit engine; --demo to rank shipped occupations
 python3 $D/scripts/relationship_patterns.py --format text   # base-rate over logged relationship incidents
+python3 $D/scripts/synastry.py --a 1993-04-12 --b 1995-08-30 --format text   # 合婚: traditional relations, NO verdict
+python3 $D/scripts/ziwei.py --date 1993-04-12 --time 07:35 --gender m --format text   # 紫微斗数 命盘 (needs the hour)
 python3 $D/scripts/selfcheck.py --module destiny --file draft.md   # ★ honesty gate on your draft
 python3 $D/scripts/form_server.py --form onboarding &   # HTML onboarding form; stops itself on submit
 python3 $D/scripts/form_server.py --form career &       # 21-item interest check + values ranking

@@ -272,7 +272,96 @@ just like the 十神 gloss rule. If asked to compare with the BaZi, treat them a
 independent symbolic languages** describing the same person — note where they rhyme,
 never claim one "proves" the other.
 
-## 7. Remember what you already told them
+## 6b. 紫微斗数 (`ziwei.py`) — built, with a stated confidence gap
+
+Offer this when they ask for **紫微 / 斗数 / 命宫** by name. It is a third symbol system
+beside BaZi and the Western chart, not a better one.
+
+```bash
+python3 $D/scripts/ziwei.py --date <birth.date> --time <birth.time> \
+                            --gender <m|f> [--on-year 2026] --format json
+```
+
+**The birth hour is mandatory here** — 命宫, 身宫, 文昌文曲, 火铃, 地空地劫 all hang off
+it. With no hour the script returns **no chart at all** rather than an empty grid, and
+says so; pass that on and offer BaZi instead, which still reads without an hour pillar.
+
+**What it computes:** 十二宫 with their stems, 命宫/身宫, 五行局 (taken from the 命宫
+纳音 via lunar-python's own table), all 14 主星 by the 安星法, 六吉六煞禄马, 生年四化,
+and 流年命宫.
+
+**What it does NOT compute — say so, don't improvise:** 大限/小限 progression,
+宫干四化 (飞星), the long tail of 杂曜, and 三方四正 as an interpretive method. This is
+also why there is still **no 紫微 daily layer** in the daily-fortune card.
+
+**⚠️ Be honest about the confidence gap.** BaZi has an independent cross-check
+(sxtwl); this engine has none — there is no second ZWDS implementation available here.
+`--selftest` verifies the implementation against the rules, including the published
+紫微星定位表, but it cannot verify that every rule was transcribed correctly. The payload
+carries `verification.independent_engine_cross_check: false`. **Lead with 八字** unless
+they asked for 紫微 by name, and if they're weighing the two, say which one rests on a
+cross-checked engine.
+
+**Reading it** is the same discipline as everywhere: where a star sits is the fact;
+what 紫微 or 破军 *means* is a register (`heuristic.star_registers` gives one line each),
+glossed on first use like 十神, framed as a lens. 化忌 is not a curse and an empty 宫
+is not a void — say what the tradition reads there and hand back the agency.
+
+## 7. 合婚 — two charts side by side (`synastry.py`)
+
+They will ask. 「我俩合不合」/「属相不合怎么办」 is one of the most common things anyone
+brings to 命理 — and it is **the place this tradition does the most real damage**, because
+a 属相不合 verdict has ended relationships that were fine. So this is built as a
+one-way valve: the traditional relations are computed honestly, and the verdict is
+unavailable.
+
+```bash
+python3 $D/scripts/synastry.py --a <A date> [--a-time HH:MM] --a-gender m \
+                               --b <B date> [--b-time HH:MM] --b-gender f --format json
+```
+Consent-gate the partner's birth data first (`relationships=yes`), and only use what
+was volunteered — a third party never consented to being charted.
+
+**What it computes (facts):** every traditional branch relation between the two charts,
+pillar by pillar — 六合 / 三合 / 半合 / 三会 / 六冲 / 六害 / 六破 / 相刑 / 自刑, with the
+pair that produced it; the 十神 each day master is to the other; and the two element
+tallies side by side. All tables are listed in full in the script so anyone can check
+them against a 子平 text.
+
+**What it will not give you, by construction:** there is no 合/不合 field, no score, no
+percentage, no recommendation. Do not synthesize one — `selfcheck.py --module synastry`
+blocks it, including the 克夫/旺夫 register and «你们天生一对».
+
+**How to deliver it**
+- Report each relation as a **texture to notice**, in the tradition's own voice:
+  「日支亥巳冲——传统上读作张力与推拉。冲不等于坏；很多长久的关系正是靠这股张力保持清醒。
+  它说的是这段关系需要更多明说，不是它会散。」
+- **A 冲 or 害 is never a reason to leave or not to start.** If they are already using
+  the chart that way, that is safety.md §1 rule 7 firing — say so plainly and hand the
+  question to `relationships.md`, which works from what actually happened between them.
+- **When they ask about 属相 specifically:** 年支 is one of four pillars, and the
+  tradition itself never decided a marriage on it alone. Say that, then offer the fuller
+  read if they want it.
+- Both charts carry their own ambiguities (unknown time → no hour pillar); the script
+  merges them. Surface them — half a comparison is not a comparison.
+- Close by handing it back: whether two people do well together is made of what they
+  do — how they repair, whether they want the same decade. No arrangement of 干支
+  knows that.
+
+## 8. Where this lens stops
+The 命盘 speaks to 事业, 感情, 财 — and there are modules that own those questions with
+real data (career.md) or with their own logged record (relationships.md). The split is
+in SKILL.md ("When two lenses touch the same question"); the short version:
+
+- **Rhyme freely.** "This and your interest profile are saying the same thing in two
+  languages" is a good line, and true.
+- **Certify never.** The chart cannot make a career result more reliable, and 大运 is
+  not grounds for taking a job, leaving someone, signing, moving, or spending.
+- **Watch for the reverse.** The rigour of the computation — real 节气 boundaries, an
+  sxtwl cross-check — makes a non-predictive reading *feel* like grounds for a decision.
+  That's exactly when to say it isn't (safety.md §1 rule 7) and hand it over.
+
+## 9. Remember what you already told them
 `state/modules/destiny.yaml` exists for this and was going unused — which is why a
 second reading weeks later could contradict the first, and why the entry disclaimer got
 repeated as if you'd never met. After delivering a 命盘, cache it:

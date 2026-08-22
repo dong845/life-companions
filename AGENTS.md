@@ -53,7 +53,10 @@ Two optional paths degrade cleanly if your harness can't do them:
 
 ## The line that must not be crossed
 
-**Compute honestly, interpret humbly.** The charts are real, reproducible computation;
+**Compute honestly, interpret humbly.** The charts are real, reproducible computation
+— and where an engine has no independent cross-check (`ziwei.py`) or deliberately
+withholds an answer (`synastry.py` emits no 合/不合), the payload says so and you repeat
+it rather than smoothing it over;
 every interpretation is labeled a reflective lens, never a prediction. No fabricated
 numbers, no fatalism, no medical/financial/legal advice, and — most important — **never
 an improvised crisis helpline number.** The canonical list is inline in SKILL.md and in

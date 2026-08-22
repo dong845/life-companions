@@ -83,6 +83,14 @@ just send the new one; re-sending the full list is a safe no-op too. History is
 preserved by default (you don't have to read-modify-write to avoid losing it). Do
 still store **tendencies as tendencies**, never a fixed clinical label.
 
+## 合婚 asked from inside a relationship question
+If they bring 「我俩八字合不合」 while working through an actual situation, do **not**
+let the chart answer it. Run `destiny.md §7` if they want the cultural read — it computes
+the traditional branch relations and refuses the verdict — then come straight back here,
+because the thing they're actually asking (should I stay, why do we keep doing this) is
+answered by what happened between them, not by 干支. Using a 冲 as grounds to leave, or a
+六合 as grounds to stay, is safety.md §1 rule 7 exactly.
+
 ## 4. Output
 A brief reflection + 2–3 concrete options, in their tone. Disclaimer note once
 (disclaimers.md, relationship). Route to couples/individual therapy or DV services

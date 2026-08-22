@@ -249,14 +249,77 @@ DISCLAIMER_MARKERS = {
                r"don'?t predict"],
     "relationships": [r"只听到了?你(这)?一面", r"看不到全部", r"不是替你下判断", r"几种可能的角度",
                       r"only hearing your side", r"not a verdict"],
+    "synastry": [r"不是预测", r"不是.*依据", r"一种(文化)?视角", r"怎么相处", r"反思",
+                 r"not a prediction", r"cultural lens"],
 }
-MODULES = ["destiny", "daily", "career", "relationships", "journal", "crisis", "none"]
+# 合婚 has its own blockers because it is the highest-harm output this skill can
+# produce: a 属相不合 verdict has ended relationships that were fine. synastry.py
+# deliberately emits no verdict — this stops one being synthesized anyway.
+SYNASTRY_VERDICT = [
+    (r"(你们|两人|这段(感情|关系))?[^。！？\n]{0,6}(不合|合得来|合不来|不般配|不相配|"
+     r"天生一对|命定的?一对|绝配|注定在一起|注定分开)", "给出「合/不合」的结论"),
+    (r"(属相|生肖|八字)[^。！？\n]{0,6}(不合|相冲|犯冲|不配|克)[^。！？\n]{0,10}"
+     r"(别|不要|不能|分|散|离)", "拿属相/八字当劝分或劝阻的理由"),
+    (r"(合婚|配对|契合)[^。！？\n]{0,6}(得分|分数|评分|\d+\s*分|\d+\s*%)", "合婚打分"),
+    (r"(克夫|克妻|旺夫|旺妻|命硬)", "克/旺 之类的断语"),
+    (r"\b(you two are|you'?re) (a )?(perfect match|meant to be|incompatible)\b",
+     "compatibility verdict"),
+]
+# safety.md §1 rule 7, made checkable. The rigour of the computation (real 节气
+# boundaries, a real ephemeris) makes a NON-predictive reading feel like grounds for a
+# real decision. This fires when a draft lets a chart term settle a high-stakes action —
+# the one direction the lenses must never run (SKILL.md, "When two lenses touch the
+# same question").
+# NOTE the (?:...) on every one of these. A bare alternation does not compose: pasting
+# "a|b" into a longer pattern makes the WHOLE pattern an alternation, so the first
+# version of this rule quietly degraded into "any chart word anywhere" and appeared to
+# work. Keep them grouped.
+_CHART_TERM = (r"(?:八字|命盘|命理|大运|流年|流月|流日|十神|日主|星盘|本命盘|紫微|"
+               r"斗数|星座|上升|宫位|命宫|盘上|盘里)")
+_REAL_DECISION = (r"(?:换工作|辞职|跳槽|接(?:这个)?offer|入职|创业|分手|离婚|结婚|表白|"
+                  r"复合|买房|卖房|投资|加仓|借钱|签(?:约|合同)|移民|搬去|出国|退学|休学|"
+                  # Chinese splits the verb and object freely — 「把房买了」 is the same
+                  # decision as 「买房」 and must not slip past.
+                  r"把(?:房|车|合同|婚)(?:子)?(?:买|卖|签|结)|(?:房|车)(?:子)?(?:买|卖)了|"
+                  r"把(?:工作|职)辞|婚(?:也)?结了)")
+_DECIDING = (r"(?:所以(?:你)?(?:该|应该|就)|建议你|那就(?:去|把)?|可以放心|大胆|"
+             r"不妨(?:就)?|说明你该|是该|适合(?:在)?(?:今年|明年|这两年|这一步)|"
+             r"时机(?:到了|不对))")
+RULE7 = [
+    (_CHART_TERM + r"[^。！？\n]{0,24}" + _DECIDING + r"[^。！？\n]{0,12}" + _REAL_DECISION,
+     "拿命理读法给现实高风险决定背书"),
+    (_REAL_DECISION + r"[^。！？\n]{0,20}(?:看|按|依|据)[^。！？\n]{0,8}" + _CHART_TERM
+     + r"[^。！？\n]{0,12}" + _DECIDING,
+     "把现实决定挂在命理读法上"),
+]
+
+MODULES = ["destiny", "daily", "career", "relationships", "synastry",
+           "journal", "crisis", "none"]
 
 
-def _find(text, patterns, code, severity, fix):
+# Refusing a verdict necessarily quotes it — 「两个人合不合，是你们怎么相处决定的」 is
+# the RIGHT sentence and contains 「不合」. A gate that punishes the correct refusal
+# teaches the model to stop refusing, which is the opposite of the point. So for the
+# verdict families, a match inside a sentence that is visibly declining or reframing
+# the verdict does not count.
+REFUSAL_CUE = re.compile(
+    r"不是|并非|别拿|不该|不能|不作数|决定的|替你决定|取决于|要看|得看|怎么相处|"
+    r"由你们|自己决定|没有?依据|说了不算|不构成|无关|谈不上|不替你|"
+    r"回到.{0,4}模块|走.{0,4}模块|交给|"
+    r"isn'?t|is not|doesn'?t|does not|cannot|can'?t|never|rather than|not a |no such")
+
+
+def _find(text, patterns, code, severity, fix, respect_refusal=False):
     out = []
     for pat, why in patterns:
         for m in re.finditer(pat, text, re.I):
+            if respect_refusal:
+                # the sentence this match sits in
+                start = max(text.rfind(c, 0, m.start()) for c in "。！？!?\n；;") + 1
+                end = min([e for e in (text.find(c, m.end()) for c in "。！？!?\n；;")
+                           if e != -1] or [len(text)])
+                if REFUSAL_CUE.search(text[start:end]):
+                    continue
             out.append({"code": code, "severity": severity, "why": why,
                         "evidence": m.group(0).strip()[:120], "fix": fix})
     return out
@@ -294,6 +357,13 @@ def check(text, module="none", locale=None):
                    "checkable about someone else's body or life. Rewrite as their own "
                    "relational tendency, and never forecast a third party.",
         })
+    if module == "synastry":
+        f += _find(text, SYNASTRY_VERDICT, "synastry-verdict", "blocker", respect_refusal=True, fix=
+                   "synastry.py emits no 合/不合, no score, and no recommendation, by "
+                   "construction. Report the branch relations as textures to notice "
+                   "(「亥巳冲，传统上读作张力与推拉」), then say plainly that whether two "
+                   "people do well together is made of what they DO — and route a real "
+                   "relationship question to references/modules/relationships.md.")
     f += _find(text, RELATIONSHIP_VERDICT, "one-sided-verdict", "blocker",
                "relationships.md §G + safety.md §3: hold ≥2 perspectives, voice the "
                "absent partner fairly, tendencies not labels. If it IS abuse, route to "
@@ -365,6 +435,13 @@ def check(text, module="none", locale=None):
                    "payload, not a computed fact. Label it (「按扶抑一派估…」) and note "
                    "that 调候/病药 schools may read it differently.",
         })
+
+    f += _find(text, RULE7, "reading-as-decision", "blocker", respect_refusal=True,
+               fix="safety.md §1 rule 7: a reading names what they FEEL and VALUE; it "
+                   "never decides. Say that plainly, then hand the question to the lens "
+                   "that owns it — career.md for a job or path, relationships.md for a "
+                   "partner question, factcheck.md for anything turning on external "
+                   "facts. Let the lenses rhyme; never let one certify the other.")
 
     # --- high-stakes external facts need the factcheck block ----------------
     hs = [m.group(0) for p in HIGH_STAKES for m in re.finditer(p, text, re.I)]

@@ -70,8 +70,11 @@ paper over it into a fake single verdict.
   labeled 五行-derived 彩头, no "the stars will make you…". The per-dimension lean is
   the 扶抑 heuristic, labeled.
 - Never fatalistic; agency language; keep it woven with the journal.
-- Coverage now: **八字流日 · 生肖 · 西方星座(真实天文)· 五行**. 紫微斗数 daily is a
-  future add (heavier — needs a ZWDS engine); say it's coming if asked, don't fake it.
+- Coverage now: **八字流日 · 生肖 · 西方星座(真实天文)· 五行**. A 紫微 chart now exists
+  (`ziwei.py`), but a 紫微 **daily** layer needs 大限/流年宫位 progression that the engine
+  deliberately does not compute — so it is still not in the daily card. If they ask, say
+  that plainly: the natal 紫微盘 is available (destiny module), the daily layer isn't.
+  Don't improvise one out of the natal chart.
 - Close the loop: offer to log the day (`add-entry`, with your reflection), and offer
   a deeper drill-down on any layer. Keep it a daily touch — rich, but not exhausting;
   if they want the quick version, give just 基调 + 宜/忌.

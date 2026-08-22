@@ -427,6 +427,148 @@ class TestAstro(unittest.TestCase):
         self.assertTrue(r.get("caveats"))
 
 
+class TestSynastry(unittest.TestCase):
+    """合婚 is where this tradition does the most real-world damage. The engine's job
+    is to compute the traditional relations and make a verdict UNAVAILABLE."""
+
+    def chart(self, **kw):
+        args = ["--a", "1993-04-12", "--a-time", "07:35", "--a-gender", "m",
+                "--b", "1995-08-30", "--b-time", "14:20", "--b-gender", "f"]
+        return jrun("synastry.py", *args)
+
+    def test_branch_relations_are_computed_and_symmetric(self):
+        import synastry
+        # every table entry must read the same both ways round
+        for z1 in synastry.ZHI:
+            for z2 in synastry.ZHI:
+                a = {r["relation"] for r in synastry._relations_between(z1, z2)}
+                b = {r["relation"] for r in synastry._relations_between(z2, z1)}
+                self.assertEqual(a, b, f"{z1}/{z2} asymmetric")
+
+    def test_known_relations(self):
+        import synastry as sy
+        rel = lambda a, b: {r["relation"] for r in sy._relations_between(a, b)}
+        self.assertIn("六合", rel("子", "丑"))
+        self.assertIn("六冲", rel("子", "午"))
+        self.assertIn("六害", rel("子", "未"))
+        self.assertIn("半合", rel("申", "子"))
+        self.assertIn("三会", rel("寅", "卯"))
+        self.assertIn("相刑", rel("子", "卯"))
+        self.assertIn("自刑", rel("辰", "辰"))
+        # 寅亥 carries TWO relations at once — report both, not the flattering one
+        self.assertEqual({"六合", "六破"}, rel("寅", "亥"))
+        self.assertEqual(set(), rel("子", "寅"))
+
+    def test_computed_section_carries_no_verdict(self):
+        # Scan only `computed` — `refusals`/`disclaimer` necessarily QUOTE the verdict
+        # in order to forbid it, exactly like a good reply does.
+        r = self.chart()
+        blob = json.dumps(r["computed"], ensure_ascii=False)
+        for forbidden in ["compatib", "合不合", "般配", "score", "得分", "评分", "%",
+                          "克夫", "克妻", "天生一对"]:
+            self.assertNotIn(forbidden, blob, f"computed leaks a verdict: {forbidden}")
+        # and no numeric field that could be printed as a compatibility number
+        def numbers(o, path=""):
+            if isinstance(o, dict):
+                for k, v in o.items():
+                    yield from numbers(v, f"{path}.{k}")
+            elif isinstance(o, list):
+                for i, v in enumerate(o):
+                    yield from numbers(v, f"{path}[{i}]")
+            elif isinstance(o, (int, float)) and not isinstance(o, bool):
+                yield path, o
+        for path, val in numbers(r["computed"]):
+            self.assertIn("tally", path,
+                          f"unexpected number in the payload ({path}={val}) — the only "
+                          f"numbers here should be element counts")
+
+    def test_refusals_are_present_and_route_elsewhere(self):
+        r = self.chart()
+        self.assertIn("refusals", r)
+        self.assertIn("relationships.md", r["refusals"]["route"])
+        self.assertIn("属相", r["refusals"]["zodiac_myth"])
+
+    def test_unknown_time_shrinks_the_comparison_and_says_so(self):
+        r = jrun("synastry.py", "--a", "1993-04-12", "--b", "1995-08-30")
+        pillars = [p["pillar"] for p in r["computed"]["pillar_pairs"]]
+        self.assertNotIn("hour", pillars)
+        self.assertTrue(any("时刻未知" in a or "时柱不参与" in a for a in r["ambiguities"]))
+
+    def test_gate_blocks_a_synthesized_verdict(self):
+        import selfcheck
+        for bad in ["你们属相不合，别勉强了。", "合婚得分 78 分。", "你们俩天生一对。",
+                    "她命硬克夫。"]:
+            self.assertFalse(selfcheck.check(bad, "synastry")["ok"], bad)
+
+    def test_gate_allows_the_correct_refusal(self):
+        # the sentence that DECLINES the verdict necessarily contains its words
+        import selfcheck
+        good = ("日支亥巳冲，传统上读作张力与推拉。这只是一种文化视角下的反思，不是预测，"
+                "也不是这段关系该不该继续的依据；两个人合不合，是你们怎么相处决定的。")
+        self.assertTrue(selfcheck.check(good, "synastry")["ok"],
+                        selfcheck.check(good, "synastry")["findings"])
+
+
+class TestZiwei(unittest.TestCase):
+    """A chart engine written from tables, with no second engine to check against —
+    so the tests carry more weight here than anywhere else in this skill."""
+
+    def test_selftest_passes(self):
+        code, out, err = run("ziwei.py", "--selftest")
+        self.assertEqual(code, 0, out + err)
+        self.assertIn("SELFTEST: OK", out)
+
+    def test_ziwei_matches_the_published_table(self):
+        # THE external check: 紫微星定位表, first five days of all five 局
+        import ziwei
+        table = {2: ["丑", "寅", "寅", "卯", "卯"], 3: ["辰", "丑", "寅", "巳", "寅"],
+                 4: ["亥", "辰", "丑", "寅", "子"], 5: ["午", "亥", "辰", "丑", "寅"],
+                 6: ["酉", "午", "亥", "辰", "丑"]}
+        for ju, row in table.items():
+            for day, want in enumerate(row, start=1):
+                self.assertEqual(ziwei.ZHI[ziwei._ziwei_position(ju, day)], want,
+                                 f"{ju}局 day {day}")
+
+    def test_sihua_palace_agrees_with_the_chart_body(self):
+        # these disagreed on the first real chart rendered: the palace lookup ran
+        # clockwise while the palaces themselves run counter-clockwise
+        import ziwei
+        c = ziwei.compute("1993-04-12", "07:35", "m")["computed"]
+        where = {s["star"]: p["palace"] for p in c["palaces"] for s in p["stars"]}
+        for hua, info in c["birth_sihua"].items():
+            if info["palace"]:
+                self.assertEqual(info["palace"], where[info["star"]],
+                                 f"{hua}{info['star']} palace mismatch")
+
+    def test_no_birth_time_yields_NO_chart_not_an_empty_one(self):
+        # an empty chart with a real-looking 命宫 reads as computed; that is worse
+        import ziwei
+        c = ziwei.compute("1993-04-12", None, "m")["computed"]
+        self.assertIsNone(c["ming_gong"])
+        self.assertIsNone(c["shen_gong"])
+        self.assertIsNone(c["lunar"]["hour_zhi"])
+        self.assertIsNone(c["wuxing_ju"]["name"])
+        self.assertEqual(c["palaces"], [])
+
+    def test_declares_it_has_no_independent_cross_check(self):
+        import ziwei
+        r = ziwei.compute("1993-04-12", "07:35", "m")
+        self.assertFalse(r["verification"]["independent_engine_cross_check"])
+        self.assertTrue(r["not_computed"])
+
+    def test_leap_month_is_flagged_not_silently_resolved(self):
+        import ziwei
+        # 2020 had a leap 4th month; find a date inside it
+        found = False
+        for day in range(21, 32):
+            r = ziwei.compute(f"2020-05-{day:02d}", "07:35", "m")
+            if r["computed"]["lunar"]["is_leap_month"]:
+                found = True
+                self.assertTrue(any("闰" in a for a in r["ambiguities"]))
+                break
+        self.assertTrue(found, "expected a leap-month date in 2020-05")
+
+
 class TestSafetyScan(unittest.TestCase):
     """A keyword backstop. It may miss; it must not cry wolf on ordinary venting."""
 
@@ -553,6 +695,45 @@ class TestSelfcheck(unittest.TestCase):
     def test_blocks_labelling_and_deciding_for_them(self):
         r = self.check("她这种行为就是典型的煤气灯操控，你该离开她。", "relationships")
         self.assertTrue(any(x["code"] == "one-sided-verdict" for x in r["findings"]))
+
+    # --- safety.md rule 7, made checkable: a reading must never settle a real,
+    # high-stakes decision. The first version of this rule was BROKEN in a way that
+    # looked like it worked — a bare alternation pasted into a longer pattern makes the
+    # whole pattern an alternation, so it fired on any chart word anywhere. ---
+
+    def test_blocks_a_reading_used_to_decide(self):
+        for bad in ["你今年流年正财旺，所以该辞职去创业。",
+                    "大运走到这一步，建议你就把房买了。",
+                    "从八字看，这一步适合今年结婚。",
+                    "命盘说明你该跳槽，不妨大胆一点。",
+                    "要不要分手，按你俩的八字看是该分了。",
+                    "盘里说时机到了，那就把合同签了。"]:
+            r = self.check(bad, "destiny")
+            self.assertTrue(any(x["code"] == "reading-as-decision" for x in r["findings"]), bad)
+
+    def test_allows_declining_to_decide(self):
+        # the refusal necessarily names both the chart and the decision
+        for good in ["流年正财被点亮，是季节感——但这不是「你该辞职」的依据；"
+                     "换不换工作要看真实的岗位。",
+                     "盘不能替你决定要不要分手；那要看你们之间实际发生了什么，"
+                     "我们回到关系模块。",
+                     "买房这种事得看你的现金流和这套房本身；命盘说了不算。"]:
+            self.assertTrue(self.check(good, "destiny")["ok"],
+                            self.check(good, "destiny")["findings"])
+
+    def test_allows_two_lenses_rhyming(self):
+        good = ("你盘里正官(责任、规矩)藏得厚，跟兴趣量表上 Investigative 最高是"
+                "同一个人的两种说法——是呼应，不是佐证。")
+        self.assertTrue(self.check(good, "destiny")["ok"], self.check(good, "destiny")["findings"])
+
+    def test_rule7_patterns_actually_compose(self):
+        # guards the specific bug above: each component must be a grouped unit, so a
+        # lone chart word can never satisfy the whole rule
+        import selfcheck, re
+        for pat, _ in selfcheck.RULE7:
+            self.assertFalse(re.search(pat, "今年流年不错。"), f"lone chart word matched {pat[:40]}")
+            self.assertFalse(re.search(pat, "他打算换工作。"), f"lone decision word matched {pat[:40]}")
+            self.assertFalse(re.search(pat, "建议你多休息。"), f"lone decider matched {pat[:40]}")
 
     def test_english_output_is_checked_too(self):
         r = self.check("You will definitely get the job — you are destined to succeed.",

@@ -154,7 +154,16 @@ facts. The reading gets to say what they feel about it. It does not get a vote.
    ```bash
    python3 $D/scripts/selfcheck.py --module <destiny|daily|career|relationships|crisis> --file draft.md
    ```
-   It's a deterministic backstop for the rules below — fabricated precision (in digits
+   The same command also prints a **`voice`** section: the wording tells that make a
+   reply read like a form a machine filled in — 「不是X，是Y」 as a reflex, stock phrases
+   (`delve`, 「值得注意的是」), 破折号 as the default connective, every paragraph wearing a
+   `**label**：`, sentences all the same length, padding adverbs, 「进行/做出+名词」. It
+   never blocks, and it counts things, so the fix is always "cut three of these".
+   **Read `references/voice.md`** when it fires, or before writing anything long — it
+   also covers 通俗易懂 (大白话在前、术语在后) and why the required honesty framing does
+   not have to be hedged into mush. (Emoji and headers are fine; wording is the issue.)
+
+   The honesty half is a deterministic backstop for the rules below — fabricated precision (in digits
    **or in words**: 「八成契合」), fatalism *including hedged forms* (「大概率保不住」,
    「本命年容易出事」), forecasts about a relative's health, 黄历-style prohibitions,
    hiring predictions, clinical labels on an absent partner, an **invented helpline
@@ -250,6 +259,8 @@ references/
   journaling.md              low-friction daily capture
   continuity.md              how to feel "known" across sessions
   forms.md                   HTML forms for onboarding / career (preferred input)
+  voice.md                   sounding like a person + 通俗易懂 (zh & en); read when
+                             selfcheck's `voice` section fires, or before anything long
   safety.md                  crisis + honesty + privacy — ALWAYS in force
   modules/
     destiny.md               ★ built: BaZi 命盘 + Western natal (星盘) + 紫微斗数 + 合婚

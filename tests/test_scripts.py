@@ -618,6 +618,19 @@ class TestSelfcheck(unittest.TestCase):
         r = self.check("可以打心理热线 400-800-1234 试试。", "crisis")
         self.assertTrue(any(x["code"] == "unknown-helpline" for x in r["findings"]))
 
+    def test_a_birth_datetime_is_not_a_phone_number(self):
+        # Found in real use: every destiny reading states the birth moment, and
+        # "1993-04-12 16:00" is a hyphenated 12-digit string. Left unfixed, the most
+        # important check in this gate would have cried wolf on every single chart.
+        for t in ["起盘设定：1993-04-12 16:00 · Beijing", "生于 1993-04-12 07:35",
+                  "2026-08-22T14:30 的流日", "时效: as of 2026-08"]:
+            r = self.check(t, "destiny")
+            self.assertFalse(any(x["code"] == "unknown-helpline" for x in r["findings"]), t)
+
+    def test_still_catches_an_invented_helpline_near_dates(self):
+        r = self.check("生于 1993-04-12。可以打热线 400-800-1234 试试。", "crisis")
+        self.assertTrue(any(x["code"] == "unknown-helpline" for x in r["findings"]))
+
     def test_accepts_the_canonical_helplines(self):
         for good in ["全国心理援助热线 12356 是 24 小时的",
                      "113 Zelfmoordpreventie — 0800-0113",
@@ -739,6 +752,81 @@ class TestSelfcheck(unittest.TestCase):
         r = self.check("You will definitely get the job — you are destined to succeed.",
                        "career")
         self.assertFalse(r["ok"])
+
+
+class TestVoice(unittest.TestCase):
+    """AI味 is measurable, and it is about WORDING — emoji and headers are fine.
+    The skill's own output specs used to mandate the form-filling voice, so prose
+    advice alone was never going to fix it."""
+
+    HUMAN_ZH = ("🌤 今天有点拧巴。\n\n天干那头是压力，地支那头反倒跟你时柱的申凑成了"
+                "半个水局。水是你缺的，所以补给这条线今天开着。\n\n收尾比开新战线划算。"
+                "想拍板的事，明天再看一眼。今天流日冲你日支，传统上说那是贴身的一格被"
+                "摇动，判断会比自己以为的毛躁。\n\n就这样。扶抑一派的看法，别的流派未必"
+                "这么读。")
+    AI_ZH = ("**🌤 今日基调**：今天不是单纯的重日：压力那面在天干，补给那面在地支。\n"
+             "**🔮 分层面**：事业推着走的感觉重，适合硬啃细活，不适合开新战线。\n"
+             "**💬 结合近况**：这其实正是那条线的样子——往一门东西里深钻、并且让它被检验，"
+             "而不是再多扛一条战线。某种意义上，这跟昨天那句话是同一个答案的两面。\n"
+             "换句话说，今天真正需要做出决定的，其实不是方向，而是节奏。")
+    HUMAN_EN = ("🌤 Today pulls two ways at once.\n\nThe pressure sits on the stem. But "
+                "the branch pairs with your hour pillar into a water combination, and "
+                "water is what your chart runs thin on. So there's a supply line open "
+                "today that usually isn't there.\n\nFinish something. Don't start "
+                "something. If you're about to decide anything that matters, look again "
+                "tomorrow.\n\nOne school's read. Not a forecast.")
+    AI_EN = ("Let's delve into today. It's worth noting that Saturn retrograde plays a "
+             "crucial role, a testament to the myriad ways these energies interact. In "
+             "other words, this isn't just about work; it's about the holistic tapestry "
+             "of your day. That said, the key here is balance. Ultimately, this is not a "
+             "prediction, but an invitation. I hope this helps!")
+
+    def voice(self, t):
+        import selfcheck
+        return selfcheck.check_voice(t)
+
+    def test_human_writing_passes_in_both_languages(self):
+        for label, t in (("zh", self.HUMAN_ZH), ("en", self.HUMAN_EN)):
+            r = self.voice(t)
+            self.assertTrue(r["ok_voice"], f"{label}: {r['findings']}")
+
+    def test_machine_writing_is_flagged_in_both_languages(self):
+        for label, t in (("zh", self.AI_ZH), ("en", self.AI_EN)):
+            r = self.voice(t)
+            self.assertGreaterEqual(len(r["findings"]), 2, f"{label}: {r['findings']}")
+
+    def test_emoji_alone_never_triggers_anything(self):
+        # explicit product decision: emoji are fine, wording is the issue
+        plain = "今天有点拧巴。收尾比开新战线划算。就这样。"
+        emojied = "🌤✨🔮 " + plain + " 💬🀄♓🎨✅⛔🕰️💼💰"
+        self.assertEqual([f["code"] for f in self.voice(plain)["findings"]],
+                         [f["code"] for f in self.voice(emojied)["findings"]])
+        self.assertTrue(self.voice(emojied)["ok_voice"])
+
+    def test_language_is_detected_and_can_be_forced(self):
+        import selfcheck
+        self.assertTrue(selfcheck.check_voice(self.HUMAN_ZH)["cjk"])
+        self.assertFalse(selfcheck.check_voice(self.HUMAN_EN)["cjk"])
+        self.assertFalse(selfcheck.check_voice(self.HUMAN_ZH, locale="en")["cjk"])
+
+    def test_english_sentences_split_on_periods(self):
+        # this was broken: without '.' every English paragraph counted as ONE sentence,
+        # so human writing scored as perfectly uniform and got flagged
+        import selfcheck
+        n = len(selfcheck._sentences("One. Two things here. Three. And a fourth one."))
+        self.assertGreaterEqual(n, 4)
+        # decimals must not split
+        self.assertEqual(len(selfcheck._sentences("orb 0.3 degrees of tension here")), 1)
+
+    def test_voice_never_blocks(self):
+        code, out, _ = run("selfcheck.py", "--module", "daily", "--text", self.AI_ZH)
+        self.assertEqual(code, 0, "voice findings must never set a failing exit code")
+        self.assertIn("voice", out)
+
+    def test_no_voice_flag_suppresses_the_section(self):
+        _, out, _ = run("selfcheck.py", "--module", "daily", "--no-voice",
+                        "--text", self.AI_ZH)
+        self.assertNotIn("voice [", out)
 
 
 class TestDocsTeachGoodShapes(unittest.TestCase):

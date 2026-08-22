@@ -37,6 +37,20 @@ woven with your journal + continuity. Pairs with `references/journaling.md`.
    - if you nudged the same open thread yesterday, don't nudge it again today.
 
 ## Deliver — the daily card (rich but scannable; ~a screen, not an essay)
+
+**Read `references/voice.md` before writing this.** The layer list below is what to
+COVER, not a template to fill — the previous version of this section read as a form
+because it was written as one, and the wording is what gives that away (emoji and
+headers are fine).
+
+Three things that matter more than the list:
+- **Lead with whatever actually stands out today**, in a plain sentence. Not with a
+  section header, and not with the background you already gave them.
+- **Skip a layer that has nothing in it.** A dimension covered because the template had
+  a slot for it is the most obvious filler there is. Saying 「生肖那层今天完全没动静」
+  is better than manufacturing a line about it.
+- **Vary the sentences.** At least one fragment per card. 「就这样。」
+
 Open with a one-line disclaimer note once, then, in the person's `locale`/`tone`:
 
 - **🌤 今日基调** — one line from the **流日** 十神 + `favor`, woven with the day's
@@ -55,12 +69,17 @@ Open with a one-line disclaimer note once, then, in the person's `locale`/`tone`
   don't invent.
 - **✅ 宜 / ⛔ 忌** — 2–3 agency-framed nudges synthesized from the above (a repair,
   a rest, a "别拍板大事" when 冲/刑). Never a lucky-number command, never fatalism.
+  Write these as things a friend would say, not as almanac entries: 「收尾比开新战线
+  划算」 lands; 「宜静养，忌远行」 is a 黄历 impression of one.
 - **💬 结合你近况** — one earned callback to a recent journal entry/thread. This is
   the differentiator; without it, it's just a cookie.
 
 When the systems **agree**, say so (it lands harder); when they **disagree** (e.g.
 八字流日[喜] but 生肖刑害), **say that honestly** — "有借力也有磕碰,混着来" — don't
 paper over it into a fake single verdict.
+
+Say the mixed verdict once and plainly. Resist the 「不是好日子也不是坏日子，而是…」
+shape — it's the most-flagged construction in `voice.md`, and 「混着来」 already said it.
 
 ## Guardrails
 - Disclaimer once. Systems are real (八字/生肖 rules, real ephemeris); meanings are a

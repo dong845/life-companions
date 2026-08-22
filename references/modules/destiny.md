@@ -76,7 +76,14 @@ more granular, more term-heavy than the last. The reader chooses how far to go, 
 "easy to understand" (L0/L1) and "comprehensive" (L2/L3) stop fighting. Keep the
 ①facts / ②lens split (that's the honesty spine); all the richness goes in ②.
 Ground every line in `data/content/bazi-life-arc.md` (dimension + life-arc tables)
-and speak in `bazi-interpretation.md §E`'s voice.
+and speak in `bazi-interpretation.md §E`'s voice — and in the register of
+`references/voice.md`: 大白话在前、术语在后, one idea per sentence, and the honesty
+frame said **once** at the top rather than hedged into every clause.
+
+**Read `references/voice.md` before writing the 画像.** The layers below are a
+structure for *what to cover and in what order of depth* — they are not a form. L0 in
+particular has to sound like a person who just looked at your chart and said one true
+thing, which means plain words, no label, and no 「不是X，是Y」.
 
 **Two rules baked into every layer below:**
 - **Jargon-gloss rule.** A 十神/五行/扶抑 term appears only in `术语(大白话)` form
@@ -94,34 +101,37 @@ folded line ABOVE L0 (info kept, not hogging the opening). The real opener is L0
 
 **🪞 L0 · 一句话画像** *(the single most important line — zero jargon, friend-voice)*
 One sentence that concentrates the day-master + dominant 十神 into "what kind of
-person you are". First-glance payoff for the term-averse reader.
-> 例（癸亥·男）：你是那种「心思深、看得细、认死理要把事做扎实」的人——想法在心里转很久，
-> 但一旦认准，会用很务实的方式一点点把它做出来。
+person you are". First-glance payoff for the term-averse reader. It has to sound like
+someone who just looked at your chart and said one true thing — so: plain words, no
+label, no 「不是X，是Y」, and no dash doing the work a full stop should do.
+> 例（癸亥·男）：你想事情想得很久。但认准了就会很实在地一点一点把它做出来，
+> 不太声张，也不太回头。
 
 **✍️ L1 · 性格速写** *(3–4 plain lines, still zero jargon)*
 `**加粗引导词** + 一句大白话`, each ≤2 lines. What they're *like day to day*.
-> - **想得深、感受细**：遇事先在心里过一遍，共情强，但容易想太多、把别人情绪吸到自己身上。
-> - **有主见、独立**：脑子转得快、像水一样能变通，认准方向不太受人左右。
-> - **务实、重承诺**：不爱空谈，喜欢把价值一点点建起来，答应的事会当真。
-> - **在意规矩和责任**：「该达标、该做好」在你心里分量很重。
+Vary them: one longer, one very short. Not every line needs three parallel clauses.
+> - **想得深**：遇事先在心里过一遍。共情强，代价是容易把别人的情绪也接过来。
+> - **有主见**：脑子转得快，像水一样能绕路，但方向是自己定的。
+> - **务实**：不爱空谈。答应的事会当真。
+> - **在意规矩**：「该做好」这三个字在你心里分量很重。
 
 **🔎 L2 · 分层面** *(the 7 dimensions — first comprehensiveness block)*
 Seven skippable blocks — **事业 / 财 / 感情 / 健康 / 家庭 / 学业 / 性格** — each
 `**层面名** → 一句结论 → 半句依据(术语就地夹注)`, ≤3 lines, whole-block skippable,
 gender-noted where 财/官/食伤 apply. Source each from `bazi-life-arc.md §1`.
-> **💼 事业**：适合「深耕型、能出成果又被认可」的路子。你盘里正官(责任、规矩、嵌进体系
-> 做好)藏得厚，食伤(想表达、把心里的东西做出来)也在——既想靠谱，又想有作品感。
-> **💰 财运**：偏「稳稳积累」而非「一把暴富」。正财(踏实赚取、务实攒钱那条线)清晰，靠专业
-> 和长期复利比投机更合你。(男命:财也关联伴侣缘。)
-> **❤️ 感情**：重投入、也重承诺，但心思私密、不轻易外露。是认真型；要留神想太多、把对方
-> 情绪都接过来会累。
-> **🩺 健康(只谈倾向，不诊断)**：你水最旺(水主思虑、睡眠、情绪)，最该照看「脑子停不下来」
-> ——熬夜、反刍、情绪内耗是主要消耗口。给思绪挖出口比硬扛好；真有担心请找医生。
-> **👪 家庭/六亲**：比劫(同类、手足、同侪)有力——同辈/朋友/合伙戏份重，是助力也需边界。
-> 印星偏向偏印(靠钻研、悟、偏冷门专精的学习方式)，靠自己钻研多于被喂养。
-> **📚 学业**：自学型。偏印(靠钻研、悟、偏冷门专精)是底色，适合深挖一门慢慢成专家。
-> **🧭 性格(底色)**：日主癸水(这张盘的「你」，阴水，雨露雾气的意象)：敏感、想象力强、
-> 温和、心思深而私密。有目标时是动力，没出口时容易变成停不下来的盘算。
+> **💼 事业**：适合往深里做、还能被看见的路子。你盘里正官(责任、规矩、把自己嵌进体系里
+> 做好)藏得厚，食伤(想表达、想把心里的东西做出来)也在。想靠谱，又想有作品感。
+> **💰 财运**：偏稳稳积累那一路。正财(踏实赚取、务实攒钱那条线)清晰，靠专业和时间复利
+> 比靠投机更合你。(男命：财这条线也关联伴侣缘。)
+> **❤️ 感情**：投入得深，也肯承诺，但心思私密，不太外露。认真型。要留神的是想太多，
+> 以及把对方的情绪也一并接过来。
+> **🩺 健康(只谈倾向，不诊断)**：你水最旺，水在传统里主思虑、睡眠、情绪，所以最该照看的
+> 是「脑子停不下来」。熬夜和反刍是主要消耗口。给思绪挖个出口，比硬扛省。真有担心请找医生。
+> **👪 家庭/六亲**：比劫(同类、手足、同侪)有力，同辈和合伙人在你的故事里戏份重。是助力，
+> 边界也得自己划。印星偏向偏印(靠钻研、悟、偏冷门专精的学习方式)，靠自己钻研多于被喂养。
+> **📚 学业**：自学型。偏印(靠钻研、悟、偏冷门专精)是底色，适合深挖一门，慢慢成专家。
+> **🧭 性格(底色)**：日主癸水(这张盘里的「你」，阴水，雨露雾气那种意象)。敏感，想象力强，
+> 心思深而私密。有目标的时候这是动力；没出口的时候，容易变成停不下来的盘算。
 
 Then the strength read as **one skippable gray line** (the most term-heavy thing,
 demoted out of the body):
@@ -182,14 +192,13 @@ them away ("the Direct Officer star") loses the reader's ability to look anythin
 > it is a cultural lens for self-reflection — not a scientific prediction. You decide.*
 >
 > **🪞 L0 · In one line**
-> You're the kind of person who thinks deeply, notices the fine grain, and won't let a
-> thing go until it's built properly — slow to commit, then very hard to deflect.
+> You take a long time to commit to something. Once you have, you're very hard to
+> deflect, and you'd rather build the thing properly than quickly.
 >
 > **✍️ L1 · Quick sketch** *(plain words, zero terms)*
-> - **You think before you feel out loud.** Strong empathy, and a tendency to carry
->   other people's moods home with you.
-> - **Independent-minded.** Quick to adapt, but not easily talked out of a direction
->   once you've decided it's right.
+> - **You think before you feel out loud.** Strong empathy. It costs you, because other
+>   people's moods tend to come home with you.
+> - **Independent-minded.** Quick to adapt. Not easily talked off a direction.
 > - **Practical about value.** You'd rather compound something real than chase a spike.
 >
 > **🔎 L2 · By life area** *(each ≤3 lines, skippable, gloss on first use)*

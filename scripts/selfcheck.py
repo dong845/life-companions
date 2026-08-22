@@ -309,6 +309,204 @@ REFUSAL_CUE = re.compile(
     r"isn'?t|is not|doesn'?t|does not|cannot|can'?t|never|rather than|not a |no such")
 
 
+# ---------------------------------------------------------------------------
+# VOICE — does this read like a person, or like a form a machine filled in?
+#
+# Kept separate from the honesty findings above and never a blocker: sounding like a
+# bot is not a safety failure, and conflating the two would dilute the checks that ARE.
+# But it is measurable, and this skill's own output specs used to MANDATE the worst of
+# it (emoji-headed sections, a bold label on every paragraph), so prose advice alone
+# was never going to fix it.
+#
+# Everything here is per-1000-characters (zh) or per-300-words (en) so the numbers mean
+# the same thing on a one-line check-in and on a full 命盘.
+# ---------------------------------------------------------------------------
+LABEL_ROW_RE = re.compile(r"^\s*(?:[-*+]\s*)?\*\*[^*\n]{2,14}\*\*\s*[：:]", re.M)
+
+# The corrective "not X, but Y" reflex. One is a rhetorical move; five in a row is a tic.
+NOT_X_BUT_Y = re.compile(
+    r"不是[^。，！？\n]{1,20}[，,]\s*(?:而)?是|不是[^。\n]{1,16}也不是|"
+    r"\b(?:it|this|that)'?s? (?:is )?n[o']t (?:just |only |about )?[^,;.\n]{1,34}[,;]\s*"
+    r"(?:it'?s|but|rather)\b|"
+    r"\bnot (?:just|only|merely) [^,.\n]{1,34},? but\b|"
+    r"\bis not [^,.\n]{1,30}, but\b", re.I)
+
+# Stock phrases that almost never survive a human rewrite.
+STOCK_ZH = [r"值得注意的是", r"需要指出的是", r"总而言之", r"综上所述", r"总的来说",
+            r"在某种程度上", r"不容忽视", r"至关重要", r"让我们一起", r"深入探讨",
+            r"希望(?:这|以上)(?:对你)?有(?:所)?帮助", r"首先.{0,40}其次.{0,40}最后"]
+STOCK_EN = [r"\bdelve\b", r"\btapestry\b", r"\ba testament to\b", r"\bnavigat\w+ the complexit",
+            r"\bin the realm of\b", r"\bit'?s worth noting\b", r"\bit'?s important to note\b",
+            r"\bthat being said\b", r"\bat the end of the day\b", r"\bwhen it comes to\b",
+            r"\bplays? a (?:crucial|pivotal|vital) role\b", r"\bunderscores?\b", r"\bshowcases?\b",
+            r"\bseamless\b", r"\bholistic\b", r"\bmyriad\b", r"\bplethora\b",
+            r"\bfoster(?:ing|s)?\b", r"\bembark\b", r"\bdeep dive\b", r"\bunpack\b",
+            r"^\s*(?:Importantly|Notably|Crucially|Ultimately|Moreover|Furthermore),",
+            r"\bI hope this helps\b", r"\bIn summary\b", r"\bIn conclusion\b"]
+
+TRIAD_ZH = re.compile(r"[^\s、，。]{2,8}、[^\s、，。]{2,8}、[^\s、，。]{2,8}")
+
+# Explaining-your-own-point moves. One is fine; a habit of them is the "essay voice".
+META_ZH = [r"这(?:其实|恰恰|正)是", r"某种(?:意义|程度)上", r"换句话说", r"也就是说",
+           r"我们可以看到", r"可以说", r"不难看出", r"这意味着", r"归根结底",
+           r"与其说.{0,20}不如说", r"既.{1,12}又.{1,12}", r"一方面.{0,40}另一方面"]
+META_EN = [r"\bin other words\b", r"\bwhat this means is\b", r"\bhere'?s the thing\b",
+           r"\bthe key (?:here )?is\b", r"\bin a sense\b", r"\bto put it another way\b",
+           r"\bwhich is to say\b", r"\bon one hand\b.{0,80}\bon the other\b",
+           r"\bthat said\b", r"\bthe point is\b"]
+
+# Padding adverbs and nominalised verbs — the texture of writing that says little slowly.
+FILLER_ZH = re.compile(r"其实|确实|的确|真的很|非常|十分|极其|相当地?|某种|一定程度")
+NOMINAL_ZH = re.compile(r"(?:进行|做出|给予|加以|予以|得到|实现)(?:了)?[一二三]?[个次]?"
+                        r"[\u4e00-\u9fff]{2,4}")
+FILLER_EN = re.compile(r"\b(?:very|really|quite|rather|truly|actually|basically|"
+                       r"essentially|fundamentally|significantly|incredibly)\b", re.I)
+
+# A person doesn't land every paragraph on a summarising flourish.
+UPSHOT_ZH = re.compile(r"^.{0,80}(?:这才是|说到底|归根到底|本质上|最终|终究)"
+                       r"[^。\n]{0,40}。\s*$", re.M)
+HEDGE_RE_V = re.compile(r"一种(?:读法|解读|视角)|可能|也许|或许|倾向于|传统上|不一定|"
+                        r"\bmay\b|\bmight\b|\bperhaps\b|\btends? to\b|\btraditionally\b")
+
+
+def _is_cjk(text):
+    return len(re.findall(r"[\u4e00-\u9fff]", text)) > len(re.findall(r"[A-Za-z]", text)) / 3
+
+
+def _sentences(text):
+    """Split into sentences. The English path MUST split on '.' too — leaving it out
+    made every English paragraph count as one sentence, so human writing scored as
+    perfectly uniform and got flagged. Decimals and a few abbreviations are protected."""
+    body = re.sub(r"^\s*[>|].*$", "", text, flags=re.M)          # drop quoted disclaimers
+    body = re.sub(r"`[^`]*`|\*\*|__", "", body)
+    body = re.sub(r"(\d)\.(\d)", r"\1<DOT>\2", body)            # 0.3°, 1.5
+    body = re.sub(r"\b(Mr|Mrs|Ms|Dr|St|vs|etc|e\.g|i\.e)\.", r"\1<DOT>", body)
+    parts = re.split(r"[。！？!?\n]+|(?<=[a-z0-9\)\"'])\.\s+", body)
+    # Keep short ones. The >4 filter this used to have discarded exactly the fragments
+    # ("就这样。" / "Three.") that the no-short-sentences check exists to find — the
+    # check could never have fired for the right reason.
+    return [p.replace("<DOT>", ".").strip() for p in parts
+            if p and len(p.strip()) > 1]
+
+
+def check_voice(text, locale=None):
+    """Measure the machine-written tells. Returns findings with real numbers, so the
+    fix is 'cut three of these', not 'sound more human'."""
+    cjk = _is_cjk(text) if locale is None else (locale != "en")
+    n_chars = max(len(re.sub(r"\s", "", text)), 1)
+    n_words = max(len(re.findall(r"[A-Za-z']+", text)), 1)
+    unit = n_chars / 1000 if cjk else n_words / 300
+    unit = max(unit, 0.25)
+    out = []
+
+    def add(code, count, per_unit, limit, why, fix):
+        if per_unit > limit:
+            out.append({"code": code, "severity": "voice", "count": count,
+                        "per_unit": round(per_unit, 1), "limit": limit,
+                        "why": why, "fix": fix})
+
+    # A RUN of consecutive labelled rows is a list (the 分层面 grid is one by design)
+    # and counts once. Labels scattered through prose are the habit worth flagging.
+    lines = text.splitlines()
+    labels, prev = 0, False
+    for ln in lines:
+        hit = bool(LABEL_ROW_RE.match(ln))
+        if hit and not prev:
+            labels += 1
+        prev = hit or (not ln.strip() and prev)   # a blank line doesn't break a list
+    add("label-template", labels, labels / unit, 3,
+        f"{labels} separate places where a paragraph is captioned 「**label**：content」",
+        "Captioning your own thoughts reads as a filled-in form. A deliberate grid (the "
+        "分层面 block) counts once — this is about labels sprinkled through prose. Let "
+        "most paragraphs just be sentences.")
+
+    dashes = text.count("——") + len(re.findall(r"\s—\s", text))
+    add("em-dash", dashes, dashes / unit, 4, f"{dashes} em-dashes",
+        "The default LLM connective. Some of these are commas, some are full stops, and "
+        "a couple are two separate sentences.")
+
+    nx = len(NOT_X_BUT_Y.findall(text))
+    add("not-x-but-y", nx, nx / unit, 2, f"{nx} 「不是X，是Y」/「not X, but Y」",
+        "A good move once. As a reflex it becomes the tell people name first. Say the "
+        "positive half on its own and trust it.")
+
+    stock = [m.group(0) for p in (STOCK_ZH if cjk else STOCK_EN)
+             for m in re.finditer(p, text, re.I | re.M)]
+    if stock:
+        out.append({"code": "stock-phrase", "severity": "voice", "count": len(stock),
+                    "per_unit": round(len(stock) / unit, 1), "limit": 0,
+                    "why": "stock phrases: " + "、".join(sorted(set(stock))[:6]),
+                    "fix": "Say the thing directly instead. None of these survive a "
+                           "human rewrite."})
+
+    meta = [m.group(0) for p in (META_ZH if cjk else META_EN)
+            for m in re.finditer(p, text, re.I | re.M)]
+    add("explaining-yourself", len(meta), len(meta) / unit, 2,
+        "narration about your own point: " + "、".join(sorted(set(meta))[:5]),
+        "「这其实正是…」「换句话说」「in other words」 restate what you already said. "
+        "Say it once, well, and move on. If a sentence needs a translation, rewrite the "
+        "sentence.")
+
+    filler = (FILLER_ZH if cjk else FILLER_EN).findall(text)
+    add("filler-adverbs", len(filler), len(filler) / unit, 5,
+        f"{len(filler)} padding adverbs ({'、'.join(sorted(set(filler))[:6])})",
+        "其实/确实/非常/very/actually mostly add length, not meaning. Delete them and "
+        "see whether the sentence lost anything.")
+
+    if cjk:
+        nom = NOMINAL_ZH.findall(text)
+        add("nominalised-verbs", len(nom), len(nom) / unit, 2,
+            f"{len(nom)} 个「进行/做出/给予+名词」({'、'.join(sorted(set(nom))[:4])})",
+            "「做出决定」就是「决定」，「进行讨论」就是「聊」。动词直接用，句子立刻像人说的。")
+        upshots = len(UPSHOT_ZH.findall(text))
+        add("summary-flourish", upshots, upshots / unit, 2,
+            f"{upshots} paragraphs end on a summarising flourish",
+            "Not every paragraph needs a landing. Let some just stop.")
+
+    if cjk:
+        triads = len(TRIAD_ZH.findall(text))
+        add("rule-of-three", triads, triads / unit, 3, f"{triads} 个 A、B、C 三连并列",
+            "Everything arriving in threes is a rhythm nobody actually speaks in. Make "
+            "one of them two items, or one long one.")
+
+    sents = _sentences(text)
+    if len(sents) >= 8:
+        lens = [len(s) if cjk else len(s.split()) for s in sents]
+        mean = sum(lens) / len(lens)
+        sd = (sum((x - mean) ** 2 for x in lens) / len(lens)) ** 0.5
+        cv = sd / mean if mean else 0
+        short = sum(1 for x in lens if x < (mean * 0.45))
+        if cv < 0.45:
+            out.append({"code": "uniform-rhythm", "severity": "voice",
+                        "count": len(sents), "per_unit": round(cv, 2), "limit": 0.45,
+                        "why": f"sentence lengths are too even (variation {cv:.2f}, "
+                               f"{short} short sentences out of {len(sents)})",
+                        "fix": "People vary hard: a long winding one, then four words. "
+                               "Break two of the medium sentences into a long one and a "
+                               "very short one."})
+
+    if len(sents) >= 8:
+        lens2 = [len(x) if cjk else len(x.split()) for x in sents]
+        tiny = sum(1 for x in lens2 if x <= (6 if cjk else 4))
+        if tiny == 0:
+            out.append({"code": "no-short-sentences", "severity": "voice",
+                        "count": 0, "per_unit": 0, "limit": 1,
+                        "why": f"not one short sentence in {len(sents)}",
+                        "fix": "People punctuate with fragments — 「就这样。」「没了。」"
+                               "「Finish something.」 Every sentence being a complete, "
+                               "well-formed clause is itself the tell."})
+
+    hedges = len(HEDGE_RE_V.findall(text))
+    add("hedge-stacking", hedges, hedges / unit, 6, f"{hedges} hedges",
+        "This skill REQUIRES the reflective framing — but say it once, plainly, like a "
+        "person setting a boundary. Sprinkling 「可能/倾向于/一种读法」 into every "
+        "sentence is how honest framing turns into mush.")
+
+    return {"ok_voice": not out, "cjk": bool(cjk), "findings": out,
+            "_note": "Taste, measured. Never blocks — but two or three of these together "
+                     "is what people mean by AI味."}
+
+
 def _find(text, patterns, code, severity, fix, respect_refusal=False):
     out = []
     for pat, why in patterns:
@@ -386,7 +584,13 @@ def check(text, module="none", locale=None):
                          "anything else must go."})
 
     # --- invented helplines -------------------------------------------------
-    for m in PHONE_RE.finditer(text):
+    # Strip ISO datetimes first. A destiny reading states the birth moment
+    # ("1993-04-12 16:00") on essentially every run, and to PHONE_RE that is a
+    # 12-digit string with hyphens. Left in, this rule would fire on every chart
+    # reading the skill produces — the fastest way to make its most important check
+    # get ignored.
+    phone_scan = re.sub(r"\d{4}-\d{1,2}-\d{1,2}(?:[ T]\d{1,2}(?::\d{2}){0,2})?", " ", text)
+    for m in PHONE_RE.finditer(phone_scan):
         raw = m.group(0).strip()
         norm = raw.replace(" ", "")
         if norm in KNOWN_HELPLINES or raw in KNOWN_HELPLINES:
@@ -511,6 +715,9 @@ def main():
     src.add_argument("--text", default=None)
     src.add_argument("--file", default=None)
     ap.add_argument("--json", action="store_true")
+    ap.add_argument("--locale", default=None, choices=["zh", "en"],
+                    help="force the voice check's language (default: detect)")
+    ap.add_argument("--no-voice", action="store_true", help="honesty checks only")
     args = ap.parse_args()
 
     if args.file:
@@ -522,6 +729,8 @@ def main():
         text = sys.stdin.read()
 
     r = check(text, args.module)
+    if not args.no_voice:
+        r["voice"] = check_voice(text, args.locale)
     if args.json:
         print(json.dumps(r, ensure_ascii=False, indent=2))
     else:
@@ -537,6 +746,17 @@ def main():
                     print(f"    evidence: {x['evidence']}")
                 print(f"    fix: {x['fix']}\n")
             print(r["_note"])
+        v = r.get("voice")
+        if v and v["findings"]:
+            print()
+            print(f"voice [{'zh' if v['cjk'] else 'en'}]: {len(v['findings'])} thing(s) "
+                  f"making this read like a form, not a person\n")
+            for x in v["findings"]:
+                print(f"~ {x['code']}: {x['why']}")
+                print(f"    fix: {x['fix']}\n")
+            print(v["_note"])
+        elif v:
+            print("\nvoice: clean — nothing measurably machine-written.")
     sys.exit(1 if r["blockers"] else 0)
 
 

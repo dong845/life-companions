@@ -230,7 +230,13 @@ HEDGE_WINDOW = 130
 HIGH_STAKES = [
     r"签证|居留|永居|绿卡|入籍|国籍|移民|工签|工作许可|30\s*%\s*ruling|知识移民",
     r"报税|税率|退税|免税|社保|补贴|助学金|奖学金|贷款利率",
-    r"执业(资格|证)|职业资格认证|学历认证|licens(e|ing)|credential",
+    # Narrowed: a bare "licence" also means a software licence, and any draft that
+    # mentioned LICENSE or CC BY was being blocked for missing a fact-check block. The
+    # rule is about permission to PRACTISE, so require that context.
+    r"执业(?:资格|证)|职业资格认证|学历认证|行医执照|"
+    r"(?:professional|occupational|medical|nursing|teaching|engineering)\s+licen[cs]"
+    r"|licen[cs](?:e|ing)\s+(?:requirement|board|exam|renewal|reciprocity)"
+    r"|licen[cs]ed to practi|credential(?:ing|s)?\s+(?:requirement|recognition|evaluation)",
     r"\bvisa\b|\bresidence permit\b|\bwork permit\b|\bpermanent residen",
 ]
 FACTCHECK_MARKERS = [r"事实核查", r"来源\s*[:：]", r"时效\s*[:：]",

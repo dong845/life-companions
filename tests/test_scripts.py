@@ -652,6 +652,23 @@ class TestSelfcheck(unittest.TestCase):
                       "你需要自己确认: 你首次来荷时的居留类型")
         self.assertTrue(self.check(good, "career")["ok"])
 
+    def test_software_licences_are_not_a_licensing_question(self):
+        # "licence" the legal permission to practise vs "LICENSE" the file. The bare
+        # pattern matched both, so any draft mentioning the repo's own licence was
+        # blocked for missing a fact-check block.
+        for t in ["Code and prose: see LICENSE. Data is CC BY 4.0.",
+                  "本项目采用 MIT license 发布。",
+                  "The occupation data ships under a CC BY 4.0 licence."]:
+            r = self.check(t, "none")
+            self.assertFalse(any(x["code"] == "missing-factcheck" for x in r["findings"]), t)
+
+    def test_real_licensing_eligibility_still_needs_the_block(self):
+        for t in ["你在荷兰要先满足 professional licence requirements 才能执业。",
+                  "他的学历认证还没办，能不能在这边执业不好说。",
+                  "You'll need to check the licensing board exam schedule."]:
+            r = self.check(t, "career")
+            self.assertTrue(any(x["code"] == "missing-factcheck" for x in r["findings"]), t)
+
     def test_warns_on_unglossed_ten_gods(self):
         r = self.check("你的七杀很旺，所以压力大。", "destiny")
         self.assertTrue(any(x["code"] == "unglossed-jargon" for x in r["findings"]))

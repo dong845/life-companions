@@ -34,6 +34,9 @@ from urllib.parse import parse_qs, urlparse
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 COMPANION = os.path.join(_HERE, "companion.py")
+if _HERE not in sys.path:
+    sys.path.insert(0, _HERE)
+from companion import resolve_timezone as _resolve_tz  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -274,12 +277,33 @@ def write_onboarding(home, form):
         v = form.get(k, [d])
         return v[0] if isinstance(v, list) else v
 
-    tz = {"cn": "Asia/Shanghai", "nl": "Europe/Amsterdam"}.get(g("region"), None)
+    # identity.timezone drives daily timing AND which crisis helpline this person is
+    # offered. The two quick-pick regions cover the common cases; for anyone else we
+    # resolve the city they actually typed instead of throwing it away (which is what
+    # this used to do — a Berlin user got timezone:null and a dead `location` field).
+    region = g("region")
+    city = g("city").strip()
+    tz = {"cn": "Asia/Shanghai", "nl": "Europe/Amsterdam"}.get(region)
+    tz_note = None
+    if tz is None and city:
+        cands = _resolve_tz(city)
+        if len(cands) == 1 or (cands and cands[0]["score"] >= 0.95):
+            tz = cands[0]["timezone"]
+        elif cands:
+            tz_note = ("多个时区都对得上「%s」：%s —— 跟本人确认一个再存。"
+                       % (city, "、".join(c["timezone"] for c in cands[:3])))
+        else:
+            tz_note = ("没能从「%s」认出时区。问一个附近的大城市或国家再存 "
+                       "identity.timezone —— 别猜：它决定每日时辰，也决定万一需要时给"
+                       "哪个国家的求助热线。" % city)
+    elif tz is None and region == "other":
+        tz_note = "所在地留空了。timezone 还是 null，日运时辰和本地求助渠道都会受影响。"
+
     identity = {"locale": g("locale") or None, "timezone": tz}
     if g("name").strip():
         identity["name"] = g("name").strip()
-    if g("region") == "other" and g("city").strip():
-        identity["location"] = g("city").strip()
+    if city:
+        identity["location"] = city          # the raw words they used; see profile-schema.md
 
     patch = {"identity": identity,
              "preferences": {"tone": g("tone") or "warm-direct"},
@@ -300,11 +324,25 @@ def write_onboarding(home, form):
                    f"birth={'yes' if birth_ok else 'no'}",
                    f"mood={'yes' if g('mood_consent') else 'no'}")
 
+    # Anything the form could NOT fill goes in `todo`, so the model finishes the job
+    # instead of discovering the hole later (or never). A form that silently returns a
+    # half-filled profile is worse than one that says what's missing.
+    todo = []
+    if tz_note:
+        todo.append(tz_note)
+    if birth_ok and patch["birth"].get("place") and not patch["birth"].get("lat"):
+        todo.append("生辰地点有了，但 birth.lat/lon/tz_at_birth 还是空的 —— 由城市推出来并"
+                    "用 set-profile 存上（onboarding.md Tier 1），否则星盘永远算不出上升和宫位。")
+    if birth_ok and not patch["birth"].get("gender"):
+        todo.append("没填性别 —— 八字大运的顺逆行需要它，问一下再起盘。")
+
     summary = {"status": "onboarded", "form": "onboarding",
                "name": identity.get("name"), "locale": identity.get("locale"),
                "tone": patch["preferences"]["tone"], "timezone": tz,
+               "location": identity.get("location"),
                "birth_consent": birth_ok, "birth_date": g("birth_date") if birth_ok else None,
                "mood_consent": bool(g("mood_consent")),
+               "todo": todo,
                "ts": datetime.datetime.now().isoformat(timespec="seconds")}
     with open(os.path.join(home, ".form_result.json"), "w", encoding="utf-8") as f:
         json.dump(summary, f, ensure_ascii=False)

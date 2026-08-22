@@ -250,6 +250,7 @@ AGENTS.md                    entry point for harnesses that read AGENTS.md
 
 ```bash
 python3 $D/scripts/companion.py doctor          # python + deps + what degrades if missing
+python3 $D/scripts/companion.py resolve-tz 柏林   # their words -> IANA zone (offline; asks if unsure)
 python3 $D/scripts/companion.py brief           # ★ the every-turn snapshot, one call
 python3 $D/scripts/companion.py init
 python3 $D/scripts/companion.py status          # slim version of brief

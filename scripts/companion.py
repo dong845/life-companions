@@ -33,6 +33,7 @@ import argparse
 import datetime
 import json
 import os
+import re
 import sys
 import tempfile
 
@@ -230,6 +231,122 @@ def cmd_status(args):
         "consent": {k: v.get("granted") for k, v in consent.items()},
         "journal_entries": len(rows),
         "last_entry": last,
+    }, ensure_ascii=False, indent=2))
+
+
+# ---------------------------------------------------------------------------
+# City -> IANA timezone, offline.
+#
+# `identity.timezone` drives daily timing AND which crisis helpline the person is
+# offered, and onboarding asks them for it in plain words ("柏林", "New York"). The
+# onboarding form used to map only two hard-coded countries, so everyone else had the
+# city they typed silently thrown away. zoneinfo ships the full IANA list, and most
+# zones are named after a city — that makes a real, general, offline resolver.
+_TZ_ALIASES = {
+    "北京": "Asia/Shanghai", "上海": "Asia/Shanghai", "广州": "Asia/Shanghai",
+    "深圳": "Asia/Shanghai", "杭州": "Asia/Shanghai", "成都": "Asia/Shanghai",
+    "中国": "Asia/Shanghai", "香港": "Asia/Hong_Kong", "澳门": "Asia/Macau",
+    "台北": "Asia/Taipei", "台湾": "Asia/Taipei",
+    "东京": "Asia/Tokyo", "日本": "Asia/Tokyo", "首尔": "Asia/Seoul", "韩国": "Asia/Seoul",
+    "新加坡": "Asia/Singapore", "曼谷": "Asia/Bangkok", "迪拜": "Asia/Dubai",
+    "阿姆斯特丹": "Europe/Amsterdam", "荷兰": "Europe/Amsterdam",
+    "莱顿": "Europe/Amsterdam", "鹿特丹": "Europe/Amsterdam", "海牙": "Europe/Amsterdam",
+    "柏林": "Europe/Berlin", "德国": "Europe/Berlin", "慕尼黑": "Europe/Berlin",
+    "巴黎": "Europe/Paris", "法国": "Europe/Paris",
+    "伦敦": "Europe/London", "英国": "Europe/London",
+    "马德里": "Europe/Madrid", "西班牙": "Europe/Madrid",
+    "罗马": "Europe/Rome", "意大利": "Europe/Rome",
+    "苏黎世": "Europe/Zurich", "瑞士": "Europe/Zurich",
+    "斯德哥尔摩": "Europe/Stockholm", "哥本哈根": "Europe/Copenhagen",
+    "布鲁塞尔": "Europe/Brussels", "维也纳": "Europe/Vienna", "莫斯科": "Europe/Moscow",
+    "纽约": "America/New_York", "波士顿": "America/New_York", "华盛顿": "America/New_York",
+    "芝加哥": "America/Chicago", "洛杉矶": "America/Los_Angeles",
+    "旧金山": "America/Los_Angeles", "西雅图": "America/Los_Angeles",
+    "温哥华": "America/Vancouver", "多伦多": "America/Toronto", "加拿大": "America/Toronto",
+    "悉尼": "Australia/Sydney", "墨尔本": "Australia/Melbourne", "澳大利亚": "Australia/Sydney",
+    "奥克兰": "Pacific/Auckland", "新西兰": "Pacific/Auckland",
+    # English country/region words that aren't zone names
+    "usa": "America/New_York", "united states": "America/New_York", "uk": "Europe/London",
+    "england": "Europe/London", "britain": "Europe/London", "ireland": "Europe/Dublin",
+    "germany": "Europe/Berlin", "france": "Europe/Paris", "spain": "Europe/Madrid",
+    "italy": "Europe/Rome", "netherlands": "Europe/Amsterdam", "holland": "Europe/Amsterdam",
+    "belgium": "Europe/Brussels", "switzerland": "Europe/Zurich", "sweden": "Europe/Stockholm",
+    "japan": "Asia/Tokyo", "korea": "Asia/Seoul", "china": "Asia/Shanghai",
+    "india": "Asia/Kolkata", "australia": "Australia/Sydney", "canada": "America/Toronto",
+    "brazil": "America/Sao_Paulo", "mexico": "America/Mexico_City",
+}
+
+
+def _fold(s):
+    """lowercase + strip diacritics, so "São Paulo" reaches America/Sao_Paulo and
+    "Zurich" reaches Europe/Zurich. A companion for one person anywhere has to match
+    the way that person actually spells their own city."""
+    import unicodedata
+    return "".join(c for c in unicodedata.normalize("NFKD", s.lower())
+                   if not unicodedata.combining(c))
+
+
+def resolve_timezone(text, limit=5):
+    """Best-effort city/country -> IANA zone, offline. Returns ranked candidates.
+
+    Empty list when nothing matches — that is the honest answer. Never fall back to a
+    default zone: a wrong timezone means a wrong daily chart and, worse, the wrong
+    country's crisis helpline.
+    """
+    if not text or not text.strip():
+        return []
+    raw = text.strip()
+    low = _fold(raw)
+    hits, seen = [], set()
+
+    def add(zone, score, why):
+        if zone and zone not in seen:
+            seen.add(zone)
+            hits.append({"timezone": zone, "score": score, "matched_on": why})
+
+    # 1. explicit alias (Chinese city names, country words)
+    for k, v in _TZ_ALIASES.items():
+        if k in low or k in raw:
+            add(v, 1.0, f"alias:{k}")
+
+    # 2. the text already IS a zone name
+    try:
+        from zoneinfo import available_timezones, ZoneInfo
+        zones = available_timezones()
+    except Exception:  # pragma: no cover - zoneinfo missing/no tzdata
+        return hits[:limit]
+    for z in zones:
+        if z.lower() == low:
+            add(z, 1.0, "exact zone name")
+
+    # 3. the last path segment is a city: America/New_York -> "new york"/"new_york"
+    token = re.sub(r"[^a-z0-9\u4e00-\u9fff]+", " ", low).strip()
+    for z in sorted(zones):
+        city = z.rsplit("/", 1)[-1]
+        city_words = re.sub(r"[^a-z0-9]+", " ", _fold(city)).strip()
+        if not city_words:
+            continue
+        if city_words == token:
+            add(z, 0.95, f"city:{city}")
+        elif token and (token.startswith(city_words + " ") or f" {city_words} " in f" {token} "):
+            add(z, 0.7, f"city:{city}")
+    return sorted(hits, key=lambda h: -h["score"])[:limit]
+
+
+def cmd_resolve_tz(args):
+    """Map what a person calls their location to an IANA timezone, offline.
+
+    `identity.timezone` decides daily timing and which crisis line they're offered, so
+    a wrong guess is worse than no answer: with no match this returns an empty list and
+    tells you to ask, rather than defaulting to anything."""
+    hits = resolve_timezone(args.place)
+    print(json.dumps({
+        "query": args.place, "candidates": hits,
+        "_note": ("Confirm with the person if more than one is plausible, then store it: "
+                  "`set-profile --merge-json '{\"identity\":{\"timezone\":\"<zone>\"}}'`."
+                  if hits else
+                  "No match — ASK for a nearby major city or the country. Do NOT guess a "
+                  "timezone: it drives the daily chart and which crisis helpline they get."),
     }, ensure_ascii=False, indent=2))
 
 
@@ -632,6 +749,10 @@ def main():
     sub.add_parser("init").set_defaults(func=cmd_init)
     sub.add_parser("status").set_defaults(func=cmd_status)
     sub.add_parser("doctor").set_defaults(func=cmd_doctor)
+
+    rt = sub.add_parser("resolve-tz", help="city/country -> IANA timezone (offline)")
+    rt.add_argument("place", help="what the person called their location, e.g. 柏林 / New York")
+    rt.set_defaults(func=cmd_resolve_tz)
 
     br = sub.add_parser("brief", help="every-turn snapshot in ONE call "
                                       "(status + profile + continuity + due follow-ups)")

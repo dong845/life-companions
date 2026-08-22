@@ -19,6 +19,10 @@ WHAT THIS IS NOT: proof the reply is honest. It matches surface patterns. It can
 see a fabricated *claim* phrased calmly, a chart read against the wrong pillars, or a
 callback to something the person never said. Passing this gate is necessary, not
 sufficient — the module checklists still apply.
+
+Run it on a DRAFT REPLY, never on this skill's own reference files: those quote the
+forbidden shapes in order to forbid them ("no invented 综合运 ⭐⭐⭐⭐", 'never "水逆导致
+你…"'), and nothing here can tell a counter-example from an example.
 """
 import argparse
 import json
@@ -172,15 +176,55 @@ TEN_GODS = ["比肩", "劫财", "食神", "伤官", "正财", "偏财", "正官"
             "正印", "偏印", "枭神"]
 GLOSS_WINDOW = 25  # a gloss may trail the term by a few characters, not just hug it
 GLOSS_CHARS = "（(【[「"
+_OPEN, _CLOSE = "（(【[", "）)】]"
+
+
+def _is_glossed(text, i, term):
+    """Is this 十神 explained in plain language at its first use?
+
+    Two legitimate forms, both used by the skill's own examples:
+      正官(责任、规矩、把自己嵌进体系做好)   — term OUTSIDE, gloss follows
+      乙卯(食神·表达萌芽)                  — term INSIDE the bracket with the gloss
+    Only checking the first shape made every L3 timeline row warn, and a warning that
+    always fires is one nobody reads.
+    """
+    end = i + len(term)
+    if any(c in text[end:end + GLOSS_WINDOW] for c in GLOSS_CHARS):
+        return True
+    # look backwards for an enclosing bracket, then forwards for its close
+    start = -1
+    for k in range(i - 1, max(-1, i - GLOSS_WINDOW), -1):
+        if text[k] in _CLOSE:
+            break
+        if text[k] in _OPEN:
+            start = k
+            break
+    if start < 0:
+        return False
+    close = -1
+    for k in range(end, min(len(text), end + GLOSS_WINDOW)):
+        if text[k] in _CLOSE:
+            close = k
+            break
+    if close < 0:
+        return False
+    inside = text[start + 1:close]
+    return len(inside) - len(term) >= 3      # the bracket carries a real explanation
 
 # Strength / 用神 terms are a different rule: they are the most school-dependent,
 # openly heuristic part of the whole chart (safety.md §1, bazi.py `heuristic` block).
 # They may be used freely — but not bare. Somewhere near them the reply has to say
 # this is ONE school's rule of thumb.
 STRENGTH_TERMS = ["身强", "身弱", "扶抑", "用神", "喜用神", "忌神", "调候", "偏强", "偏弱"]
-HEDGE_RE = re.compile(r"一派|一种|流派|启发|估|大致|不替你(钉|定)|heuristic|one school|"
-                      r"rule of thumb|可能不同|别的读法")
-HEDGE_WINDOW = 60
+HEDGE_RE = re.compile(r"一派|一种|流派|启发|估|大致|不替你(钉|定)|可能不同|别的读法|"
+                      r"不同流派|各家|存疑|"
+                      r"heuristic|one school|schools?\s|rule of thumb|one reading|"
+                      r"one way to read|tradition|may read|read it differently|"
+                      r"not settled|isn'?t settled|approximation|"
+                      r"不给硬?喜忌|不替你|近中和|接近中和|near.?balanc", re.I)
+# Wide enough that the hedge can live in the next sentence — which is where it usually
+# is in English ("…sits close to balanced. That's one school's rule of thumb.").
+HEDGE_WINDOW = 130
 
 # High-stakes external-fact markers → safety.md §1 rule 6 + the factcheck.md block.
 HIGH_STAKES = [
@@ -295,7 +339,7 @@ def check(text, module="none", locale=None):
         if i < 0:
             continue
         end = i + len(term)
-        if any(c in text[end:end + GLOSS_WINDOW] for c in GLOSS_CHARS):
+        if _is_glossed(text, i, term):
             continue
         f.append({
             "code": "unglossed-jargon", "severity": "warn",

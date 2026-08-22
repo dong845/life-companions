@@ -24,6 +24,11 @@ Collect once, up front, before any reading:
   language they wrote to you in.
 - **Where you are** (city/country or timezone) → `identity.timezone`. Needed for
   correct daily timing *and* for localizing crisis helplines — you can say that.
+  Take their own words and resolve them offline:
+  `companion.py resolve-tz "柏林"` → `Europe/Berlin`. One clear candidate: store it.
+  Several: ask which. **None: ask for a nearby major city — never guess a zone**, since
+  it decides which country's crisis line they'd be given. Keep the raw words in
+  `identity.location` too.
 - **Tone** you want (options: 温暖直接 / 轻松俏皮 / 简洁克制) → `preferences.tone`.
 
 Write with `companion.py set-profile --merge-json '{"identity":{…},"preferences":{…}}'`.

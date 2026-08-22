@@ -14,7 +14,13 @@ updated: 2026-07-17          # bumps on every write
 identity:
   name: 小明                  # example persona (not a real user)
   pronouns: null             # optional; ask, don't infer
-  timezone: Asia/Shanghai    # drives daily timing + crisis-helpline locale
+  timezone: Asia/Shanghai    # IANA zone. Drives daily timing + crisis-helpline locale.
+                             # Resolve from their own words: `companion.py resolve-tz 柏林`.
+                             # Never guess one — a wrong zone means the wrong country's
+                             # helpline. No match → ask; leaving it null is the honest state.
+  location: "São Paulo"      # the words THEY used for where they are (optional).
+                             # Kept because a city names a country more reliably than a
+                             # zone does, which matters for localizing crisis help.
   locale: zh                 # output language: zh | en | bilingual
 birth:                       # sensitive — gated by consent.birth
   date: 1993-04-12           # ISO solar/公历; null if declined

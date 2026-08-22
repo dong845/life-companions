@@ -301,6 +301,97 @@ class TestBaZi(unittest.TestCase):
         self.assertNotIn("strength", r["computed"])
 
 
+class TestTimezoneResolution(unittest.TestCase):
+    """identity.timezone decides daily timing AND which country's crisis line the
+    person is offered, so a confident wrong answer is worse than no answer."""
+
+    def resolve(self, q):
+        import companion
+        return [c["timezone"] for c in companion.resolve_timezone(q)]
+
+    def test_resolves_cities_in_both_languages(self):
+        for q, expect in [("柏林", "Europe/Berlin"), ("Berlin", "Europe/Berlin"),
+                          ("纽约", "America/New_York"), ("New York", "America/New_York"),
+                          ("台北", "Asia/Taipei"), ("Kolkata", "Asia/Kolkata"),
+                          ("Auckland", "Pacific/Auckland")]:
+            self.assertIn(expect, self.resolve(q), q)
+
+    def test_handles_diacritics_either_way(self):
+        # the person spells their own city with its accents; the zone name has none
+        for q in ("São Paulo", "Sao Paulo"):
+            self.assertIn("America/Sao_Paulo", self.resolve(q), q)
+        for q in ("Zürich", "Zurich"):
+            self.assertIn("Europe/Zurich", self.resolve(q), q)
+
+    def test_country_words_work_too(self):
+        self.assertIn("Europe/Berlin", self.resolve("Germany"))
+        self.assertIn("Asia/Shanghai", self.resolve("中国"))
+
+    def test_refuses_rather_than_defaulting(self):
+        for q in ("瓦坎达", "", "   ", "asdfghjkl"):
+            self.assertEqual(self.resolve(q), [], q)
+        out = jrun("companion.py", "resolve-tz", "瓦坎达")
+        self.assertEqual(out["candidates"], [])
+        self.assertIn("Do NOT guess", out["_note"])
+
+
+class TestOnboardingForm(unittest.TestCase):
+    """The form is the PREFERRED onboarding path, so what it writes is the profile
+    most people get. It used to hard-code two countries and drop everyone else's city."""
+
+    def _submit(self, fields, port):
+        import urllib.request, urllib.parse, subprocess, time, json as _json
+        home = tempfile.mkdtemp()
+        run("companion.py", "init", home=home)
+        env = dict(os.environ, COMPANION_HOME=home, LIFE_COMPANION_NO_AUTOINSTALL="1")
+        srv = subprocess.Popen(
+            [sys.executable, os.path.join(SCRIPTS, "form_server.py"), "--form", "onboarding",
+             "--no-open", "--port", str(port), "--timeout", "25"],
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, env=env)
+        try:
+            for _ in range(50):
+                try:
+                    urllib.request.urlopen(f"http://127.0.0.1:{port}/", timeout=1).read()
+                    break
+                except Exception:
+                    time.sleep(0.1)
+            urllib.request.urlopen(
+                f"http://127.0.0.1:{port}/submit",
+                data=urllib.parse.urlencode(fields).encode()).read()
+            out = srv.communicate(timeout=20)[0]
+        finally:
+            srv.kill()
+        line = [l for l in out.splitlines() if l.startswith("SUBMITTED ")]
+        return _json.loads(line[0][len("SUBMITTED "):]) if line else {}, home
+
+    def test_a_city_outside_the_quick_picks_still_lands(self):
+        summary, home = self._submit({
+            "name": "Ana", "locale": "en", "region": "other", "city": "São Paulo",
+            "tone": "warm-direct", "mood_consent": "on"}, 8841)
+        self.assertEqual(summary.get("timezone"), "America/Sao_Paulo")
+        import yaml
+        with open(os.path.join(home, "profile.yaml"), encoding="utf-8") as f:
+            prof = yaml.safe_load(f)
+        self.assertEqual(prof["identity"]["timezone"], "America/Sao_Paulo")
+        self.assertEqual(prof["identity"]["location"], "São Paulo")
+
+    def test_form_reports_what_it_could_not_finish(self):
+        summary, _ = self._submit({
+            "name": "B", "locale": "zh", "region": "cn", "tone": "concise",
+            "birth_consent": "on", "birth_date": "1993-04-12", "birth_time": "07:35",
+            "birth_place": "Beijing, CN"}, 8842)
+        todo = " ".join(summary.get("todo", []))
+        self.assertIn("lat", todo)       # coords still needed for the Ascendant
+        self.assertIn("性别", todo)       # needed for 大运 direction
+
+    def test_unrecognisable_place_is_reported_not_guessed(self):
+        summary, _ = self._submit({
+            "name": "C", "locale": "zh", "region": "other", "city": "瓦坎达",
+            "tone": "concise"}, 8843)
+        self.assertIsNone(summary.get("timezone"))
+        self.assertTrue(any("时区" in t for t in summary.get("todo", [])))
+
+
 class TestAstro(unittest.TestCase):
     """The profile stores an IANA zone; the script used to demand a float."""
 
@@ -467,6 +558,53 @@ class TestSelfcheck(unittest.TestCase):
         r = self.check("You will definitely get the job — you are destined to succeed.",
                        "career")
         self.assertFalse(r["ok"])
+
+
+class TestDocsTeachGoodShapes(unittest.TestCase):
+    """The worked examples in the module docs are what the model imitates. If an
+    example would fail the gate, the skill is teaching the shape it forbids.
+
+    Only the QUOTED examples are scanned, never a whole reference file: those files
+    also quote the forbidden shapes in order to forbid them ("no invented 综合运 ⭐⭐⭐⭐"),
+    and the gate cannot tell a counter-example from an example."""
+
+    def _quoted_example(self, path, start_marker, end_marker):
+        s = open(os.path.join(SKILL, path), encoding="utf-8").read()
+        i = s.find(start_marker)
+        self.assertGreater(i, -1, f"marker not found in {path}: {start_marker}")
+        block = s[i:s.find(end_marker, i)]
+        return "\n".join(l.lstrip("> ") for l in block.splitlines() if l.startswith(">"))
+
+    def test_english_destiny_example_passes_the_gate(self):
+        import selfcheck
+        ex = self._quoted_example("references/modules/destiny.md",
+                                  "### The same layers when `locale` is `en`",
+                                  "Note what does *not* change")
+        self.assertIn("正官", ex, "the English example must keep the 汉字 terms")
+        self.assertIn("(", ex, "…each glossed on first use")
+        r = selfcheck.check(ex, "destiny")
+        self.assertTrue(r["ok"], r["findings"])
+        self.assertEqual(r["warnings"], 0, r["findings"])
+
+    def test_chinese_destiny_example_passes_the_gate(self):
+        import selfcheck
+        ex = self._quoted_example("references/modules/destiny.md",
+                                  "**🪞 L0 · 一句话画像**",
+                                  "### The same layers when `locale` is `en`")
+        r = selfcheck.check(ex, "destiny")
+        self.assertTrue(r["ok"], r["findings"])
+        # the disclaimer lives above this block in the real output, so allow only that
+        self.assertEqual([x["code"] for x in r["findings"]], ["missing-disclaimer"],
+                         r["findings"])
+
+    def test_disclaimers_cover_both_locales(self):
+        s = open(os.path.join(SKILL, "assets", "disclaimers.md"), encoding="utf-8").read()
+        for section in ["Destiny", "Career fit", "Relationship reflection"]:
+            i = s.find(section)
+            self.assertGreater(i, -1, section)
+            block = s[i:i + 700]
+            self.assertIn("**zh:**", block, section)
+            self.assertIn("**en:**", block, section)
 
 
 class TestCareerMatch(unittest.TestCase):

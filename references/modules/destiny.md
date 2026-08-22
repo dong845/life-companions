@@ -118,7 +118,7 @@ gender-noted where 财/官/食伤 apply. Source each from `bazi-life-arc.md §1`
 > **🩺 健康(只谈倾向，不诊断)**：你水最旺(水主思虑、睡眠、情绪)，最该照看「脑子停不下来」
 > ——熬夜、反刍、情绪内耗是主要消耗口。给思绪挖出口比硬扛好；真有担心请找医生。
 > **👪 家庭/六亲**：比劫(同类、手足、同侪)有力——同辈/朋友/合伙戏份重，是助力也需边界。
-> 印偏偏印，靠自己钻研多于被喂养。
+> 印星偏向偏印(靠钻研、悟、偏冷门专精的学习方式)，靠自己钻研多于被喂养。
 > **📚 学业**：自学型。偏印(靠钻研、悟、偏冷门专精)是底色，适合深挖一门慢慢成专家。
 > **🧭 性格(底色)**：日主癸水(这张盘的「你」，阴水，雨露雾气的意象)：敏感、想象力强、
 > 温和、心思深而私密。有目标时是动力，没出口时容易变成停不下来的盘算。
@@ -167,6 +167,48 @@ every row into prose — that recreates the wall; depth lives in the drill-down.
 > 🎯 已经很准的那条 —— 直接说「性格那面镜子最像我」，我顺着聊
 > (事业方向我还有专门的职业模块能更系统地做；要的话我接过去。)
 > 要不要把这次起盘+画像记进你的私人档案，方便回看？另外，你希望我怎么称呼你？
+
+### The same layers when `locale` is `en`
+
+Every worked example above is Chinese, which made the English path something the model
+had to improvise. It shouldn't be — the layers, the gloss rule and the honesty voice
+all carry over verbatim. **BaZi keeps its Chinese terms** (SKILL.md's Language rule);
+what changes is that the gloss now does double duty, translating *and* explaining:
+`正官 (Proper Officer — responsibility, structure, doing it right inside a system)`.
+Keep the pillars, 十神 and 大运 labels in 汉字 with pinyin on first use — transliterating
+them away ("the Direct Officer star") loses the reader's ability to look anything up.
+
+> *The chart itself is computed by traditional rules (a reproducible fact); how we read
+> it is a cultural lens for self-reflection — not a scientific prediction. You decide.*
+>
+> **🪞 L0 · In one line**
+> You're the kind of person who thinks deeply, notices the fine grain, and won't let a
+> thing go until it's built properly — slow to commit, then very hard to deflect.
+>
+> **✍️ L1 · Quick sketch** *(plain words, zero terms)*
+> - **You think before you feel out loud.** Strong empathy, and a tendency to carry
+>   other people's moods home with you.
+> - **Independent-minded.** Quick to adapt, but not easily talked out of a direction
+>   once you've decided it's right.
+> - **Practical about value.** You'd rather compound something real than chase a spike.
+>
+> **🔎 L2 · By life area** *(each ≤3 lines, skippable, gloss on first use)*
+> **💼 Work** — suits the deep-specialist path that still gets *seen*. Your chart
+> carries 正官 (zhèng guān, "Proper Officer" — responsibility, structure, doing it right
+> inside a system) in the hidden stems, alongside 食伤 (shí shāng — the urge to express,
+> to make the inside thing exist outside). Reliable *and* wanting a body of work.
+> **🩺 Health (tendencies only — not a diagnosis)** — 水 (water) runs strongest here,
+> and in this tradition water governs rumination and sleep. The thing worth minding is
+> a mind that won't stop. If something actually worries you, see a doctor.
+>
+> *(small print, skippable)* On the 扶抑 (fú yì — "support/restrain") reading, this
+> chart sits close to balanced. That's one school's rule of thumb, and 调候/病药 schools
+> may read it differently — I'm not nailing it down for you.
+
+Note what does *not* change in English: the ①facts / ②lens split, one disclaimer at the
+top, tendency-and-agency verbs ("tends to", "worth noticing", "a season for"), and the
+hard refusal to name events or dates. `selfcheck.py` checks the English shapes too
+("you will definitely…", "destined to", "likely to get sick").
 
 When the user takes a 【层面】or【阶段】offer, expand with the FULL `bazi-life-arc.md`
 §4 recipe (十神 register × favor valence × age-band × 流年 weather) — richly, but

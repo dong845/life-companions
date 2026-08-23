@@ -307,7 +307,10 @@ python3 $D/scripts/companion.py cache --module destiny   # what reading you alre
 python3 $D/scripts/companion.py trend --days 30
 python3 $D/scripts/companion.py journal --since 2026-07-01   # re-read prose entries
 python3 $D/scripts/companion.py forget --birth        # real deletion
-python3 $D/scripts/bazi.py --date 1993-04-12 --time 07:35 --gender m --on-date today --format json  # +daily: 生肖/五行tips
+python3 $D/scripts/bazi.py --date 1993-04-12 --time 07:35 --gender m --tz Asia/Shanghai --on-date today --format json  # 生肖/五行tips
+#   --tz is the BIRTHPLACE zone (profile birth.tz_at_birth). 節氣 are absolute instants
+#   resolved on a Beijing clock, so omitting it can hand back the wrong year/month
+#   pillar for any birth outside UTC+8 — the payload says when it had to assume.
 python3 $D/scripts/astro.py --date 1993-04-12 --time 07:35 --on-date today --format json   # real 星座 daily
 python3 $D/scripts/astro.py --date 1993-04-12 --time 07:35 --natal --lat 52.16 --lon 4.49 --tz Europe/Amsterdam --format json  # full natal chart (星盘)
 python3 $D/scripts/career_match.py --find "产品经理"   # map their WORDS to a real O*NET occupation first

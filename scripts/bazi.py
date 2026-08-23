@@ -184,6 +184,47 @@ def _equation_of_time_minutes(dt):
     return 9.87 * math.sin(2 * b) - 7.53 * math.cos(b) - 1.5 * math.sin(b)
 
 
+CST = "Asia/Shanghai"
+
+
+def parse_tz(v):
+    """Accept an IANA zone name or a plain UTC-offset in hours."""
+    v = str(v).strip()
+    try:
+        return float(v)
+    except ValueError:
+        pass
+    from zoneinfo import ZoneInfo
+    ZoneInfo(v)          # validate here so the error names --tz
+    return v
+
+
+def _offset_hours(tz, dt):
+    """UTC offset in force at `dt` for an IANA name, or the number itself."""
+    if isinstance(tz, (int, float)):
+        return float(tz)
+    from zoneinfo import ZoneInfo
+    import datetime as _dt
+    return _dt.datetime(dt.year, dt.month, dt.day, dt.hour, dt.minute,
+                        tzinfo=ZoneInfo(tz)).utcoffset().total_seconds() / 3600.0
+
+
+def _to_china_clock(dt, tz):
+    """The same instant, expressed on a Beijing wall clock.
+
+    lunar-python takes a NAIVE datetime and resolves 節氣 against China Standard Time.
+    節氣 are absolute astronomical instants, so a birth outside China must be moved
+    into that frame before the 年柱/月柱 can be right. Without this the engine silently
+    reads an Amsterdam clock as a Beijing one and can hand back the wrong year pillar
+    — while confidently describing the wrong side of the boundary.
+    """
+    if tz is None:
+        return dt, 0.0
+    off = _offset_hours(tz, dt)
+    shift = 8.0 - off
+    return dt + datetime.timedelta(hours=shift), shift
+
+
 def _apply_true_solar_time(dt, lon, standard_meridian):
     """Shift civil clock time to local True Solar Time (traditional convention)."""
     lon_correction_min = (lon - standard_meridian) * 4.0  # 4 min per degree
@@ -476,13 +517,19 @@ def _sxtwl_year_boundary_check(y, m, d, on_lichun_day=False):
 
 # ---------------------------------------------------------------------------
 def compute(date, time, gender, lon=None, true_solar_time=False,
-            standard_meridian=120.0, late_zishi=True, on_date=None):
+            standard_meridian=None, late_zishi=True, on_date=None, tz=None):
     y, m, d = [int(x) for x in date.split("-")]
     hour_known = time is not None
     hh, mm = (int(x) for x in time.split(":")) if hour_known else (12, 0)
 
     ambiguities = []
     dt = datetime.datetime(y, m, d, hh, mm)
+
+    # The standard meridian belongs to the BIRTHPLACE's zone, not to China. It used to
+    # default to 120°E for everyone, so an unmodified TST run silently corrected a
+    # European birth against Beijing's meridian — hours of error.
+    if standard_meridian is None:
+        standard_meridian = (_offset_hours(tz, dt) * 15.0) if tz is not None else 120.0
 
     if true_solar_time and lon is not None:
         dt = _apply_true_solar_time(dt, lon, standard_meridian)
@@ -501,12 +548,27 @@ def compute(date, time, gender, lon=None, true_solar_time=False,
         )
     if not hour_known:
         ambiguities.append("出生时刻未知：时柱不可计算，与时柱相关的十神/藏干省略。")
+        ambiguities.append("出生时刻未知也会影响起运：起运时刻由出生到节气的间隔折算，"
+                           "时辰不同可差数月，大运的换运年份因此有出入。")
 
     # 立春 is a MOMENT: a birth within a few hours of it flips the whole year pillar.
     # Surface that as an ambiguity — it is exactly the kind of thing the person must be
     # told, and it is invisible unless the script says it.
-    lichun_gap, lichun_moment = _lichun_gap_hours(dt)
-    on_lichun_day = bool(lichun_moment and lichun_moment.date() == dt.date())
+    # 節氣 comparisons happen on the Beijing clock; everything local stays local.
+    dt_cn, tz_shift = _to_china_clock(dt, tz)
+    if tz is None:
+        ambiguities.append(
+            "未提供出生地时区（--tz）：本引擎的節氣/立春表以东八区为准，此盘按"
+            "「出生钟点即北京时间」计算。出生地不在东八区时，年柱与月柱可能算错——"
+            "请补上 --tz（如 Europe/Amsterdam）。")
+    elif abs(tz_shift) > 1e-9:
+        ambiguities.append(
+            f"出生地时区 {tz}：节气按绝对时刻比对（等效北京时间 "
+            f"{dt_cn.strftime('%Y-%m-%d %H:%M')}），年柱月柱据此定；日柱与时柱仍按"
+            f"当地钟点。海外出生的日/时柱取法各家不同，此为本引擎的公开约定。")
+
+    lichun_gap, lichun_moment = _lichun_gap_hours(dt_cn)
+    on_lichun_day = bool(lichun_moment and lichun_moment.date() == dt_cn.date())
     if lichun_gap is not None and abs(lichun_gap) <= 24:
         side = "之后" if lichun_gap >= 0 else "之前"
         ambiguities.append(
@@ -520,6 +582,14 @@ def compute(date, time, gender, lon=None, true_solar_time=False,
     solar = Solar.fromYmdHms(dt.year, dt.month, dt.day, dt.hour, dt.minute, 0)
     lunar = solar.getLunar()
     ec = lunar.getEightChar()
+    # 年柱/月柱 hang off 節氣 (absolute instants) and are read from the Beijing-clock
+    # equivalent; 日柱/時柱 hang off the local day and local 時辰 and stay on the birth
+    # clock. Same object when no tz is given, so behaviour is unchanged without --tz.
+    ec_jq = ec
+    if tz is not None and abs(tz_shift) > 1e-9:
+        ec_jq = Solar.fromYmdHms(dt_cn.year, dt_cn.month, dt_cn.day,
+                                 dt_cn.hour, dt_cn.minute, 0).getLunar().getEightChar()
+        ec_jq.setSect(2 if late_zishi else 1)
     # Verified vs lunar-python: sect 2 (晚子时/子时不换日) keeps a 23:00–24:00 birth on
     # TODAY's 日柱; sect 1 (早子时/子时换日) rolls it to the NEXT day's 日柱. Default sect 2.
     ec.setSect(2 if late_zishi else 1)
@@ -527,8 +597,8 @@ def compute(date, time, gender, lon=None, true_solar_time=False,
     gender_code = 1 if gender.lower().startswith("m") else 0
 
     pillars = {
-        "year": _pillar(ec, "Year"),
-        "month": _pillar(ec, "Month"),
+        "year": _pillar(ec_jq, "Year"),
+        "month": _pillar(ec_jq, "Month"),
         "day": _pillar(ec, "Day"),
     }
     if hour_known:
@@ -541,7 +611,14 @@ def compute(date, time, gender, lon=None, true_solar_time=False,
     strength = _strength_heuristic(day_gan, tally)
     strength_label = strength["label"]
     favor_sets = _favor_sets(day_gan, strength_label)
-    current_age = (datetime.date.today().year - y) if y else None
+    # A year-difference is NOT an age: before the birthday it is one too high, which
+    # pushed anyone sitting on a 大运 boundary into the NEXT decade entirely. The
+    # "current decade" drives the whole stage reading, so that is a ten-year error,
+    # not an off-by-one.
+    _today = datetime.date.today()
+    current_age = None
+    if y:
+        current_age = _today.year - y - ((_today.month, _today.day) < (m, d))
 
     result = {
         "computed": {  # ---- reproducible system facts ----
@@ -549,6 +626,12 @@ def compute(date, time, gender, lon=None, true_solar_time=False,
                 "date": date, "time": time, "time_known": hour_known,
                 "gender": "male" if gender_code == 1 else "female",
                 "conventions": {
+                    "tz": tz,
+                    "jieqi_frame": ("birthplace tz → Beijing clock (節氣 are absolute "
+                                    "instants)" if tz is not None
+                                    else "ASSUMED: birth clock is Beijing time"),
+                    "day_hour_frame": "local birth clock",
+                    "standard_meridian": standard_meridian,
                     # honest: reflects whether TST was ACTUALLY applied (needs lon)
                     "true_solar_time": bool(true_solar_time and lon is not None),
                     "zishi_rule": "late" if late_zishi else "early",
@@ -646,7 +729,12 @@ def main():
     ap.add_argument("--lon", type=float, default=None, help="Longitude (for True Solar Time)")
     ap.add_argument("--true-solar-time", action="store_true",
                     help="Apply True Solar Time (真太阳时) correction — off by default")
-    ap.add_argument("--standard-meridian", type=float, default=120.0,
+    ap.add_argument("--tz", type=parse_tz, default=None,
+                    help="BIRTHPLACE timezone — IANA name (Europe/Amsterdam) or UTC-offset "
+                         "hours. REQUIRED for a birth outside UTC+8: 節氣 are absolute "
+                         "instants and the engine's tables are Beijing-based, so without "
+                         "this the year/month pillar can be wrong.")
+    ap.add_argument("--standard-meridian", type=float, default=None,
                     help="Timezone standard meridian (China=120)")
     ap.add_argument("--early-zishi", action="store_true",
                     help="Use 早子时/子时换日 (23:00–24:00 → NEXT day's 日柱); "
@@ -664,7 +752,7 @@ def main():
         r = compute(
             date=args.date, time=args.time, gender=args.gender, lon=args.lon,
             true_solar_time=args.true_solar_time,
-            standard_meridian=args.standard_meridian,
+            standard_meridian=args.standard_meridian, tz=args.tz,
             late_zishi=not args.early_zishi, on_date=on_date,
         )
     except (ValueError, TypeError) as e:

@@ -271,11 +271,100 @@ class TestBaZi(unittest.TestCase):
 
     def test_ordinary_date_agrees_and_is_quiet(self):
         r = self.chart("--date", "1993-04-12", "--time", "07:35", "--gender", "m",
-                       "--format", "json")
+                       "--tz", "Asia/Shanghai", "--format", "json")
         x = r["computed"]["cross_check_sxtwl"]
         if x.get("available"):
             self.assertIs(x["agrees"], True)
         self.assertEqual(r["ambiguities"], [])
+
+
+class TestBaZiCurrentDecade(unittest.TestCase):
+    """`is_current` drives the whole 分阶段 reading, so getting it wrong is a ten-year
+    error, not an off-by-one. It used to come from `today.year - birth_year`, which is
+    a year-difference, not an age: before the birthday it reads one too high and pushes
+    anyone sitting on a 大运 boundary into the next decade."""
+
+    def test_age_is_birthday_aware(self):
+        import bazi, datetime
+        today = datetime.date.today()
+        for y, m, d in ((1998, 11, 16), (2002, 12, 1), (1994, 10, 5), (1993, 4, 12)):
+            got = bazi.compute(f"{y}-{m:02d}-{d:02d}", "10:00", "m")["computed"]["current_age_approx"]
+            want = today.year - y - ((today.month, today.day) < (m, d))
+            self.assertEqual(got, want, f"{y}-{m}-{d}")
+
+    def test_current_decade_matches_the_real_age_across_a_sweep(self):
+        import bazi, datetime
+        today = datetime.date.today()
+        wrong = []
+        for m, d in ((11, 16), (12, 1), (10, 5), (3, 16), (6, 20)):
+            for y in range(1975, 2006, 3):
+                age = today.year - y - ((today.month, today.day) < (m, d))
+                ps = bazi.compute(f"{y}-{m:02d}-{d:02d}", "10:00", "m")["computed"]["luck_pillars"]["pillars"]
+                marked = [p for p in ps if p["is_current"]]
+                correct = [p for p in ps if p["start_age"] <= age <= p["end_age"]]
+                if marked and correct and marked[0]["ganzhi"] != correct[0]["ganzhi"]:
+                    wrong.append((y, m, d, marked[0]["ganzhi"], correct[0]["ganzhi"]))
+        self.assertEqual(wrong, [], f"{len(wrong)} charts marked the wrong decade")
+
+    def test_unknown_hour_says_it_also_blurs_qiyun(self):
+        r = jrun("bazi.py", "--date", "1993-04-12", "--gender", "m", "--format", "json")
+        self.assertTrue(any("起运" in a for a in r["ambiguities"]), r["ambiguities"])
+
+
+class TestBaZiTimezone(unittest.TestCase):
+    """節氣 are absolute astronomical instants and lunar-python resolves them against
+    China Standard Time. A birth outside UTC+8 therefore has to be moved into that
+    frame or the year/month pillar can be wrong — and it was, silently, while the
+    ambiguity text confidently described the WRONG side of the boundary."""
+
+    def chart(self, *a):
+        return jrun("bazi.py", "--gender", "m", "--format", "json", *a)
+
+    def test_overseas_birth_just_after_lichun_gets_the_right_year_pillar(self):
+        # 立春 1993 = 03:37 Beijing on Feb 4 = 20:37 Feb 3 in Amsterdam.
+        # 21:00 local on Feb 3 is therefore AFTER it.
+        r = self.chart("--date", "1993-02-03", "--time", "21:00",
+                       "--tz", "Europe/Amsterdam")
+        self.assertEqual(r["computed"]["pillars"]["year"]["ganzhi"], "癸酉")
+        self.assertTrue(any("之后" in a and "立春" in a for a in r["ambiguities"]),
+                        r["ambiguities"])
+
+    def test_day_and_hour_pillars_stay_on_the_local_clock(self):
+        # 21:00 local is 亥时 wherever you are; it must NOT become Beijing's 04:00
+        r = self.chart("--date", "1993-02-03", "--time", "21:00",
+                       "--tz", "Europe/Amsterdam")
+        self.assertEqual(r["computed"]["pillars"]["hour"]["zhi"], "亥")
+
+    def test_china_births_are_completely_unchanged(self):
+        for args in (["--date", "1993-04-12", "--time", "07:35"],
+                     ["--date", "1993-04-12", "--time", "16:00"],
+                     ["--date", "1993-02-04", "--time", "00:30"],
+                     ["--date", "1993-04-12"]):
+            def gz(extra):
+                p = self.chart(*(args + extra))["computed"]["pillars"]
+                return [v["ganzhi"] if v else None for v in p.values()]
+            self.assertEqual(gz([]), gz(["--tz", "Asia/Shanghai"]), args)
+
+    def test_omitting_tz_discloses_the_assumption_instead_of_hiding_it(self):
+        r = self.chart("--date", "1993-04-12", "--time", "07:35")
+        self.assertTrue(any("未提供出生地时区" in a for a in r["ambiguities"]))
+        self.assertIn("ASSUMED", r["computed"]["input"]["conventions"]["jieqi_frame"])
+
+    def test_standard_meridian_follows_the_birthplace_not_china(self):
+        r = self.chart("--date", "1993-07-15", "--time", "14:00",
+                       "--tz", "Europe/Amsterdam", "--lon", "4.90", "--true-solar-time")
+        self.assertEqual(r["computed"]["input"]["conventions"]["standard_meridian"], 30.0)
+
+    def test_numeric_offset_is_accepted_too(self):
+        a = self.chart("--date", "1993-02-03", "--time", "21:00", "--tz", "Europe/Amsterdam")
+        b = self.chart("--date", "1993-02-03", "--time", "21:00", "--tz", "1")
+        self.assertEqual(a["computed"]["pillars"]["year"]["ganzhi"],
+                         b["computed"]["pillars"]["year"]["ganzhi"])
+
+    def test_bad_tz_is_rejected_clearly(self):
+        code, _, err = run("bazi.py", "--date", "1993-04-12", "--gender", "m",
+                           "--tz", "Mars/Olympus", expect_ok=False)
+        self.assertNotEqual(code, 0)
 
     def test_zishi_rule_changes_the_day_pillar(self):
         late = self.chart("--date", "1993-04-12", "--time", "23:30", "--gender", "m",

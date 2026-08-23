@@ -15,6 +15,7 @@ woven with your journal + continuity. Pairs with `references/journaling.md`.
 2. **Compute the day from real systems** (never hand-compute):
    ```bash
    python3 $D/scripts/bazi.py  --date <birth.date> [--time <birth.time>] --gender <m|f> \
+     --tz <birth.tz_at_birth> \
      --on-date today --format json     # → computed.daily: 流年/流月/流日 十神+favor,
                                         #   zodiac_day (生肖 vs 日支), wuxing_tips
    python3 $D/scripts/astro.py --date <birth.date> [--time <birth.time>] \

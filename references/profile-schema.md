@@ -30,7 +30,10 @@ birth:                       # sensitive — gated by consent.birth
   place: "Beijing, CN"
   lat: 39.9042
   lon: 116.4074
-  tz_at_birth: "Asia/Shanghai"   # IANA zone NAME (not an hour offset); pass to astro.py --tz
+  tz_at_birth: "Asia/Shanghai"   # IANA zone NAME (not an hour offset).
+                             # Pass to BOTH astro.py --tz and bazi.py --tz. Without it
+                             # bazi resolves 節氣 on a Beijing clock and a non-UTC+8
+                             # birth can get the wrong year/month pillar.
   conventions:               # frozen so charts regenerate identically
     true_solar_time: false   # default civil time; TST is an offered toggle
     zishi_rule: late         # 早/晚子时 for 23:00–24:00 births

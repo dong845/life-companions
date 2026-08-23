@@ -22,10 +22,21 @@ conventions:
 ```bash
 python3 $D/scripts/bazi.py \
   --date <birth.date> [--time <birth.time>] --gender <m|f> \
+  --tz <birth.tz_at_birth>                     # ← ALWAYS pass this when you have it \
   [--lon <birth.lon> --true-solar-time]        # only if conventions.true_solar_time
   [--early-zishi]                               # only if conventions.zishi_rule == early
   --format json
 ```
+**`--tz` is not optional for a birth outside China.** 節氣 are absolute astronomical
+instants and the engine resolves them on a Beijing clock, so without the birthplace
+timezone a European or American birth can come back with the **wrong year or month
+pillar** — and the ambiguity note will confidently describe the wrong side of the
+boundary. Pass `birth.tz_at_birth` (an IANA name; a plain offset also works). 年柱/月柱
+are then compared as absolute instants while 日柱/時柱 stay on the local clock, and the
+payload records both frames under `conventions`. With no `--tz` the chart still
+computes, but it says out loud that it assumed the birth clock was Beijing time —
+surface that to the person rather than letting it pass.
+
 It's deterministic and fast — recompute freely (v1 doesn't cache). The JSON splits
 `computed` (facts) from `heuristic` (the labeled 扶抑 strength guess) and lists
 `ambiguities`. **Surface the ambiguities honestly** — unknown time, a 23:00 子时

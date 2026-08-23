@@ -19,6 +19,7 @@ woven with your journal + continuity. Pairs with `references/journaling.md`.
      --on-date today --format json     # → computed.daily: 流年/流月/流日 十神+favor,
                                         #   zodiac_day (生肖 vs 日支), wuxing_tips
    python3 $D/scripts/astro.py --date <birth.date> [--time <birth.time>] \
+     --tz <birth.tz_at_birth> \
      --on-date today --format json     # → 星座/双鱼…, 今日月亮星座, 逆行, 本命相位
    ```
    Read `data/content/bazi-life-arc.md §1` for the 十神→dimension mappings that turn

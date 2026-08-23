@@ -285,6 +285,12 @@ all known** — the Ascendant, Midheaven, and Placidus house cusps.
   when the data can't support it. Omit, and name what's missing (a birth time / place
   / timezone would let you compute it).
 
+**Read `caveats` every time.** It now also carries: the resolved timezone and how it
+was derived, a birth clock that **never existed** (spring-forward gap) or that **ran
+twice** (autumn fall-back — an hour of doubt moves the Ascendant ~15°), and a Moon
+sitting within ~1.5° of a sign boundary. Those are exactly the cases where a confident
+sentence would be wrong.
+
 **Interpretation** = same rules as everywhere: Sun/Moon/Rising and aspects are a
 reflective, cultural lens — "one way to read this", agency language, no fatalism, no
 event/date prediction, no fabricated authority. Glossed plain-language on first use,

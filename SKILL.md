@@ -311,7 +311,9 @@ python3 $D/scripts/bazi.py --date 1993-04-12 --time 07:35 --gender m --tz Asia/S
 #   --tz is the BIRTHPLACE zone (profile birth.tz_at_birth). 節氣 are absolute instants
 #   resolved on a Beijing clock, so omitting it can hand back the wrong year/month
 #   pillar for any birth outside UTC+8 — the payload says when it had to assume.
-python3 $D/scripts/astro.py --date 1993-04-12 --time 07:35 --on-date today --format json   # real 星座 daily
+python3 $D/scripts/astro.py --date 1993-04-12 --time 07:35 --tz Asia/Shanghai --on-date today --format json  # 星座 daily
+#   --tz matters in DAILY mode too: without it the birth clock is read as UT, and the
+#   daily card can report a different Sun sign than the natal chart for the same person.
 python3 $D/scripts/astro.py --date 1993-04-12 --time 07:35 --natal --lat 52.16 --lon 4.49 --tz Europe/Amsterdam --format json  # full natal chart (星盘)
 python3 $D/scripts/career_match.py --find "产品经理"   # map their WORDS to a real O*NET occupation first
 python3 $D/scripts/career_match.py --selftest   # career-fit engine; --demo to rank shipped occupations

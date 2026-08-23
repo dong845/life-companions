@@ -660,6 +660,60 @@ class TestZiwei(unittest.TestCase):
         self.assertTrue(found, "expected a leap-month date in 2020-05")
 
 
+class TestAstroDailyTimezone(unittest.TestCase):
+    """The daily card read the birth wall clock as UT while natal() subtracted the
+    offset, so the same profile could be told two different Sun signs by the two
+    modes. Daily also accepted --tz and silently dropped it."""
+
+    def test_daily_and_natal_agree_on_the_sun_sign(self):
+        import astro, datetime
+        on = datetime.date(2026, 8, 23)
+        for d, t in (("1993-04-20", "07:35"), ("1995-09-23", "20:00"),
+                     ("1998-03-20", "16:00"), ("1991-01-20", "23:30")):
+            off, _ = astro._resolve_tz("Asia/Shanghai", d, t)
+            daily = astro.compute(d, t, on, tz="Asia/Shanghai")["sun_sign"]
+            nat = astro.natal(d, t, lat=39.9, lon=116.4, tz_offset=off)
+            ns = nat["sun"]["sign"] if isinstance(nat.get("sun"), dict) else nat.get("sun_sign")
+            self.assertEqual(daily, ns, f"{d} {t}")
+
+    def test_daily_actually_uses_the_tz_flag(self):
+        r = jrun("astro.py", "--date", "1993-04-20", "--time", "07:35",
+                 "--tz", "Asia/Shanghai", "--on-date", "2026-08-23")
+        self.assertEqual(r["tz"], "Asia/Shanghai")
+        self.assertIn("snapshot_at", r)
+
+    def test_missing_tz_is_disclosed_not_hidden(self):
+        r = jrun("astro.py", "--date", "1993-04-20", "--time", "07:35",
+                 "--on-date", "2026-08-23")
+        self.assertTrue(any("未提供出生地时区" in c for c in r["caveats"]), r["caveats"])
+
+    def test_nonexistent_and_doubled_wall_clocks_are_flagged(self):
+        import astro
+        _, gap = astro._resolve_tz("Europe/Amsterdam", "2026-03-29", "02:30")
+        self.assertIn("并不存在", gap)
+        _, fold = astro._resolve_tz("Europe/Amsterdam", "2026-10-25", "02:30")
+        self.assertIn("两次", fold)
+        _, ok = astro._resolve_tz("Europe/Amsterdam", "2026-07-15", "14:00")
+        self.assertNotIn("并不存在", ok)
+        self.assertNotIn("两次", ok)
+
+    def test_moon_near_a_sign_boundary_is_hedged(self):
+        import astro, datetime
+        hits = 0
+        for i in range(40):
+            d = datetime.date(2026, 8, 1) + datetime.timedelta(days=i)
+            r = astro.compute("1993-04-12", "07:35", d, tz="Asia/Shanghai")
+            hits += any("换座边界" in c for c in r["caveats"])
+        self.assertGreater(hits, 0, "the Moon crosses a sign every ~2.5 days; "
+                                    "40 days must contain a boundary day")
+
+    def test_extreme_latitude_omits_houses_loudly(self):
+        import astro
+        r = astro.natal("1993-04-12", "07:35", lat=78.2, lon=15.6, tz_offset=1)
+        self.assertIsNone(r.get("ascendant"))
+        self.assertTrue(any("宫位" in c for c in r.get("caveats", [])))
+
+
 class TestSafetyScan(unittest.TestCase):
     """A keyword backstop. It may miss; it must not cry wolf on ordinary venting."""
 
@@ -872,7 +926,10 @@ class TestNoRealUserDataInRepo(unittest.TestCase):
     # the only birth data allowed in the tree, matching profile-schema.md's example
     SYNTHETIC = {"1993-04-12", "1995-08-30", "1930-06-15", "1993-07-15", "2020-05",
                  "1993-02-04", "1993-02-03", "2030-01-01", "1900-01-15",
-                 "1990-01-01"}   # round placeholder used by the consent tests
+                 "1990-01-01",   # round placeholder used by the consent tests
+                 # Sun-sign boundary fixtures: dates chosen because the Sun changes
+                 # sign around them, which is where a timezone error becomes visible.
+                 "1993-04-20", "1995-09-23", "1998-03-20", "1991-01-20"}
 
     def test_no_birth_dates_outside_the_synthetic_set(self):
         import re

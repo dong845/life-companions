@@ -62,16 +62,40 @@ def _angle(a, b):
     return min(d, 360 - d)
 
 
-def compute(birth_date, birth_time, on_date):
+def compute(birth_date, birth_time, on_date, tz=None):
+    """Daily reading. `tz` is the BIRTHPLACE zone (IANA name or offset hours).
+
+    This used to take the birth wall clock as if it were UT while natal() correctly
+    subtracted the offset, so the same profile could be told two different Sun signs
+    by the two modes — 金牛 from the daily card and 白羊 from the natal chart. The
+    daily entry point also accepted --tz and then ignored it.
+    """
     by, bm, bd = (int(x) for x in birth_date.split("-"))
     hh, mm = ((int(x) for x in birth_time.split(":")) if birth_time else (12, 0))
     time_known = birth_time is not None
-    # natal (UTC approx; sun/most planets barely move intra-day)
-    natal_jd = swe.julday(by, bm, bd, hh + mm / 60.0)
+    caveats = []
+
+    tz_offset, tz_note = _resolve_tz(tz, birth_date, birth_time)
+    if tz_note:
+        caveats.append(tz_note)
+    if tz_offset is None:
+        tz_offset = 0.0
+        caveats.append("未提供出生地时区：出生钟点按 UT 处理，本命太阳/月亮的度数会有偏差"
+                       "（最多约一个星座）。传 --tz（如 Asia/Shanghai）即可对齐。")
+    natal_jd = swe.julday(by, bm, bd, hh + mm / 60.0 - float(tz_offset))
     sun_natal = _lon_speed(natal_jd, swe.SUN)[0]
     moon_natal = _lon_speed(natal_jd, swe.MOON)[0] if time_known else None
+    if not time_known:
+        caveats.append("出生时刻未知：本命月亮按当日 12:00 估算，月亮每天走 12–15°，"
+                       "星座可能不对——本命月亮相关的解读请当作存疑。")
 
-    tjd = _jd(datetime.datetime(on_date.year, on_date.month, on_date.day, 12, 0))
+    # "Today" is a moment, not a day. The snapshot used to be a bare 12:00 UT with no
+    # epoch stated, while the card said 「今日月亮在X座」 — the Moon crosses a sign
+    # roughly every 2.5 days, so on a crossing day that label is a coin flip. Take the
+    # snapshot at local noon for the person's own zone and SAY which instant it is.
+    snap_hour = 12.0 - float(tz_offset)
+    tjd = _jd(datetime.datetime(on_date.year, on_date.month, on_date.day, 12, 0)) \
+        - 12.0 / 24.0 + snap_hour / 24.0
     today = {}
     for name, pl in PLANETS:
         lon, spd = _lon_speed(tjd, pl)
@@ -96,9 +120,21 @@ def compute(birth_date, birth_time, on_date):
 
     retros = [n for n in ("水星", "金星", "火星", "木星", "土星") if today[n]["retrograde"]]
 
+    # Is the Moon near a sign boundary at the snapshot instant? Then "today's moon
+    # sign" depends on the hour and must not be stated flatly.
+    moon_lon = today["月亮"]["lon"]
+    deg_in_sign = moon_lon % 30.0
+    if deg_in_sign < 1.6 or deg_in_sign > 28.4:
+        caveats.append(f"今日月亮在 {today['月亮']['sign']}座 {deg_in_sign:.1f}° —— 贴近换座边界，"
+                       f"月亮一天走 12–15°，今天早晚可能不是同一个星座。别把它说死。")
+
     return {
         "system": "Western astrology (real ephemeris, Swiss/Moshier)",
         "date": on_date.isoformat(),
+        "snapshot_at": (f"{on_date.isoformat()} 12:00 local (UT"
+                        f"{-snap_hour + 12:+g}h offset applied)"),
+        "tz": tz,
+        "caveats": caveats,
         "sun_sign": _sign(sun_natal),
         "sun_sign_en": SIGN_EN[int(sun_natal // 30) % 12],
         "sun_element": SIGN_ELEMENT[_sign(sun_natal)],
@@ -144,16 +180,36 @@ def _resolve_tz(tz, date_str, time_str):
     Returns (offset_hours, note) — the note records how it was resolved so the reply
     can be honest about it, e.g. a summer birth in Amsterdam being +2, not +1.
     """
-    if tz is None or isinstance(tz, float):
-        return tz, None
+    if tz is None or isinstance(tz, (int, float)):
+        return (None if tz is None else float(tz)), None
     from zoneinfo import ZoneInfo
     y, m, d = (int(x) for x in date_str.split("-"))
     hh, mm = (int(x) for x in (time_str or "12:00").split(":"))
-    local = datetime.datetime(y, m, d, hh, mm, tzinfo=ZoneInfo(tz))
+    zone = ZoneInfo(tz)
+    naive = datetime.datetime(y, m, d, hh, mm)
+    local = naive.replace(tzinfo=zone)
     off = local.utcoffset().total_seconds() / 3600.0
+
+    # A wall clock is not a guarantee that the moment existed. On the spring-forward
+    # night the clocks jump and an hour is simply skipped; on the autumn night an hour
+    # runs twice. zoneinfo resolves both silently, so the chart used to be built on a
+    # time that never happened — or on the wrong one of two — with no complaint.
+    extra = None
+    round_trip = local.astimezone(datetime.timezone.utc).astimezone(zone)
+    if round_trip.replace(tzinfo=None) != naive:
+        extra = (f"{date_str} {time_str} 在 {tz} 并不存在——那晚夏令时向前跳，这个钟点被"
+                 f"跳过了。已按 UTC{off:+g} 处理，但出生时间本身需要向本人确认。")
+    else:
+        alt = naive.replace(tzinfo=zone, fold=1).utcoffset().total_seconds() / 3600.0
+        if abs(alt - off) > 1e-9:
+            extra = (f"{date_str} {time_str} 在 {tz} 出现了两次——那晚时钟回拨，同一个钟点"
+                     f"走了两遍（UTC{off:+g} 与 UTC{alt:+g}）。已取前一次；差一小时会移动"
+                     f"上升约 15°，请与本人确认是拨钟前还是拨钟后。")
     note = (f"tz {tz} resolved to UTC{off:+g} for {date_str} "
             f"{time_str or '(time unknown, assumed 12:00)'} — historical DST/zone "
             f"changes applied by zoneinfo, not guessed.")
+    if extra:
+        note += " " + extra
     if y < 1970:
         # Many platforms ship a "slim"/truncated tzdata that drops pre-1970 transitions
         # and answers with the modern rule instead. Don't present that as exact — an
@@ -322,7 +378,8 @@ def main():
             return
         on_date = (datetime.date.today() if args.on_date == "today"
                    else datetime.date.fromisoformat(args.on_date))
-        r = compute(args.date, args.time, on_date)
+        # daily mode used to accept --tz and silently drop it
+        r = compute(args.date, args.time, on_date, tz=args.tz)
     except (ValueError, TypeError) as e:
         print(json.dumps({"ok": False, "error": f"bad input: {e}"}, ensure_ascii=False))
         sys.exit(2)

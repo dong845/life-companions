@@ -16,6 +16,46 @@ O\*NET 职业数据），然后把结果当镜子递给你，不告诉你会发�
 
 ---
 
+## 安装
+
+需要 **Python 3.9+**。没有需要手动装的东西——脚本会在首次使用时自动获取 `PyYAML`、
+`lunar-python`、`pyswisseph`、`sxtwl`，装不上时（没网络、PEP 668）会打印确切的安装命令。
+用 `python3 scripts/companion.py doctor` 一次看全。
+
+**方式一 —— 一行搞定，用 [`npx skills`](https://github.com/vercel-labs/skills)：**
+
+```bash
+npx skills add dong845/life-companions
+```
+
+它会问你装给哪个 agent、装在哪个范围。加 `-g` 装给所有项目，`-a claude-code`（或
+`-a codex`）跳过 agent 选择，`-y` 全程非交互。**仓库根就是这个 skill**，整个目录会被
+复制进你的 skills 文件夹。
+
+**方式二 —— 作为 Claude Code 插件**（更新受管）：
+
+```text
+/plugin marketplace add dong845/life-companions
+/plugin install life-companion@life-companion
+/reload-plugins
+```
+
+插件形式的 skill 带命名空间，调用是 `/life-companion:life-companion`。两点要注意：
+如果你**同时**在 `~/.claude/skills/` 里留了手动副本，这个 skill 会出现两次——没有去重，
+删掉一份。另外第三方 marketplace 不会自动更新，要拿新版本得跑
+`/plugin marketplace update life-companion`。
+
+**方式三 —— 直接 clone**（想改它就选这个；改动立即生效，插件缓存做不到这点）：
+
+```bash
+git clone --depth 1 https://github.com/dong845/life-companions.git ~/.claude/skills/life-companion
+```
+
+无论走哪条路，**你的数据都不会跟着走**：档案和日记在 `~/.companion/`，在仓库之外，
+既不属于安装内容，也不会被更新覆盖。
+
+---
+
 ## 怎么用
 
 像聊天一样说话就行，不用记命令。第一次用会走一段简短的、征得同意的建档。

@@ -21,6 +21,49 @@ drops the fortune-telling entirely and points them at real help.
 
 ---
 
+## Install
+
+Needs **Python 3.9+**. Nothing to install by hand — the scripts fetch `PyYAML`,
+`lunar-python`, `pyswisseph` and `sxtwl` on first use, and say exactly what to run if
+they can't (no network, PEP 668). Check with
+`python3 scripts/companion.py doctor`.
+
+**Option 1 — one line with [`npx skills`](https://github.com/vercel-labs/skills):**
+
+```bash
+npx skills add dong845/life-companions
+```
+
+It prompts for the agent and scope. Add `-g` for all projects, `-a claude-code` (or
+`-a codex`) to skip the agent prompt, `-y` for non-interactive. The repository root
+*is* the skill, so the whole directory is copied into your skills folder.
+
+**Option 2 — as a Claude Code plugin** (managed updates):
+
+```text
+/plugin marketplace add dong845/life-companions
+/plugin install life-companion@life-companion
+/reload-plugins
+```
+
+Plugin skills are namespaced, so it is invoked as `/life-companion:life-companion`.
+Two things worth knowing: if you *also* keep a manual copy in `~/.claude/skills/`
+you will see the skill twice — there is no dedup, so remove one. And third-party
+marketplaces do not auto-update; run `/plugin marketplace update life-companion` to
+pick up a new release.
+
+**Option 3 — clone** (best if you intend to edit it; changes take effect immediately,
+which the plugin cache does not give you):
+
+```bash
+git clone --depth 1 https://github.com/dong845/life-companions.git ~/.claude/skills/life-companion
+```
+
+Whichever path you pick, your data does not come with it: the profile and journal live
+in `~/.companion/`, outside the repo, and are never part of an install or an update.
+
+---
+
 ## Using it
 
 Just talk. There are no commands to remember. The first run collects a short,

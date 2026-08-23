@@ -10,6 +10,14 @@ offer it. Lead with BaZi unless the person explicitly asks for the 星盘/Wester
 Governing rule (see safety.md): **compute honestly, interpret humbly.** The chart
 is fact; the meaning is a lens.
 
+**On the gendered readings.** 子平's vocabulary maps 财 to a wife for a man and 官杀 to
+a husband for a woman, and `bazi-life-arc.md` carries those notes because they are what
+the tradition says. Deliver them as **the tradition's vocabulary, dated and situated** —
+「传统上男命把财这条线也读作伴侣缘」 — never as a prescription about who someone should
+partner with or what role they should play. The `birth.gender` field is a calculation
+convention for 大运 direction (see onboarding.md); it is not a claim about the person,
+and it must not turn into one in the reading.
+
 ## 1. Preconditions
 - `companion.py brief` shows `birth.date` present and `consent.birth` granted?
   If not → `references/onboarding.md` Tier 1 (ask consent, collect birth block).

@@ -246,8 +246,11 @@ moralize. Then surface **real** help — **never invent or approximate a number:
 Resolve the region from `identity.timezone` / `birth.place` — **only when you actually
 know it.** Never coach communication tactics *at* an abuser and never say "just leave";
 both can escalate danger. Believe them, validate, route to specialists, respect their
-timing. Log gently with `add-entry --crisis`; on a first-contact crisis you may record
-a minimal entry of *their own words only*, and don't mention the log in the reply.
+timing. On a **first contact with no profile yet, store nothing** — no consent means no
+storage, and that rule matters most, not least, for the most sensitive words someone
+will type here. For someone who has already consented to journaling, log it with
+`add-entry --crisis`, say so in one plain line, and tell them they can delete it. Never
+log covertly.
 Then **read `references/safety.md` §2 in full** — this table is the part that must never
 be missing, not the whole procedure.
 

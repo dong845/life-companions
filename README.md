@@ -145,6 +145,13 @@ stored.
 Every computation is **offline**. BaZi, charts and career matching make no network
 calls, so your data never leaves the machine and nothing costs API credit.
 
+**One exception, stated precisely:** the *first* run may reach the network to
+`pip install` its four dependencies. That is a package download, not your data leaving
+— but it is a network call, so it should not hide behind the word "offline". Set
+`LIFE_COMPANION_NO_AUTOINSTALL=1` to forbid it and install them yourself; the scripts
+then print the exact command instead of reaching out. After that, nothing this skill
+does touches the network.
+
 ---
 
 ## Notes for anyone modifying it

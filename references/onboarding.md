@@ -55,8 +55,14 @@ Then collect:
   Without these three, **the full Western natal chart can never compute the
   Ascendant/houses and BaZi can't offer True Solar Time** — so this is the step that
   makes those features actually work.
-- **Gender** (male/female) — needed for BaZi 大运 direction (阳男阴女顺行…). Ask
-  plainly; store `birth.gender`.
+- **Chart convention** (the field is `birth.gender`) — BaZi's 大运 runs forward or
+  backward by the rule 阳男阴女顺行 / 阴男阳女逆行, so the calculation needs one of two
+  values and the tradition offers no third. **Ask for it as what it is: a setting the
+  chart needs, not a statement about who they are.** 「起大运的方向在传统规则里只有两种
+  取法，我按哪一种给你算？」 If they are non-binary, say plainly that the tradition has
+  no convention for it, let them pick which one to use, and note that the choice is
+  theirs and reversible. Their actual identity belongs in `identity.pronouns`, which is
+  never inferred from this field. Do not let a chart setting become a label.
 
 Write to `birth:` via `set-profile`. Then hand to `modules/destiny.md`.
 

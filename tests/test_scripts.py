@@ -1028,6 +1028,88 @@ class TestNoRealUserDataInRepo(unittest.TestCase):
         self.assertEqual(offenders, [], f"real-looking birth dates in the repo: {offenders}")
 
 
+class TestForgetAllCannotWipeAnUnrelatedDirectory(unittest.TestCase):
+    """`--yes` was the ONLY guard on a recursive rmtree of whatever COMPANION_HOME
+    pointed at. A typo, a stale export, or a shell variable meant for something else
+    took an unrelated directory with it — verified by deleting one in testing."""
+
+    def test_refuses_a_directory_it_did_not_create(self):
+        with tempfile.TemporaryDirectory() as t:
+            victim = os.path.join(t, "precious")
+            os.makedirs(victim)
+            keep = os.path.join(victim, "important.txt")
+            with open(keep, "w") as f:
+                f.write("not the skill's data")
+            r = jrun("companion.py", "forget", "--all", "--yes", home=victim)
+            self.assertFalse(r["ok"])
+            self.assertIn("does not look like a companion home", r["error"])
+            self.assertTrue(os.path.exists(keep), "an unrelated file was deleted")
+
+    def test_refuses_a_directory_with_only_one_marker(self):
+        with tempfile.TemporaryDirectory() as t:
+            half = os.path.join(t, "half")
+            os.makedirs(half)
+            with open(os.path.join(half, "profile.yaml"), "w") as f:
+                f.write("schema_version: 1\n")
+            r = jrun("companion.py", "forget", "--all", "--yes", home=half)
+            self.assertFalse(r["ok"])
+            self.assertTrue(os.path.exists(half))
+
+    def test_a_real_companion_home_can_still_be_wiped(self):
+        with tempfile.TemporaryDirectory() as t:
+            home = os.path.join(t, "real")
+            run("companion.py", "init", home=home)
+            r = jrun("companion.py", "forget", "--all", "--yes", home=home)
+            self.assertTrue(r["ok"])
+            self.assertFalse(os.path.exists(home))
+
+    def test_still_refuses_without_yes(self):
+        with tempfile.TemporaryDirectory() as t:
+            home = os.path.join(t, "real")
+            run("companion.py", "init", home=home)
+            r = jrun("companion.py", "forget", "--all", home=home)
+            self.assertFalse(r["ok"])
+            self.assertTrue(os.path.exists(home))
+
+
+class TestManifestsMatchReality(unittest.TestCase):
+    """A marketplace description IS the informed-consent surface. An audit found the
+    declared behaviour understated what runs (localhost server, first-run pip, file
+    writes) and — worse — that the docs claimed 'no network' while the code pip-installs."""
+
+    def _manifests(self):
+        out = []
+        for rel in (".claude-plugin/plugin.json", ".claude-plugin/marketplace.json"):
+            with open(os.path.join(SKILL, rel), encoding="utf-8") as f:
+                d = json.load(f)
+            out.append((rel, d["plugins"][0] if "plugins" in d else d))
+        return out
+
+    def test_capabilities_are_disclosed(self):
+        for rel, d in self._manifests():
+            desc = d["description"]
+            for must in ("COMPANION_HOME", "127.0.0.1", "pip install",
+                         "LIFE_COMPANION_NO_AUTOINSTALL"):
+                self.assertIn(must, desc, f"{rel} does not disclose {must}")
+
+    def test_no_unconditional_offline_claim(self):
+        # the exact contradiction the audit named
+        for rel, d in self._manifests():
+            self.assertNotIn("no network calls", d["description"], rel)
+
+    def test_versions_and_names_agree_everywhere(self):
+        import yaml
+        with open(os.path.join(SKILL, "SKILL.md"), encoding="utf-8") as f:
+            skill_name = yaml.safe_load(f.read().split("---")[1])["name"]
+        versions, names = set(), set()
+        for rel, d in self._manifests():
+            versions.add(d["version"]); names.add(d["name"])
+        with open(os.path.join(SKILL, ".claude-plugin/marketplace.json"), encoding="utf-8") as f:
+            versions.add(json.load(f)["metadata"]["version"])
+        self.assertEqual(len(versions), 1, f"version drift: {versions}")
+        self.assertEqual(names, {skill_name}, f"name drift: {names} vs {skill_name}")
+
+
 class TestConsentIsEnforcedNotJustAsked(HomeCase):
     """safety.md §4, SKILL.md and both READMEs promise birth / relationships / mood are
     EACH consent-gated and that without consent data "isn't collected, inferred or

@@ -10,12 +10,17 @@ Everything below is only what a harness needs in order to follow it correctly.
 ## Running it anywhere
 
 Nothing here is Claude-specific. It needs **Python 3.9+**, a shell, and the ability to
-read files. All computation is offline: no API keys, no network, no spend.
+read files. All computation is offline: no API keys, no network calls, no spend.
+
+The one exception, stated rather than glossed: on FIRST run the scripts may
+`pip install` their four dependencies, which is a network call (a package download, not
+user data leaving). `LIFE_COMPANION_NO_AUTOINSTALL=1` forbids it and makes them print
+the install command instead. Nothing after that touches the network.
 
 ```bash
 D="$(dirname "$(realpath AGENTS.md)")"     # or wherever this repo is checked out
 python3 "$D/scripts/companion.py" doctor   # python + dependencies + what degrades
-python3 "$D/tests/test_scripts.py"         # regression suite (45 tests, ~7s, offline)
+python3 "$D/tests/test_scripts.py"         # regression suite (140 tests, ~20s, offline)
 ```
 
 `doctor` names every missing package with its install command and what stops working

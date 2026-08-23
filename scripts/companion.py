@@ -761,6 +761,26 @@ def cmd_forget(args):
         if not args.yes:
             print(json.dumps({"ok": False, "error": "refusing to wipe without --yes"}))
             return
+        # `--yes` alone was the ONLY guard, so this would rmtree whatever COMPANION_HOME
+        # (or --home) happened to point at — a typo, a stale export, or a shell variable
+        # meant for something else took an unrelated directory with it. Refuse anything
+        # that is not recognisably a companion home: init writes README.txt and
+        # consent.yaml, so requiring them makes the target prove what it is.
+        markers = [p["readme"], p["consent"], p["profile"]]
+        present = [m for m in markers if os.path.exists(m)]
+        if len(present) < 2:
+            print(json.dumps({
+                "ok": False,
+                "error": f"refusing to wipe {home}: it does not look like a companion home",
+                "why": ("--all deletes the directory RECURSIVELY. It must contain at least "
+                        "two of README.txt / consent.yaml / profile.yaml, which `init` "
+                        "writes. Found: " + (", ".join(os.path.basename(m) for m in present)
+                                             or "none")),
+                "_next": ("Check COMPANION_HOME / --home. If you really meant this "
+                          "directory, run `init` in it first, or delete it yourself — "
+                          "this tool will not remove a directory it did not create."),
+            }, ensure_ascii=False, indent=2))
+            raise SystemExit(3)
         import shutil
         if os.path.exists(home):
             shutil.rmtree(home)

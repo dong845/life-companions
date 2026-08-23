@@ -107,12 +107,34 @@ Then, two separate outputs, never merged into one number:
 Person RIASEC-6 vector vs each occupation's RIASEC vector via **normalized cosine
 congruence**. Occupations given only a 3-letter high-point code (`riasec: null`)
 are expanded **3-2-1** and flagged **lower-confidence**; occupations with full
-six-value ratings use `(x-1)/6`. Optional **values** (ipsative cosine) and
+six-value ratings use `(x-1)/6`. Optional **values** (ipsative cosine, **rescaled** — see below) and
 **traits** (soft mean-abs-difference over mapped traits only) blend in with the
-disclosed default weights, **renormalized** when components are absent. Output is
+disclosed default weights, **renormalized** when components are absent.
+
+The values cosine needed rescaling because an ipsative rank vector cannot point near
+the origin: over all 720 orderings its minimum is **0.615**, not 0. Fed straight into
+bands built for a [0,1] metric, an **exactly reversed** value ranking still read
+"Moderate" — the component could not report a mismatch at all. It is now stretched onto
+[0,1] against that verified floor, so opposite rankings read Low. An exhaustive test
+pins the floor, so changing the vector definition can't silently skew every score. Output is
 a **band** (thresholds 0.55 / 0.75, disclosed as tunable) plus a **confidence
 note** that shrinks on short/partial assessments and on code-only occupations.
 Raw floats stay internal; the person-facing layer emits **bands + language only**.
+
+**The result comes back as TWO lists, and they are not comparable.** Use
+`score_person_grouped()`, which returns `numeric_interests` (68) and `code_only` (120)
+ranked and banded separately. For one and the same person the numeric set came out 63%
+"Strong" and the code-only set 20% — a shared threshold on differently-shaped
+distributions made "Strong" look like one claim when it was two. **Never merge them
+into one table, and never say a code-only occupation fits better than a numeric one.**
+
+**An answer set with no shape is refused, not scored.** Cosine ignores magnitude, so
+answering the same value to all 21 items produced the vector [k,k,k,k,k,k] — identical
+in direction for every k — and still yielded a full ranking, always topped by whichever
+occupation sits nearest the uniform direction. `score_person_grouped` now returns
+`{"refused": true, …}` when the six type scores barely differ. Say what it says: this is
+**"can't measure"**, not "low match". Offer to redo the check, or drop the instrument
+and talk about what they've actually done and when they were most absorbed.
 
 **Data reality (be honest about which read you gave):** coverage is now mixed, so
 say which kind of match the person actually got:

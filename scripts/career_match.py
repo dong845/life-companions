@@ -46,6 +46,10 @@ HIGHPOINT_L1 = float(sum(HIGHPOINT_RANK_WEIGHTS))  # 6.0
 DEFAULT_WEIGHTS = {"interests": 0.45, "values": 0.30, "traits": 0.25}
 
 # Coarse band thresholds on a 0..1 fit. Design defaults, disclosed as tunable.
+# Exhaustively verified over all 720 orderings of the six O*NET work values: the
+# ipsative cosine's minimum (an exactly reversed ranking) is this value, not 0.
+VALUES_COS_FLOOR = 0.615
+
 BAND_LOW_MAX = 0.55       # score < 0.55 -> "Low"
 BAND_MODERATE_MAX = 0.75  # 0.55 <= score < 0.75 -> "Moderate"; >= 0.75 -> "Strong"
 
@@ -104,6 +108,25 @@ def occupation_interest_vector(occ):
             and all(isinstance(x, (int, float)) for x in riasec):
         return interest_vector_from_ratings(riasec), False
     return expand_highpoint_code(occ.get("high_point_code", "")), True
+
+
+def response_discrimination(responses, scoring_key):
+    """How much SHAPE the answers carry, as the spread of the six type means in [0,1].
+
+    Cosine ignores magnitude, so answering the same value to every item yields the
+    vector [k,k,k,k,k,k] — identical in DIRECTION for k=1,2,3,4 and carrying no
+    information about the person. It still produced a full 188-occupation ranking with
+    bands, always topped by whichever occupation sits closest to the uniform direction.
+    A flat answer set is a non-answer and has to be refused, not scored.
+    """
+    vec, _n = person_interest_vector(responses, scoring_key)
+    if not vec:
+        return 0.0
+    return max(vec) - min(vec)
+
+
+# Below this spread the answers do not distinguish the six types at all.
+MIN_DISCRIMINATION = 0.08
 
 
 def person_interest_vector(responses, scoring_key):
@@ -220,7 +243,16 @@ def values_fit(person_ranking, occ_ranking):
     o = canonical_values_ranking(occ_ranking)
     if p is None or o is None:
         return None
-    return cosine_congruence(_pref_vec(p), _pref_vec(o))
+    raw = cosine_congruence(_pref_vec(p), _pref_vec(o))
+    if raw is None:
+        return None
+    # An ipsative rank vector cannot point anywhere near the origin, so this cosine
+    # has a hard FLOOR: over all 6! = 720 orderings it never drops below
+    # VALUES_COS_FLOOR. Feeding that straight into bands built for a [0,1] metric
+    # meant the exactly-opposite ranking still read "Moderate" — the component could
+    # not report a mismatch at all. Stretch the real range onto [0,1] so "opposite"
+    # lands where it belongs. VALUES_COS_FLOOR is pinned by an exhaustive test.
+    return max(0.0, (raw - VALUES_COS_FLOOR) / (1.0 - VALUES_COS_FLOOR))
 
 
 def traits_fit(person_traits, occ_expectations):
@@ -338,9 +370,46 @@ def score_person(responses, scoring_key, occupations,
             person_vec, n_items, occ,
             person_values=person_values, person_traits=person_traits,
             occ_expectations=occ_exp.get(occ.get("soc_code")), weights=weights)
+        payload["data_quality"] = ("numeric-interests"
+                                   if occ.get("riasec") is not None else "code-only")
         scored.append((raw, payload))
     scored.sort(key=lambda t: t[0], reverse=True)
     return [p for _, p in scored]
+
+
+def score_person_grouped(responses, scoring_key, occupations, **kw):
+    """The honest shape of this result: TWO lists, not one.
+
+    68 occupations carry real numeric O*NET interest ratings; 120 carry only a
+    3-letter high-point code reconstructed 3-2-1. Those produce differently-shaped
+    score distributions, so one shared band threshold does not mean the same thing in
+    each: for the same person the numeric set came out 63% "Strong" and the code-only
+    set 20%. Merging them into one ranked table made "Strong" look comparable when it
+    was not. Rank and band each group on its own, and say so.
+
+    Returns {"refused": …} | {"numeric_interests": [...], "code_only": [...], "_note": …}
+    """
+    disc = response_discrimination(responses, scoring_key)
+    if disc < MIN_DISCRIMINATION:
+        return {
+            "refused": True,
+            "reason": ("答案没有区分度：六个类型的得分几乎一样，说明这套回答没有指向性"
+                       f"（类型间差 {disc:.3f} < {MIN_DISCRIMINATION}）。"),
+            "_next": ("这不是「匹配度低」，是「测不出来」。请对方重做一次，明确区分"
+                      "喜欢与不喜欢；或者直接聊他实际做过什么、什么时候最投入。"
+                      "不要拿这份回答生成排名。"),
+            "discrimination": round(disc, 3),
+        }
+    ranked = score_person(responses, scoring_key, occupations, **kw)
+    return {
+        "numeric_interests": [p for p in ranked if p.get("data_quality") == "numeric-interests"],
+        "code_only": [p for p in ranked if p.get("data_quality") == "code-only"],
+        "discrimination": round(disc, 3),
+        "_note": ("两组分别排名。numeric_interests 有真实 O*NET 兴趣分；code_only 的兴趣"
+                  "信号是从三字母高点码 3-2-1 反推的，置信度更低。**两组的档位不可互相"
+                  "比较** —— 不要把它们并成一张表，也不要说某个 code_only 职业比某个 "
+                  "numeric 职业更契合。"),
+    }
 
 
 def rank_occupations(responses, scoring_key, occupations, top_n=10, **kw):

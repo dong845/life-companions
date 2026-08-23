@@ -1304,6 +1304,82 @@ class TestCareerMatch(unittest.TestCase):
         self.assertIn("o*net", blob)
 
 
+class TestCareerValidity(unittest.TestCase):
+    """Three measurement defects, all of which produced a confident-looking result
+    that carried no information — the failure mode this skill exists to avoid."""
+
+    def setUp(self):
+        import career_match as cm
+        self.cm = cm
+        self.key = cm.load_scoring_key()
+        self.occ, _ = cm.load_occupations()
+
+    # --- A: an undiscriminating answer set is a non-answer -------------------
+    def test_straight_lining_is_refused_not_ranked(self):
+        # cosine ignores magnitude, so [k,k,k,k,k,k] is the SAME direction for every k
+        for v in (0, 1, 2, 3, 4):
+            r = self.cm.score_person_grouped({i: v for i in range(1, 22)},
+                                             self.key, self.occ)
+            self.assertTrue(r.get("refused"), f"all-{v} should be refused")
+            self.assertIn("区分度", r["reason"])
+
+    def test_a_shaped_answer_set_still_scores(self):
+        resp = {i: 1 for i in range(1, 22)}
+        for i in (5, 6, 7, 8):
+            resp[i] = 4
+        r = self.cm.score_person_grouped(resp, self.key, self.occ)
+        self.assertFalse(r.get("refused"))
+        self.assertEqual(len(r["numeric_interests"]) + len(r["code_only"]), len(self.occ))
+
+    # --- B: the values cosine had a hard floor ------------------------------
+    def test_opposite_value_rankings_read_low(self):
+        V = list(self.cm.WORK_VALUES)
+        self.assertEqual(self.cm.band(self.cm.values_fit(list(reversed(V)), V)), "Low")
+        self.assertEqual(self.cm.band(self.cm.values_fit(V, V)), "Strong")
+
+    def test_values_fit_spans_the_whole_band_range(self):
+        import itertools
+        V = list(self.cm.WORK_VALUES)
+        vals = [self.cm.values_fit(list(p), V) for p in itertools.permutations(V)]
+        self.assertLess(min(vals), 0.05)
+        self.assertAlmostEqual(max(vals), 1.0, places=6)
+
+    def test_the_declared_cosine_floor_is_still_true(self):
+        # VALUES_COS_FLOOR is what the rescale subtracts; if the vector definition ever
+        # changes, this catches it instead of silently skewing every values score.
+        import itertools, math
+        V = list(self.cm.WORK_VALUES)
+        base = self.cm.values_preference_vector(V)
+        raw = []
+        for p in itertools.permutations(V):
+            a = self.cm.values_preference_vector(list(p))
+            n = sum(x * y for x, y in zip(a, base))
+            da = math.sqrt(sum(x * x for x in a)); db = math.sqrt(sum(x * x for x in base))
+            raw.append(n / (da * db))
+        self.assertAlmostEqual(min(raw), self.cm.VALUES_COS_FLOOR, places=3)
+
+    # --- C: two incomparable scales shared one threshold --------------------
+    def test_groups_are_ranked_separately_and_labelled(self):
+        resp = {i: 1 for i in range(1, 22)}
+        for i in (5, 6, 7, 8):
+            resp[i] = 4
+        r = self.cm.score_person_grouped(resp, self.key, self.occ)
+        self.assertTrue(all(p["data_quality"] == "numeric-interests"
+                            for p in r["numeric_interests"]))
+        self.assertTrue(all(p["data_quality"] == "code-only" for p in r["code_only"]))
+        self.assertIn("不可互相", r["_note"])
+
+    def test_every_occupation_lands_in_exactly_one_group(self):
+        resp = {i: 1 for i in range(1, 22)}
+        for i in (5, 6, 7, 8):
+            resp[i] = 4
+        r = self.cm.score_person_grouped(resp, self.key, self.occ)
+        names = ([p["occupation"] for p in r["numeric_interests"]]
+                 + [p["occupation"] for p in r["code_only"]])
+        self.assertEqual(len(names), len(set(names)), "an occupation appears twice")
+        self.assertEqual(len(names), len(self.occ))
+
+
 class TestDeps(unittest.TestCase):
     def test_doctor_reports_without_installing(self):
         rep = jrun("companion.py", "doctor")

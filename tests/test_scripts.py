@@ -33,7 +33,7 @@ def run(script, *args, home=None, expect_ok=True):
     env["LIFE_COMPANION_NO_AUTOINSTALL"] = "1"   # tests never reach for the network
     r = subprocess.run([sys.executable, os.path.join(SCRIPTS, script), *args],
                        capture_output=True, text=True, env=env)
-    if expect_ok and r.returncode not in (0, 1, 2):
+    if expect_ok and r.returncode not in (0, 1, 2, 3):   # 3 = refused (consent gate)
         raise AssertionError(f"{script} {args} exited {r.returncode}\n{r.stderr}")
     return r.returncode, r.stdout, r.stderr
 
@@ -153,6 +153,7 @@ class TestContinuityThreads(HomeCase):
 
     def test_keyless_list_items_still_accrete(self):
         # relationship incidents have no stable key — history must keep growing
+        run("companion.py", "consent", "--set", "relationships=yes", home=self.home)
         run("companion.py", "cache", "--module", "relationships", "--merge-json",
             json.dumps({"people": {"A": {"patterns": ["pursue-withdraw"]}}}), home=self.home)
         run("companion.py", "cache", "--module", "relationships", "--merge-json",
@@ -167,6 +168,7 @@ class TestContinuityThreads(HomeCase):
     def test_two_incidents_on_the_same_day_both_survive(self):
         # `date` must NOT act as an identity key — a couple can have two rows on one
         # day, and upserting on the date would silently delete one of them.
+        run("companion.py", "consent", "--set", "relationships=yes", home=self.home)
         for gist in ("早上因为洗碗吵了", "晚上又聊崩了"):
             run("companion.py", "cache", "--module", "relationships", "--merge-json",
                 json.dumps({"people": {"A": {"incidents": [
@@ -796,6 +798,120 @@ class TestNoRealUserDataInRepo(unittest.TestCase):
                     if m.group(0) not in self.SYNTHETIC:
                         offenders.append((os.path.relpath(path, SKILL), m.group(0)))
         self.assertEqual(offenders, [], f"real-looking birth dates in the repo: {offenders}")
+
+
+class TestConsentIsEnforcedNotJustAsked(HomeCase):
+    """safety.md §4, SKILL.md and both READMEs promise birth / relationships / mood are
+    EACH consent-gated and that without consent data "isn't collected, inferred or
+    stored". Only `mood` was ever enforced in code — the two most sensitive categories,
+    one of them about a third party who never consented, were written on request."""
+
+    def test_birth_is_refused_without_consent(self):
+        r = jrun("companion.py", "set-profile", "--merge-json",
+                 json.dumps({"birth": {"date": "1990-01-01"}}), home=self.home)
+        self.assertFalse(r["ok"])
+        self.assertIn("consent.birth", r["error"])
+        with open(os.path.join(self.home, "profile.yaml"), encoding="utf-8") as f:
+            self.assertNotIn("1990-01-01", f.read())
+
+    def test_third_party_relationship_notes_refused_without_consent(self):
+        r = jrun("companion.py", "cache", "--module", "relationships", "--merge-json",
+                 json.dumps({"people": {"X": {"tendencies": ["anxious"]}}}), home=self.home)
+        self.assertFalse(r["ok"])
+        self.assertFalse(os.path.exists(
+            os.path.join(self.home, "state", "modules", "relationships.yaml")))
+
+    def test_granting_consent_unblocks_it(self):
+        run("companion.py", "consent", "--set", "birth=yes", "relationships=yes",
+            home=self.home)
+        self.assertTrue(jrun("companion.py", "set-profile", "--merge-json",
+                             json.dumps({"birth": {"date": "1990-01-01"}}),
+                             home=self.home)["ok"])
+        self.assertTrue(jrun("companion.py", "cache", "--module", "relationships",
+                             "--merge-json", json.dumps({"people": {"X": {}}}),
+                             home=self.home)["ok"])
+
+    def test_ungated_writes_are_unaffected(self):
+        self.assertTrue(jrun("companion.py", "set-profile", "--merge-json",
+                             json.dumps({"identity": {"name": "A"}}), home=self.home)["ok"])
+        self.assertTrue(jrun("companion.py", "cache", "--module", "destiny",
+                             "--merge-json", json.dumps({"chart": {"p": "x"}}),
+                             home=self.home)["ok"])
+
+    def test_null_only_birth_patch_is_not_treated_as_collection(self):
+        # clearing fields must not require consent you are in the middle of revoking
+        self.assertTrue(jrun("companion.py", "set-profile", "--merge-json",
+                             json.dumps({"birth": {"date": None}}), home=self.home)["ok"])
+
+
+class TestHelplineGateHoles(unittest.TestCase):
+    """An invented crisis helpline is the worst output this skill can produce. The
+    gate had three holes at once: a 6-digit floor (so `61120` was not even a phone
+    number), a trailing '.' killing the match, and crisis-no-resource matching by
+    SUBSTRING — so `61120` "contained" 112 and counted as a real resource."""
+
+    def check(self, t, m="crisis"):
+        import selfcheck
+        return selfcheck.check(t, m)
+
+    def test_short_invented_shortcode_is_caught(self):
+        r = self.check("撑不住可以打 61120。")
+        codes = {x["code"] for x in r["findings"]}
+        self.assertIn("unknown-helpline", codes)
+        self.assertIn("crisis-no-resource", codes)
+
+    def test_invented_numbers_in_several_shapes(self):
+        for t in ["可以打心理热线 400-800-1234 试试。", "Call the crisis line at 555-0142.",
+                  "热线是 021.6279.8888", "Try 116 124 for support.", "打 4001619996 也行"]:
+            self.assertFalse(self.check(t)["ok"], t)
+
+    def test_real_helplines_still_pass(self):
+        for t in ["全国心理援助热线 12356 是 24 小时的", "113 Zelfmoordpreventie — 0800-0113",
+                  "988 (call or text)", "Samaritans 116 123",
+                  "不确定你在哪的话，findahelpline.com 可以按国家找"]:
+            r = self.check(t)
+            self.assertFalse(any(x["code"] == "unknown-helpline" for x in r["findings"]), t)
+
+    def test_ordinary_numbers_are_not_helplines(self):
+        for t in ["起盘设定：1993-04-12 07:35", "时效: as of 2026-08", "orb 0.3°，容差很紧",
+                  "第 21 题，188 个职业，其中 68 个带数值分"]:
+            r = self.check(t, "destiny")
+            self.assertFalse(any(x["code"] == "unknown-helpline" for x in r["findings"]), t)
+
+
+class TestGateHolesFoundByAudit(unittest.TestCase):
+    def check(self, t, m):
+        import selfcheck
+        return selfcheck.check(t, m)
+
+    def test_hedged_fatalism_paraphrases(self):
+        for t in ["这段关系很可能走到尽头。", "这一步免不了要破财。", "多半是守不住的。",
+                  "这事凶多吉少。"]:
+            self.assertFalse(self.check(t, "destiny")["ok"], t)
+
+    def test_english_kin_forecasts(self):
+        for t in ["Your mother's health is likely to get worse.",
+                  "Your father will probably face illness this year."]:
+            r = self.check(t, "destiny")
+            self.assertTrue(any(x["code"] == "kin-prediction" for x in r["findings"]), t)
+
+    def test_clinical_labels_without_the_copula(self):
+        for t in ["她妥妥的回避型人格。", "典型的自恋，别理她。"]:
+            self.assertFalse(self.check(t, "relationships")["ok"], t)
+
+    def test_english_synastry_verdict_survives_the_disclaimer(self):
+        # the refusal-aware matcher had no ASCII '.' in its sentence boundaries, so the
+        # mandated English disclaimer disabled the whole 合婚 gate for English replies
+        for t in ["You two aren't compatible. These branch relations are a cultural lens, "
+                  "not a prediction.",
+                  "You're not right for each other.",
+                  "The charts say you shouldn't be together."]:
+            self.assertFalse(self.check(t, "synastry")["ok"], t)
+
+    def test_correct_english_refusal_still_passes(self):
+        t = ("These branch relations are a cultural lens, not a prediction. Whether you "
+             "two do well together isn't something the chart knows. It's made of what you do.")
+        self.assertTrue(self.check(t, "synastry")["ok"], self.check(t, "synastry")["findings"])
 
 
 class TestVoice(unittest.TestCase):

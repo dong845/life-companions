@@ -152,7 +152,7 @@ facts. The reading gets to say what they feel about it. It does not get a vote.
 
 7. **Run the gate before you send.** Draft the reply, then check it:
    ```bash
-   python3 $D/scripts/selfcheck.py --module <destiny|daily|career|relationships|crisis> --file draft.md
+   python3 $D/scripts/selfcheck.py --module <destiny|daily|career|relationships|synastry|crisis|journal|none> --file draft.md
    ```
    The same command also prints a **`voice`** section: the wording tells that make a
    reply read like a form a machine filled in — 「不是X，是Y」 as a reflex, stock phrases
@@ -204,8 +204,11 @@ facts. The reading gets to say what they feel about it. It does not get a vote.
 - **Stay in lane.** No medical, financial, or legal advice — reflect, then point
   to a qualified professional.
 - **Consent & privacy.** Birth data, relationship details, and mood history are
-  each consent-gated (`companion.py consent`). No consent → don't collect, infer,
-  or store. Everything is local; "forget" commands really delete.
+  each consent-gated (`companion.py consent`), and this is **enforced in code**, not
+  merely asked of you: `set-profile` refuses a birth block and `cache --module
+  relationships` refuses third-party notes until consent is recorded (exit 3 with a
+  refusal payload). Ask plainly first — don't work around a refusal. Everything is
+  local; "forget" commands really delete.
 - **Crisis overrides all.** See the block immediately below — it is inline because
   a fabricated helpline number is the worst thing this skill could ever produce, and
   a rule that lives only in a file you were told to read "when in doubt" is a rule
@@ -312,7 +315,10 @@ python3 $D/scripts/career_match.py --selftest   # career-fit engine; --demo to r
 python3 $D/scripts/relationship_patterns.py --format text   # base-rate over logged relationship incidents
 python3 $D/scripts/synastry.py --a 1993-04-12 --b 1995-08-30 --format text   # 合婚: traditional relations, NO verdict
 python3 $D/scripts/ziwei.py --date 1993-04-12 --time 07:35 --gender m --format text   # 紫微斗数 命盘 (needs the hour)
-python3 $D/scripts/selfcheck.py --module destiny --file draft.md   # ★ honesty gate on your draft
+python3 $D/scripts/selfcheck.py --module destiny --file draft.md   # ★ honesty + voice gate
+#   --module must match the lens: synastry has its OWN no-verdict blockers that fire
+#   under NO other module, and crisis has its own. Passing the wrong one silently
+#   skips the checks that matter most for that reply.
 python3 $D/scripts/form_server.py --form onboarding &   # HTML onboarding form; stops itself on submit
 python3 $D/scripts/form_server.py --form career &       # 21-item interest check + values ranking
 ```

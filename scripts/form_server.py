@@ -319,10 +319,15 @@ def write_onboarding(home, form):
             "gender": g("gender") or None,
             "place": g("birth_place").strip() or None,
         }
-    _run_companion(home, "set-profile", "--merge-json", json.dumps(patch, ensure_ascii=False))
+    # Record consent BEFORE writing anything it gates. The form collects the birth
+    # checkbox and the birth fields in one submission, and this used to write the
+    # profile first — which is backwards semantically (consent precedes collection) and
+    # now fails outright, since companion.py enforces the gate instead of trusting the
+    # caller. Order matters; keep consent first.
     _run_companion(home, "consent", "--set",
                    f"birth={'yes' if birth_ok else 'no'}",
                    f"mood={'yes' if g('mood_consent') else 'no'}")
+    _run_companion(home, "set-profile", "--merge-json", json.dumps(patch, ensure_ascii=False))
 
     # Anything the form could NOT fill goes in `todo`, so the model finishes the job
     # instead of discovering the hole later (or never). A form that silently returns a

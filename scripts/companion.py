@@ -161,6 +161,47 @@ def _deep_merge(base, patch):
 
 
 # ---------------------------------------------------------------------------
+# Consent enforcement. safety.md §4, SKILL.md and both READMEs all promise that
+# birth, relationships and mood are EACH consent-gated and that without consent the
+# data "isn't collected, inferred or stored". Only `mood` was ever enforced in code;
+# the other two — the most sensitive categories, one of them about a third party who
+# never consented to anything — were written on request with no check at all. A
+# promise that lives only in prose depends on the model remembering to ask.
+CONSENT_GATED = {
+    "birth": ("生辰 birth data",
+              "profile.birth — 八字/星盘/紫微 all need it, so ask first: "
+              "`consent --set birth=yes`"),
+    "relationships": ("关系记录 relationship notes",
+                      "state/modules/relationships.yaml — this is data about ANOTHER "
+                      "person who never consented; ask before storing any of it: "
+                      "`consent --set relationships=yes`"),
+    "mood": ("情绪 mood", "journal mood values: `consent --set mood=yes`"),
+}
+
+
+def _granted(home, category):
+    return _load_yaml(_paths(home)["consent"]).get(category, {}).get("granted") is True
+
+
+def _refuse_ungated(home, category):
+    """Return a refusal payload when `category` is not consented, else None.
+
+    Fails CLOSED: at init `granted` is None (never asked), which is NOT consent.
+    """
+    if _granted(home, category):
+        return None
+    label, where = CONSENT_GATED[category]
+    return {
+        "ok": False,
+        "error": f"consent.{category} not granted — refusing to store {label}",
+        "refused_because": ("safety.md §4: no consent → don't collect, infer, or store "
+                            "that category. This is enforced here, not just asked of you."),
+        "where": where,
+        "_next": (f"Ask the person plainly first, then `consent --set {category}=yes`. "
+                  f"If they decline, skip the module gracefully — don't work around this."),
+    }
+
+
 def cmd_init(args):
     home = home_dir(args.home)
     p = _paths(home)
@@ -380,6 +421,12 @@ def cmd_set_profile(args):
     p = _paths(home)
     prof = _load_yaml(p["profile"])
     patch = json.loads(args.merge_json)
+    if isinstance(patch.get("birth"), dict) and any(
+            v is not None for v in patch["birth"].values()):
+        refusal = _refuse_ungated(home, "birth")
+        if refusal:
+            print(json.dumps(refusal, ensure_ascii=False, indent=2))
+            raise SystemExit(3)
     _deep_merge(prof, patch)
     prof["updated"] = _today()
     _save_yaml(p["profile"], prof)
@@ -539,6 +586,11 @@ def cmd_cache(args):
     path = os.path.join(p["modules"], f"{args.module}.yaml")
     data = _load_yaml(path, {})
     if args.merge_json:
+        if args.module in CONSENT_GATED:
+            refusal = _refuse_ungated(home, args.module)
+            if refusal:
+                print(json.dumps(refusal, ensure_ascii=False, indent=2))
+                raise SystemExit(3)
         _deep_merge(data, json.loads(args.merge_json))
         data["updated"] = _today()
         _save_yaml(path, data)

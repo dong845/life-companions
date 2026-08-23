@@ -46,19 +46,52 @@ KNOWN_HELPLINES = {
     "1-800-799-7233", "18007997233",          # US DV hotline
     "112", "911", "999", "120", "110",        # emergency services
 }
-PHONE_RE = re.compile(r"(?<![\d.\-])(?:\+?\d[\d\- ]{4,16}\d)(?![\d.\-])")
+# A trailing '.' used to kill the match ("call 555-0142." escaped entirely), so only
+# digits and hyphens may follow.
+PHONE_RE = re.compile(r"(?<![\d.\-])(?:\+?\d[\d\-. ]{2,16}\d)(?![\d\-])")
+# Crisis lines are frequently SHORT codes (988, 112, 12356, 116 123). A minimum digit
+# count therefore cannot be the test — "61120" is five digits and sailed through with
+# zero findings. Any number near helpline language is a candidate no matter how short.
+HELPLINE_CONTEXT = re.compile(
+    r"热线|专线|求助|拨打|打给?|致电|援助|干预中心|危机|自杀|心理|"
+    r"helpline|hotline|crisis line|lifeline|call|text|dial|reach", re.I)
+NUM_TOKEN_RE = re.compile(r"\+?\d[\d\-. ]*\d|\d")
 # Dates look exactly like phone numbers to that regex — and a fact-check block is FULL
 # of them ("时效: as of 2026-08"). Excluding them matters more than it sounds: a gate
 # that cries wolf on its own required artifact is a gate nobody runs twice.
 DATEY_RE = re.compile(r"^\d{4}[-/]\d{1,2}(?:[-/]\d{1,2})?$|^\d{1,2}[-/]\d{1,2}(?:[-/]\d{2,4})?$")
 
 
-def _looks_like_a_phone(raw):
+def _digits(s):
+    return re.sub(r"\D", "", s or "")
+
+
+_KNOWN_DIGITS = {_digits(h) for h in KNOWN_HELPLINES}
+
+
+def _looks_like_a_phone(raw, near_helpline=False):
     norm = raw.replace(" ", "")
     if DATEY_RE.match(norm):
         return False
-    digits = re.sub(r"\D", "", norm)
-    return len(digits) >= 6 or norm in KNOWN_HELPLINES
+    d = _digits(norm)
+    if not d:
+        return False
+    # In helpline language, even a 3-digit shortcode is a claim about where to call.
+    return len(d) >= (3 if near_helpline else 6) or norm in KNOWN_HELPLINES
+
+
+def _names_a_real_resource(text):
+    """Does this reply actually point at a REAL crisis resource?
+
+    Substring matching was the bug: "61120" contains "112", so an invented shortcode
+    satisfied this check. Compare whole number tokens instead.
+    """
+    if "findahelpline" in text.lower():
+        return True
+    for m in NUM_TOKEN_RE.finditer(text):
+        if _digits(m.group(0)) in _KNOWN_DIGITS:
+            return True
+    return False
 
 # ---------------------------------------------------------------------------
 # Patterns. Each: (code, regex, severity, why, fix)
@@ -78,11 +111,18 @@ FATALISM = [
     (r"你(会|将)(在|于)?\s*\d{4}\s*年[^。\n]{0,12}(结婚|离婚|发财|破产|生病|升职)", "指定年份的事件预言"),
     # --- hedged prediction: the REAL failure shape. A probability attached to a life
     # event is still a prophecy; hedging it doesn't make it a reflection. ---
-    (r"(大概率|十有八九|八九不离十|多半(会|要)|难免(会|要)|恐怕(会|要)|怕是(要|会)|"
-     r"基本(上)?(会|要|没)|铁定|跑不了)[^。！？\n]{0,14}(" + _BAD_EVENT + ")",
+    (r"(大概率|很可能|极可能|十有八九|八九不离十|多半(会|要|是)|难免(会|要)|免不了|"
+     r"恐怕(会|要)|怕是(要|会)|保不齐|说不好会|基本(上)?(会|要|没)|铁定|跑不了|"
+     r"逃不过|躲不掉)[^。！？\n]{0,16}(" + _BAD_EVENT + ")",
      "带概率的坏事预言（对冲过的宿命，仍是预言）"),
     (r"(" + _BAD_EVENT + r")[^。！？\n]{0,8}(是大概率|概率很大|几乎是必然|在所难免)",
      "带概率的坏事预言"),
+    # metaphors for the same forecast, which dodge the literal-event list
+    (r"(走到(尽头|头了)|到头了|守不住|保不住|撑不到|熬不过|没(有)?好结果|"
+     r"凶多吉少|难善终|收不了场)", "换成比喻的坏结局预言"),
+    (r"\b(a|the)\s+(strong|good|high|real)\s+chance\s+(that\s+)?(you|he|she|they|it)\b",
+     "English hedged prediction"),
+    (r"\b(won'?t|will not)\s+(last|work out|survive|make it)\b", "English hedged prediction"),
     # --- veiled prediction: "容易X" is fine for a TENDENCY, not for an EVENT ---
     (r"(容易|难免|小心|当心|注意)[^。！？\n]{0,8}(出事|生病|得病|破财|破产|失业|被裁|"
      r"离婚|分手|车祸|意外|受伤|坐牢|官司)", "把事件说成「容易发生」——事件预言，不是倾向"),
@@ -104,15 +144,28 @@ FATALISM = [
 KIN = r"(父亲|母亲|爸爸|妈妈|爱人|配偶|老公|老婆|伴侣|对象|孩子|子女|儿子|女儿|兄弟|姐妹|父母)"
 KIN_FORECAST = r"(会|将|容易|大概率|多半|难免|恐怕|偏|比较|不太|注定)"
 KIN_SUBJECT = r"(身体|健康|寿|命|婚姻|事业|财|运|" + _BAD_EVENT + r")"
-SENT_SPLIT = re.compile(r"[。！？!?\n；;]")
+SENT_SPLIT = re.compile(r"[。！？!?\n；;]|(?<=[a-z0-9\)])\.\s")
+
+
+KIN_EN = (r"\b(father|mother|mom|dad|parents?|spouse|husband|wife|partner|"
+          r"child(ren)?|son|daughter|brother|sister|sibling)\b")
+KIN_FORECAST_EN = (r"\b(will|going to|likely to|tends? to|may|might|is set to|"
+                   r"could end up)\b")
+KIN_SUBJECT_EN = (r"\b(health|illness|sick|ill|die|death|pass away|lifespan|marriage|"
+                  r"divorce|money|fortune|career|accident|weak(er)?|worse)\b")
 
 
 def _kin_claims(text):
+    """A chart says nothing checkable about a THIRD party's body or fate — in either
+    language. This used to be Chinese-only, so 'Your mother's health is likely to get
+    worse' passed clean."""
     out = []
     for sent in SENT_SPLIT.split(text):
-        if not re.search(KIN, sent):
-            continue
-        if re.search(KIN_FORECAST, sent) and re.search(KIN_SUBJECT, sent):
+        zh = (re.search(KIN, sent) and re.search(KIN_FORECAST, sent)
+              and re.search(KIN_SUBJECT, sent))
+        en = (re.search(KIN_EN, sent, re.I) and re.search(KIN_FORECAST_EN, sent, re.I)
+              and re.search(KIN_SUBJECT_EN, sent, re.I))
+        if zh or en:
             out.append(sent.strip()[:120])
     return out
 
@@ -157,6 +210,11 @@ DIAGNOSIS = [
     (r"你(有|患有|得了)[^。\n]{0,6}(抑郁症|焦虑症|双相|躁郁|人格障碍|PTSD|ADHD)", "疾病诊断"),
     (r"\byou\s+(have|are suffering from)\s+(depression|bipolar|anxiety disorder|PTSD|ADHD)\b", "diagnosis"),
     (r"(她|他|对方)是(焦虑型|回避型|自恋型|边缘型)(人格)?(?!倾向)", "把倾向说成固定人格标签"),
+    # dodges the copula: 「典型的回避型人格」「妥妥的自恋」「标准 PUA」
+    (r"(典型的?|妥妥的?|标准的?|百分百|活脱脱)\s*(焦虑型|回避型|自恋型?|边缘型|反社会|"
+     r"PUA|煤气灯|双相|躁郁|人格障碍)", "绕开系动词的人格/临床标签"),
+    (r"(她|他|对方)[^。！？\n]{0,8}(有|存在)[^。！？\n]{0,6}(人格障碍|心理问题|精神问题)",
+     "对第三方下临床判断"),
 ]
 
 FAKE_PRECISION = [
@@ -268,8 +326,11 @@ SYNASTRY_VERDICT = [
      r"(别|不要|不能|分|散|离)", "拿属相/八字当劝分或劝阻的理由"),
     (r"(合婚|配对|契合)[^。！？\n]{0,6}(得分|分数|评分|\d+\s*分|\d+\s*%)", "合婚打分"),
     (r"(克夫|克妻|旺夫|旺妻|命硬)", "克/旺 之类的断语"),
-    (r"\b(you two are|you'?re) (a )?(perfect match|meant to be|incompatible)\b",
+    (r"\b(you two|you)\s*(?:are|'re|'?re|aren'?t|are not)\s+(not\s+)?(a\s+)?"
+     r"(perfect match|great match|meant to be|incompatible|compatible|right for each other)\b",
      "compatibility verdict"),
+    (r"\b(the|your)\s+charts?\s+(say|show|tell)s?\s+[^.\n]{0,20}"
+     r"(shouldn'?t|should not|won'?t work|aren'?t)\b", "chart-as-verdict"),
 ]
 # safety.md §1 rule 7, made checkable. The rigour of the computation (real 节气
 # boundaries, a real ephemeris) makes a NON-predictive reading feel like grounds for a
@@ -460,6 +521,10 @@ def check_voice(text, locale=None):
         "see whether the sentence lost anything.")
 
     if cjk:
+        # A gloss is a definition, not prose rhythm: 正官(规矩、责任、嵌进体系) is the
+        # skill's REQUIRED jargon format, and counting it as a rule-of-three punished
+        # the thing the honesty rules demand. Strip bracketed spans before the scan.
+        prose = re.sub(r"[（(【\[][^）)】\]]{0,80}[）)】\]]", " ", text)
         nom = NOMINAL_ZH.findall(text)
         add("nominalised-verbs", len(nom), len(nom) / unit, 2,
             f"{len(nom)} 个「进行/做出/给予+名词」({'、'.join(sorted(set(nom))[:4])})",
@@ -470,7 +535,7 @@ def check_voice(text, locale=None):
             "Not every paragraph needs a landing. Let some just stop.")
 
     if cjk:
-        triads = len(TRIAD_ZH.findall(text))
+        triads = len(TRIAD_ZH.findall(prose))
         add("rule-of-three", triads, triads / unit, 3, f"{triads} 个 A、B、C 三连并列",
             "Everything arriving in threes is a rhythm nobody actually speaks in. Make "
             "one of them two items, or one long one.")
@@ -519,8 +584,9 @@ def _find(text, patterns, code, severity, fix, respect_refusal=False):
         for m in re.finditer(pat, text, re.I):
             if respect_refusal:
                 # the sentence this match sits in
-                start = max(text.rfind(c, 0, m.start()) for c in "。！？!?\n；;") + 1
-                end = min([e for e in (text.find(c, m.end()) for c in "。！？!?\n；;")
+                bounds = "。！？!?\n；;."
+                start = max(text.rfind(c, 0, m.start()) for c in bounds) + 1
+                end = min([e for e in (text.find(c, m.end()) for c in bounds)
                            if e != -1] or [len(text)])
                 if REFUSAL_CUE.search(text[start:end]):
                     continue
@@ -596,12 +662,13 @@ def check(text, module="none", locale=None):
     # reading the skill produces — the fastest way to make its most important check
     # get ignored.
     phone_scan = re.sub(r"\d{4}-\d{1,2}-\d{1,2}(?:[ T]\d{1,2}(?::\d{2}){0,2})?", " ", text)
-    for m in PHONE_RE.finditer(phone_scan):
+    for m in NUM_TOKEN_RE.finditer(phone_scan):
         raw = m.group(0).strip()
         norm = raw.replace(" ", "")
-        if norm in KNOWN_HELPLINES or raw in KNOWN_HELPLINES:
+        if _digits(norm) in _KNOWN_DIGITS:
             continue
-        if not _looks_like_a_phone(raw):
+        window = phone_scan[max(0, m.start() - 40):m.end() + 20]
+        if not _looks_like_a_phone(raw, near_helpline=bool(HELPLINE_CONTEXT.search(window))):
             continue
         if norm.replace("-", "") in {h.replace("-", "") for h in KNOWN_HELPLINES}:
             continue
@@ -690,9 +757,7 @@ def check(text, module="none", locale=None):
                           "evidence": m.group(0),
                           "fix": "safety.md §2: drop the fortune/advice persona entirely. "
                                  "Plain human warmth + a real, localized resource."})
-        if not any(h in text.replace(" ", "") for h in
-                   [n.replace("-", "").replace(" ", "") for n in KNOWN_HELPLINES]) \
-           and "findahelpline" not in text.lower():
+        if not _names_a_real_resource(text):
             f.append({"code": "crisis-no-resource", "severity": "blocker",
                       "why": "crisis reply surfaces no real help resource",
                       "evidence": "",

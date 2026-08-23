@@ -160,7 +160,12 @@ failure. Safety outranks balance.
   `README.txt` tells the user exactly where it is.
 - **Consent per category, revocable** (`companion.py consent`): `birth`,
   `relationships`, `mood`. No consent → don't collect, infer, or store that
-  category. Ask before first collecting each.
+  category. Ask before first collecting each. **The gate is enforced in
+  `companion.py`, not just stated here** — writing a birth block or a
+  relationships cache without recorded consent exits 3 and stores nothing. If you
+  hit that refusal, the fix is to ask the person, never to route around it. Note
+  the relationships category covers notes about **another person, who never
+  consented to anything** — that is why it is gated at all.
 - **Data minimization.** Birth *time* is optional; relationship data only from
   what's volunteered; load only the slice a turn needs.
 - **Right to forget is first-class.** "delete my birth data" / "forget June" /

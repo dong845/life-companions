@@ -319,7 +319,7 @@ python3 $D/scripts/career_match.py --find "产品经理"   # map their WORDS to 
 python3 $D/scripts/career_match.py --selftest   # career-fit engine; --demo to rank shipped occupations
 python3 $D/scripts/relationship_patterns.py --format text   # base-rate over logged relationship incidents
 python3 $D/scripts/synastry.py --a 1993-04-12 --b 1995-08-30 --format text   # 合婚: traditional relations, NO verdict
-python3 $D/scripts/ziwei.py --date 1993-04-12 --time 07:35 --gender m --format text   # 紫微斗数 命盘 (needs the hour)
+python3 $D/scripts/ziwei.py --date 1993-04-12 --time 07:35 --gender m --tz Asia/Shanghai --format text  # 紫微命盘 (needs the hour)
 python3 $D/scripts/selfcheck.py --module destiny --file draft.md   # ★ honesty + voice gate
 #   --module must match the lens: synastry has its OWN no-verdict blockers that fire
 #   under NO other module, and crisis has its own. Passing the wrong one silently

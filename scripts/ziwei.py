@@ -34,6 +34,7 @@ Usage:
   python3 ziwei.py --selftest
 """
 import argparse
+import datetime
 import json
 import os
 import sys
@@ -158,22 +159,73 @@ def _ziwei_position(ju_num, lunar_day):
     return pos
 
 
-def compute(date, time=None, gender="m", on_year=None):
+def parse_tz(v):
+    """IANA zone name or plain UTC-offset hours."""
+    v = str(v).strip()
+    try:
+        return float(v)
+    except ValueError:
+        pass
+    from zoneinfo import ZoneInfo
+    ZoneInfo(v)
+    return v
+
+
+def compute(date, time=None, gender="m", on_year=None, tz=None):
     y, m, d = (int(x) for x in date.split("-"))
+    # An impossible date is not a birthday. lunar-python silently rolls Feb 30 into
+    # March, so the engine used to hand back a complete, confident 命盘 for a date
+    # that cannot exist — the exact opposite of "fail loudly".
+    try:
+        datetime.date(y, m, d)
+    except ValueError as e:
+        raise ValueError(f"{date} is not a real date ({e})")
     hour_known = time is not None
     hh, mm = (int(x) for x in time.split(":")) if hour_known else (12, 0)
 
-    solar = Solar.fromYmdHms(y, m, d, hh, mm, 0)
+    ambiguities = []
+
+    # The lunar date and the hour branch both come from a wall clock that
+    # lunar-python resolves against China Standard Time. Same trap bazi.py had: a
+    # birth outside UTC+8 can land on the wrong lunar DAY, which moves 紫微 itself.
+    dt = datetime.datetime(y, m, d, hh, mm)
+    if tz is not None:
+        if isinstance(tz, (int, float)):
+            off = float(tz)
+        else:
+            from zoneinfo import ZoneInfo
+            off = dt.replace(tzinfo=ZoneInfo(tz)).utcoffset().total_seconds() / 3600.0
+        if abs(off - 8.0) > 1e-9:
+            dt = dt + datetime.timedelta(hours=8.0 - off)
+            ambiguities.append(
+                f"出生地时区 {tz}：农历日与时辰按绝对时刻折算到东八区（等效北京时间 "
+                f"{dt.strftime('%Y-%m-%d %H:%M')}）后起盘。海外出生的取法各家不同，"
+                f"这是本引擎的公开约定。")
+    else:
+        ambiguities.append(
+            "未提供出生地时区（--tz）：本引擎的农历与时辰以东八区为准，此盘按"
+            "「出生钟点即北京时间」计算。出生地不在东八区时，农历日可能差一天，"
+            "紫微与命宫会随之移位——请补上 --tz。")
+
+    solar = Solar.fromYmdHms(dt.year, dt.month, dt.day, dt.hour, dt.minute, 0)
     lunar = solar.getLunar()
     lunar_month = abs(lunar.getMonth())          # leap months count as their own number
     is_leap = lunar.getMonth() < 0
     lunar_day = lunar.getDay()
-    year_gz = lunar.getYearInGanZhiExact()
+    # 紫微斗数 is a LUNAR-calendar system: 命宫 and 紫微 are placed from the lunar month
+    # and lunar day, so the year stem must come from the lunar year (which turns at
+    # 春节) — not from 立春, which is BaZi's boundary. Mixing the two put a 癸酉 lunar
+    # chart under a 壬申 year stem, and the year stem drives 四化/禄存/天魁天钺/火铃.
+    year_gz = lunar.getYearInGanZhi()
+    year_gz_lichun = lunar.getYearInGanZhiExact()
+    if year_gz != year_gz_lichun:
+        ambiguities.append(
+            f"生于春节之后、立春之前（或反之）：农历年干支为 {year_gz}，立春年干支为 "
+            f"{year_gz_lichun}。本盘按斗数惯例取农历年（{year_gz}）；少数流派用立春年，"
+            f"换一种取法四化与禄存等星位会不同。")
     year_gan, year_zhi = year_gz[0], year_gz[1]
     hour_zhi = lunar.getTimeZhi()
     hour_i = IDX[hour_zhi]
-
-    ambiguities = []
     if not hour_known:
         ambiguities.append("出生时刻未知：紫微斗数的命宫、身宫、文昌文曲、火铃、地空地劫"
                            "全部依赖时辰——这张盘算不了。补上出生时间才有意义。")
@@ -324,7 +376,7 @@ def compute(date, time=None, gender="m", on_year=None):
 
     if on_year and hour_known:
         # 流年命宫 = the palace on that year's 地支
-        ly = Solar.fromYmdHms(on_year, 6, 1, 12, 0, 0).getLunar().getYearInGanZhiExact()
+        ly = Solar.fromYmdHms(on_year, 6, 1, 12, 0, 0).getLunar().getYearInGanZhi()
         li = IDX[ly[1]]
         out["computed"]["annual"] = {
             "year": on_year, "year_ganzhi": ly,
@@ -473,6 +525,10 @@ def main():
     ap.add_argument("--time", default=None, help="birth time HH:MM (required for a chart)")
     ap.add_argument("--gender", default="m", choices=["m", "f", "male", "female"])
     ap.add_argument("--on-year", type=int, default=None, help="also compute 流年命宫")
+    ap.add_argument("--tz", type=parse_tz, default=None,
+                    help="BIRTHPLACE timezone (IANA name or offset hours). Without it the "
+                         "birth clock is assumed to be Beijing time and the lunar day — "
+                         "which places 紫微 — can be off by one.")
     ap.add_argument("--format", choices=["json", "text"], default="json")
     ap.add_argument("--selftest", action="store_true")
     args = ap.parse_args()
@@ -481,7 +537,7 @@ def main():
     if not args.date:
         ap.error("--date is required (or use --selftest)")
     try:
-        r = compute(args.date, args.time, args.gender, args.on_year)
+        r = compute(args.date, args.time, args.gender, args.on_year, tz=args.tz)
     except (ValueError, KeyError) as e:
         print(json.dumps({"ok": False, "error": f"bad input: {e}"}, ensure_ascii=False))
         raise SystemExit(2)

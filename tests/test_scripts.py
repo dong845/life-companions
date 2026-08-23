@@ -337,7 +337,7 @@ class TestBaZiTimezone(unittest.TestCase):
 
     def test_china_births_are_completely_unchanged(self):
         for args in (["--date", "1993-04-12", "--time", "07:35"],
-                     ["--date", "1993-04-12", "--time", "16:00"],
+                     ["--date", "1995-08-30", "--time", "16:00"],
                      ["--date", "1993-02-04", "--time", "00:30"],
                      ["--date", "1993-04-12"]):
             def gz(extra):
@@ -871,21 +871,32 @@ class TestNoRealUserDataInRepo(unittest.TestCase):
 
     # the only birth data allowed in the tree, matching profile-schema.md's example
     SYNTHETIC = {"1993-04-12", "1995-08-30", "1930-06-15", "1993-07-15", "2020-05",
-                 "1993-02-04", "1993-02-03", "2030-01-01", "1900-01-15"}
+                 "1993-02-04", "1993-02-03", "2030-01-01", "1900-01-15",
+                 "1990-01-01"}   # round placeholder used by the consent tests
 
     def test_no_birth_dates_outside_the_synthetic_set(self):
         import re
         offenders = []
         for dp, dn, fn in os.walk(SKILL):
-            dn[:] = [d for d in dn if d not in (".git", "__pycache__", "tests")]
+            # tests/ is scanned too: it is exactly where a real birth date keeps
+            # getting reached for as the handy example, and excluding it made this
+            # gate blind to its own most likely failure.
+            dn[:] = [d for d in dn if d not in (".git", "__pycache__")]
             for f in fn:
                 if not f.endswith((".py", ".md", ".json")):
                     continue
                 path = os.path.join(dp, f)
                 text = open(path, encoding="utf-8", errors="ignore").read()
                 for m in re.finditer(r"\b(19[0-9]{2}|200[0-9])-\d{2}-\d{2}\b", text):
-                    if m.group(0) not in self.SYNTHETIC:
-                        offenders.append((os.path.relpath(path, SKILL), m.group(0)))
+                    tok = m.group(0)
+                    if tok in self.SYNTHETIC:
+                        continue
+                    try:                       # an impossible date is nobody's birthday
+                        _y, _m, _d = (int(x) for x in tok.split("-"))
+                        __import__("datetime").date(_y, _m, _d)
+                    except ValueError:
+                        continue
+                    offenders.append((os.path.relpath(path, SKILL), tok))
         self.assertEqual(offenders, [], f"real-looking birth dates in the repo: {offenders}")
 
 

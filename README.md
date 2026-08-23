@@ -2,10 +2,15 @@
 
 *[中文文档 →](README.zh-CN.md)*
 
-A private AI companion that gets to know **one person** over time. It remembers you:
-a profile and a journal that live **only on your machine**. It reads your life through
-four lenses: **destiny charts · daily fortune · career fit · relationship
-reflection**.
+> **The computation is fact. The reading is a mirror. You're the one who decides.**
+
+A private companion that gets to know **one person** over time. Not the character-chat
+kind — it computes real systems (八字, a real ephemeris, O\*NET occupation data) and
+then hands you the result as a mirror, refusing to tell you what will happen.
+
+It remembers you: a profile and a journal that live **only on your machine**, threads
+it follows up on across sessions, and four lenses to read your life through —
+**destiny charts · daily fortune · career fit · relationship reflection**.
 
 One rule runs through all of it: **compute honestly, interpret humbly.** Real systems
 (BaZi 八字, a real ephemeris, O\*NET occupation data) are computed faithfully, and what
@@ -122,7 +127,7 @@ missing; when that fails (no network, PEP 668 externally-managed Python) they pr
 exact install command and what degrades without it instead of a traceback.
 `python3 scripts/companion.py doctor` reports everything at once.
 
-**Tests** — `python3 tests/test_scripts.py` (96 cases, ~15s, no network).
+**Tests** — `python3 tests/test_scripts.py` (140 cases, ~20s, no network).
 Also `python3 scripts/career_match.py --selftest` and `python3 scripts/ziwei.py --selftest`.
 
 **Check a draft before sending it** —

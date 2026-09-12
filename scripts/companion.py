@@ -366,6 +366,15 @@ _TZ_ALIASES = {
     "温哥华": "America/Vancouver", "多伦多": "America/Toronto", "加拿大": "America/Toronto",
     "悉尼": "Australia/Sydney", "墨尔本": "Australia/Melbourne", "澳大利亚": "Australia/Sydney",
     "奥克兰": "Pacific/Auckland", "新西兰": "Pacific/Auckland",
+    # places with their own crisis lines (SKILL.md): a country that doesn't resolve can't
+    # be offered its line. Taiwan's own names too (雪梨, 纽西兰 once folded).
+    "吉隆坡": "Asia/Kuala_Lumpur", "马来西亚": "Asia/Kuala_Lumpur", "槟城": "Asia/Kuala_Lumpur",
+    "高雄": "Asia/Taipei", "台中": "Asia/Taipei", "台南": "Asia/Taipei",
+    "大阪": "Asia/Tokyo", "釜山": "Asia/Seoul",
+    "澳洲": "Australia/Sydney", "雪梨": "Australia/Sydney", "布里斯班": "Australia/Brisbane",
+    "珀斯": "Australia/Perth", "阿德莱德": "Australia/Adelaide",
+    "惠灵顿": "Pacific/Auckland", "基督城": "Pacific/Auckland", "纽西兰": "Pacific/Auckland",
+    "汉堡": "Europe/Berlin", "法兰克福": "Europe/Berlin", "里昂": "Europe/Paris",
     # English country/region words that aren't zone names
     "usa": "America/New_York", "united states": "America/New_York", "uk": "Europe/London",
     "england": "Europe/London", "britain": "Europe/London", "ireland": "Europe/Dublin",
@@ -375,6 +384,8 @@ _TZ_ALIASES = {
     "japan": "Asia/Tokyo", "korea": "Asia/Seoul", "china": "Asia/Shanghai",
     "india": "Asia/Kolkata", "australia": "Australia/Sydney", "canada": "America/Toronto",
     "brazil": "America/Sao_Paulo", "mexico": "America/Mexico_City",
+    "taiwan": "Asia/Taipei", "malaysia": "Asia/Kuala_Lumpur", "penang": "Asia/Kuala_Lumpur",
+    "new zealand": "Pacific/Auckland",
 }
 
 
@@ -398,6 +409,10 @@ def resolve_timezone(text, limit=5):
         return []
     raw = text.strip()
     low = _fold(raw)
+    # The aliases are written in simplified characters, and 港澳台 write 臺北 and 澳門:
+    # fold before matching, or the people this matters most for get "no match".
+    from _zh import to_simplified
+    simp = to_simplified(raw)
     hits, seen = [], set()
 
     def add(zone, score, why):
@@ -407,7 +422,7 @@ def resolve_timezone(text, limit=5):
 
     # 1. explicit alias (Chinese city names, country words)
     for k, v in _TZ_ALIASES.items():
-        if k in low or k in raw:
+        if k in low or k in raw or k in simp:
             add(v, 1.0, f"alias:{k}")
 
     # 2. the text already IS a zone name

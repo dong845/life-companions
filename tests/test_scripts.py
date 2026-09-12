@@ -883,6 +883,25 @@ class TestTimezoneResolution(unittest.TestCase):
         self.assertEqual(out["candidates"], [])
         self.assertIn("Do NOT guess", out["_note"])
 
+    def test_traditional_script_resolves_like_simplified(self):
+        # 港澳台 users write 臺北 and 澳門. The aliases are simplified, so both used to come
+        # back "no match", and the person was told to name a bigger city.
+        for q, expect in [("臺北", "Asia/Taipei"), ("臺灣", "Asia/Taipei"), ("澳門", "Asia/Macau"),
+                          ("東京", "Asia/Tokyo"), ("首爾", "Asia/Seoul"),
+                          ("墨爾本", "Australia/Melbourne"), ("紐西蘭", "Pacific/Auckland")]:
+            self.assertIn(expect, self.resolve(q), q)
+
+    def test_places_with_their_own_crisis_lines_resolve(self):
+        # a crisis line is picked by country, and a place that doesn't resolve gets none
+        for q, expect in [("吉隆坡", "Asia/Kuala_Lumpur"), ("马来西亚", "Asia/Kuala_Lumpur"),
+                          ("Malaysia", "Asia/Kuala_Lumpur"), ("槟城", "Asia/Kuala_Lumpur"),
+                          ("Taiwan", "Asia/Taipei"), ("高雄", "Asia/Taipei"),
+                          ("New Zealand", "Pacific/Auckland"), ("惠灵顿", "Pacific/Auckland"),
+                          ("澳洲", "Australia/Sydney"), ("雪梨", "Australia/Sydney"),
+                          ("布里斯班", "Australia/Brisbane"), ("珀斯", "Australia/Perth"),
+                          ("大阪", "Asia/Tokyo"), ("釜山", "Asia/Seoul")]:
+            self.assertIn(expect, self.resolve(q), q)
+
 
 class TestOnboardingForm(unittest.TestCase):
     """The form is the PREFERRED onboarding path, so what it writes is the profile

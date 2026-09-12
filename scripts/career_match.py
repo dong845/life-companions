@@ -451,6 +451,14 @@ _ALIASES = {
     "教授": "professor teacher postsecondary", "咨询顾问": "management analyst",
     "ux": "web digital interface", "ui": "web digital interface",
     "product manager": "management analyst project management",
+    # everyday words for occupations that ARE in the data and still found nothing
+    "小学": "elementary school", "中学": "secondary school",
+    "土木工程": "civil engineer", "电气工程": "electrical engineer",
+    "电工": "electricians", "木工": "carpenters", "客服": "customer service",
+    "司机": "driver", "卡车": "truck", "货车": "truck", "牙医": "dentists",
+    "消防员": "firefighters", "兽医": "veterinarians", "物理治疗": "physical therapist",
+    "前端": "web developer", "房地产经纪": "real estate sales agent",
+    "房产中介": "real estate sales agent", "hr": "human resources",
 }
 # Aliases that point at NEIGHBOURS because O*NET has no such occupation. A hit that leans
 # on one of these can open a conversation; it is never a strong mapping.
@@ -469,10 +477,12 @@ def _words(s):
 
 def _alias_in(key, text):
     # A Latin key must stand alone: as a bare substring, 「ui」 matched inside "equipment".
-    # Chinese has no spaces between words, so a Chinese key matches anywhere.
+    # Chinese has no spaces between words, so a Chinese key matches anywhere, except that
+    # the 工 of 电工 and 木工 also sits inside 工程: 「机电工程师」 is not an electrician.
     if key.isascii():
         return re.search(r"(?<![a-z0-9])" + re.escape(key) + r"(?![a-z0-9])", text) is not None
-    return key in text
+    return any(not (key.endswith("工") and text[m.end():m.end() + 1] == "程")
+               for m in re.finditer(re.escape(key), text))
 
 
 def _query_words(query):
@@ -486,6 +496,22 @@ def _query_words(query):
             text += " " + en
             approximate = approximate or key in _APPROXIMATE
     return set(_words(text)), approximate
+
+
+# O*NET titles say who is left OUT after "Except" ("Elementary School Teachers, Except
+# Special Education"), and a trailing ", General" only says the job is not a specialty.
+# Counting those words inverted the answer: "special education teacher" came back as the
+# one occupation that excludes it, labelled strong. They also made the real title too long
+# to win, so 「建筑师」 ranked Database Architects above Architects, Except Landscape and Naval.
+_EXCEPT = re.compile(r",?\s+except\s+(.*)$", re.I)
+_GENERAL = re.compile(r",\s*general$", re.I)
+
+
+def _title_words(title):
+    """(words that name the occupation, words of the group it leaves out)"""
+    m = _EXCEPT.search(title)
+    named = set(_words(_GENERAL.sub("", title[:m.start()] if m else title)))
+    return named, (set(_words(m.group(1))) - named if m else set())
 
 
 def _same_word(a, b):
@@ -502,15 +528,17 @@ def find_occupations(query, occupations, limit=8):
 
     `match` is "strong" for an exact title, or when the query covers two or more words
     of the title (or all of a one-word title) without leaning on an approximate alias.
-    Anything less is "weak": 「建筑师」 and Database Architects share "architect", and one
-    shared word is not a mapping. Strong hits sort first."""
+    Anything less is "weak": 「司机」 shares only "drivers" with Heavy and Tractor-Trailer
+    Truck Drivers, and one shared word is not a mapping. So is a title asked for the group
+    its "Except" clause leaves out, and one whose matched words another strong title covers
+    and more. Strong hits sort first."""
     q, approximate = _query_words(query)
     if not q:
         return []
-    out = []
+    out, exact_titles = [], set()
     for o in occupations:
         title = o.get("title", "")
-        t = set(_words(title))
+        t, excluded = _title_words(title)
         if not t:
             continue
         # count TITLE words covered, so "data" and "database" can't both count as one
@@ -519,7 +547,11 @@ def find_occupations(query, occupations, limit=8):
         if not covered:
             continue
         exact = query.strip().lower() == title.lower()
-        strong = exact or (not approximate and (len(covered) >= 2 or covered == t))
+        asks_for_excluded = any(_same_word(a, b) for a in q for b in excluded)
+        strong = exact or (not approximate and not asks_for_excluded
+                           and (len(covered) >= 2 or covered == t))
+        if exact:
+            exact_titles.add(title)
         out.append({
             "soc_code": o.get("soc_code"), "title": title,
             "job_zone": o.get("job_zone"),
@@ -529,6 +561,14 @@ def find_occupations(query, occupations, limit=8):
             "match": "strong" if strong else "weak",
             "matched_on": sorted(covered),
         })
+    # A title whose matched words are a strict subset of another strong title's explains
+    # less of what they said: for 「中学老师」, Elementary School Teachers shares only "school
+    # teachers", which Secondary School Teachers covers along with "secondary".
+    strong_sets = [set(r["matched_on"]) for r in out if r["match"] == "strong"]
+    for r in out:
+        if (r["match"] == "strong" and r["title"] not in exact_titles
+                and any(set(r["matched_on"]) < s for s in strong_sets)):
+            r["match"] = "weak"
     out.sort(key=lambda r: (r["match"] != "strong", -r["score"], r["title"]))
     # Strong titles that match on exactly the same words are equally good: 「大学教授」 covers
     # "Teachers, Postsecondary" in every subject, and alphabetical order is not a choice.

@@ -97,9 +97,11 @@ at all. Never substitute the nearest-looking title.
 Every candidate carries `match`. **`strong`** means the title is the job they named (an
 exact title, or two or more of its words). **`weak`** means one shared word, or an alias
 that points at neighbours because O\*NET has no such occupation (产品经理, 运营, 研究员):
-「建筑师」 shares only "architect" with Database Architects. Present a weak candidate as a
-neighbour, never as their job, and when every candidate is weak say that none of them is
-the job they named.
+「司机」 shares only "drivers" with Heavy and Tractor-Trailer Truck Drivers. A title never
+matches on the group its "Except" clause leaves out, and a title whose matched words another
+strong title covers and more is weak too (for 「中学老师」, Elementary School Teachers).
+Present a weak candidate as a neighbour, never as their job, and when every candidate is
+weak say that none of them is the job they named.
 
 Then, two separate outputs, never merged into one number:
 1. **Fit** — congruence band of the person against the aspiration occupation

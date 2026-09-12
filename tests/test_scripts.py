@@ -2013,8 +2013,9 @@ class TestFindMatchesWhatPeopleSay(unittest.TestCase):
         self.assertEqual(self.find("平面设计师")[0]["title"], "Graphic Designers")
 
     def test_a_single_shared_word_is_labelled_weak(self):
-        # neither has a counterpart in the shipped list; one shared word is not a mapping
-        for q in ("建筑师", "老师"):
+        # 「司机」 could be any driver and the data holds only truck drivers; 「老师」 could be
+        # any of eight teacher titles. One shared word is not a mapping.
+        for q in ("司机", "老师"):
             hits = self.find(q)
             self.assertTrue(hits, q)
             self.assertTrue(all(h["match"] == "weak" for h in hits), (q, hits[:2]))
@@ -2033,7 +2034,7 @@ class TestFindMatchesWhatPeopleSay(unittest.TestCase):
             self.assertEqual(hit["match"], "strong", (q, hit))
 
     def test_cli_says_when_every_candidate_is_weak(self):
-        code, out, _ = run("career_match.py", "--find", "建筑师", "--json")
+        code, out, _ = run("career_match.py", "--find", "司机", "--json")
         self.assertEqual(code, 0, out)
         self.assertIn("weak", json.loads(out)["_note"])
 
@@ -2066,6 +2067,73 @@ class TestFindMarksEquallyGoodTitles(unittest.TestCase):
         code, out, _ = run("career_match.py", "--find", "大学教授", "--json")
         self.assertEqual(code, 0, out)
         self.assertIn("equally", json.loads(out)["_note"])
+
+
+class TestFindReadsWhatATitleExcludes(unittest.TestCase):
+    """O*NET titles say what an occupation is NOT after "Except", and `--find` matched those
+    words too: "special education teacher" came back as Elementary School Teachers, Except
+    Special Education, labelled strong. The clause also made the right title too long to
+    win, so 「建筑师」 ranked Database Architects above Architects. And everyday words for
+    occupations that ARE in the data (电工, 客服, 土木工程师, 小学老师) found nothing."""
+
+    @classmethod
+    def setUpClass(cls):
+        import career_match as cm
+        cls.cm = cm
+        cls.occs, _ = cm.load_occupations()
+
+    def find(self, q):
+        return self.cm.find_occupations(q, self.occs)
+
+    def test_asking_for_the_excluded_group_is_never_strong(self):
+        for q, excluded in [
+                ("special education teacher", "Elementary School Teachers, Except Special Education"),
+                ("landscape architect", "Architects, Except Landscape and Naval"),
+                ("naval architect", "Architects, Except Landscape and Naval"),
+                ("advertising sales", "Sales Representatives of Services, Except Advertising, "
+                                      "Insurance, Financial Services, and Travel"),
+                ("hydrologist", "Geoscientists, Except Hydrologists and Geographers")]:
+            hit = next((h for h in self.find(q) if h["title"] == excluded), None)
+            if hit is not None:
+                self.assertEqual(hit["match"], "weak", (q, hit))
+                self.assertFalse({"special", "education", "landscape", "naval", "advertising",
+                                  "hydrologists"} & set(hit["matched_on"]), (q, hit))
+
+    def test_a_title_is_found_despite_its_except_clause(self):
+        hits = self.find("建筑师")
+        self.assertEqual((hits[0]["title"], hits[0]["match"]),
+                         ("Architects, Except Landscape and Naval", "strong"), hits[:3])
+
+    def test_everyday_words_reach_occupations_in_the_data(self):
+        for q, title in [("小学老师", "Elementary School Teachers, Except Special Education"),
+                         ("中学老师", "Secondary School Teachers, Except Special and Career/Technical Education"),
+                         ("电工", "Electricians"), ("客服", "Customer Service Representatives"),
+                         ("土木工程师", "Civil Engineers"), ("电气工程师", "Electrical Engineers"),
+                         ("卡车司机", "Heavy and Tractor-Trailer Truck Drivers"), ("木工", "Carpenters"),
+                         ("牙医", "Dentists, General"), ("消防员", "Firefighters"),
+                         ("兽医", "Veterinarians"), ("物理治疗师", "Physical Therapists"),
+                         ("前端工程师", "Web Developers"), ("房地产经纪", "Real Estate Sales Agents")]:
+            hits = self.find(q)
+            self.assertTrue(hits, q)
+            self.assertEqual((hits[0]["title"], hits[0]["match"]), (title, "strong"), (q, hits[:3]))
+
+    def test_a_title_that_explains_less_is_not_strong(self):
+        # 「中学老师」 covers secondary + school + teachers; Elementary School Teachers shares
+        # only school + teachers, so it is the neighbour, not a second answer
+        for q, other in [("中学老师", "Elementary School Teachers, Except Special Education"),
+                         ("小学老师", "Secondary School Teachers, Except Special and Career/Technical Education"),
+                         ("房地产经纪", "Securities, Commodities, and Financial Services Sales Agents")]:
+            hit = next((h for h in self.find(q) if h["title"] == other), None)
+            self.assertTrue(hit is None or hit["match"] == "weak", (q, hit))
+
+    def test_an_engineer_is_not_a_tradesperson(self):
+        # the 工 of 电工 and 木工 also sits inside 工程
+        for q, trade in [("机电工程师", "Electricians"), ("土木工程师", "Carpenters")]:
+            self.assertNotIn(trade, [h["title"] for h in self.find(q)], q)
+
+    def test_occupations_not_in_the_data_still_come_back_empty(self):
+        for q in ("幼师", "快递员", "公务员", "理发师"):
+            self.assertEqual(self.find(q), [], q)
 
 
 class TestCareerValidity(unittest.TestCase):

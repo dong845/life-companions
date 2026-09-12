@@ -466,8 +466,12 @@ def check_voice(text, locale=None):
     unit = max(unit, 0.25)
     out = []
 
-    def add(code, count, per_unit, limit, why, fix):
-        if per_unit > limit:
+    def add(code, count, per_unit, limit, why, fix, min_count=2):
+        # These families are all about HABIT, and each one's own advice says a single
+        # instance is fine ("A good move once."). Short text is clamped to a quarter
+        # unit, so one occurrence in a 300-character paragraph scored 4.0 and tripped a
+        # limit of 2 — the check contradicting its own guidance. Never fire on one.
+        if count >= min_count and per_unit > limit:
             out.append({"code": code, "severity": "voice", "count": count,
                         "per_unit": round(per_unit, 1), "limit": limit,
                         "why": why, "fix": fix})

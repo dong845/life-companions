@@ -1265,6 +1265,19 @@ class TestVoice(unittest.TestCase):
             r = self.voice(t)
             self.assertGreaterEqual(len(r["findings"]), 2, f"{label}: {r['findings']}")
 
+    def test_a_single_instance_never_fires(self):
+        # short text is clamped to a quarter unit, so ONE occurrence in a short
+        # paragraph scored 4.0 against a limit of 2 — the check contradicting its own
+        # advice, which says a single use is a good rhetorical move
+        one = "它更擅长的是拒绝。不是提醒，是拦住。"
+        self.assertTrue(self.voice(one)["ok_voice"], self.voice(one)["findings"])
+
+    def test_the_habit_is_still_caught(self):
+        many = ("不是提醒，是拦住。不是猜，是算。不是预测，是镜子。"
+                "不是替你决定，是给你看。这不是结论，是起点。")
+        codes = [f["code"] for f in self.voice(many)["findings"]]
+        self.assertIn("not-x-but-y", codes)
+
     def test_emoji_alone_never_triggers_anything(self):
         # explicit product decision: emoji are fine, wording is the issue
         plain = "今天有点拧巴。收尾比开新战线划算。就这样。"

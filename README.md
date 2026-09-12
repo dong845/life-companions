@@ -172,7 +172,8 @@ references/           onboarding · profile-schema · journaling · continuity �
   modules/            destiny · daily-fortune · career · relationships
 scripts/              companion.py · bazi.py · astro.py · ziwei.py · synastry.py
                       career_match.py · relationship_patterns.py · safety_scan.py
-                      trends.py · form_server.py · selfcheck.py · _deps.py · _zh.py
+                      trends.py · form_server.py · selfcheck.py
+                      _deps.py · _zh.py · _branches.py
 data/content/         bazi-interpretation · bazi-life-arc · relationships
                       (the editable interpretation layer — real frameworks)
 data/career/          occupations.json (188 real O*NET, CC BY 4.0) · assessment_items.json

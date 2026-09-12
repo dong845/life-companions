@@ -1919,6 +1919,36 @@ class TestFindMatchesWhatPeopleSay(unittest.TestCase):
         self.assertIn("weak", json.loads(out)["_note"])
 
 
+class TestFindMarksEquallyGoodTitles(unittest.TestCase):
+    """「大学教授」 covers "Teachers, Postsecondary" in every subject equally well. Alphabetical
+    order handed Engineering the top slot, labelled strong, as if it had been chosen."""
+
+    @classmethod
+    def setUpClass(cls):
+        import career_match as cm
+        cls.cm = cm
+        cls.occs, _ = cm.load_occupations()
+
+    def find(self, q):
+        return self.cm.find_occupations(q, self.occs)
+
+    def test_equally_good_titles_are_marked_as_a_tie(self):
+        strong = [h for h in self.find("大学教授") if h["match"] == "strong"]
+        self.assertGreater(len(strong), 1, strong)
+        self.assertTrue(all(h.get("tied") for h in strong), strong)
+
+    def test_a_clear_winner_is_not_a_tie(self):
+        self.assertFalse(self.find("平面设计师")[0].get("tied"))
+
+    def test_each_hit_says_which_title_words_matched(self):
+        self.assertEqual(self.find("平面设计师")[0]["matched_on"], ["designers", "graphic"])
+
+    def test_cli_says_to_ask_which_when_the_top_is_tied(self):
+        code, out, _ = run("career_match.py", "--find", "大学教授", "--json")
+        self.assertEqual(code, 0, out)
+        self.assertIn("equally", json.loads(out)["_note"])
+
+
 class TestCareerValidity(unittest.TestCase):
     """Three measurement defects, all of which produced a confident-looking result
     that carried no information — the failure mode this skill exists to avoid."""

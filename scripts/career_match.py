@@ -527,8 +527,16 @@ def find_occupations(query, occupations, limit=8):
             "has_work_values": o.get("work_values") is not None,
             "score": 1.0 if exact else round(len(covered) / len(q | t), 3),
             "match": "strong" if strong else "weak",
+            "matched_on": sorted(covered),
         })
     out.sort(key=lambda r: (r["match"] != "strong", -r["score"], r["title"]))
+    # Strong titles that match on exactly the same words are equally good: 「大学教授」 covers
+    # "Teachers, Postsecondary" in every subject, and alphabetical order is not a choice.
+    strong_hits = [r for r in out if r["match"] == "strong"]
+    tied = [r for r in strong_hits if strong_hits and r["matched_on"] == strong_hits[0]["matched_on"]]
+    if len(tied) > 1:
+        for r in tied:
+            r["tied"] = True
     return out[:limit]
 
 
@@ -794,6 +802,11 @@ if __name__ == "__main__":
                     "that none of these is the job they named, ask which is closest in "
                     "day-to-day WORK, or give an interests-only read. Don't score a weak "
                     "match as if it were their job.")
+        elif hits[0].get("tied"):
+            note = ("Several titles fit equally well (" + "、".join(
+                        h["title"] for h in hits if h.get("tied")) + "): they match on the "
+                    "same words, so their order means nothing. Ask which one is their actual "
+                    "work before scoring any of them.")
         else:
             note = ("Confirm the mapping with the person before scoring — «你说的X，我按 O*NET "
                     "的「<title>」来算，行吗?» Scoring them against a title they didn't mean is "

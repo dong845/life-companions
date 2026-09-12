@@ -711,7 +711,30 @@ def cmd_brief(args):
     }
     if consent_notes:
         out["_consent_notes"] = consent_notes
-    if any(r.get("crisis_flag") for r in rows[-args.recent:]) if args.recent else False:
+    crisis_recent = any(r.get("crisis_flag") for r in rows[-args.recent:]) if args.recent else False
+    # Two weeks of mostly low moods is not a crisis, and it deserves more than a fortune card
+    # every morning (safety.md §2b). Only with mood consent, never over a crisis, and at
+    # most once a week.
+    if ok["mood"] and not crisis_recent:
+        low = trends_mod._sustained_low(rows)
+        try:
+            checked = datetime.date.fromisoformat(str(cont.get("wellbeing_checked") or "")[:10])
+            asked_recently = (datetime.date.today() - checked).days < 7
+        except ValueError:
+            asked_recently = False
+        if low["triggered"] and not asked_recently:
+            out["_wellbeing_check"] = {
+                "why": (f"{low['entries']} moods logged in the last {low['window_days']} days, "
+                        f"more than half of them {low['low_max']}/10 or lower"),
+                "_next": ("Care before any reading. Set the fortune voice aside unless they ask "
+                          "for it, ask plainly how they have been, and where it fits suggest "
+                          "talking it through with someone they trust or a professional. This "
+                          "is not a crisis script: crisis lines only with crisis signals "
+                          "(safety.md §2). Don't read the numbers back as a verdict. "
+                          "Afterwards: continuity --merge-json "
+                          "'{\"wellbeing_checked\": \"YYYY-MM-DD\"}'."),
+            }
+    if crisis_recent:
         out["_crisis_recent"] = ("A recent entry carries crisis_flag. Read "
                                  "references/safety.md §2 before replying; never reopen "
                                  "it as casual small talk or with a fortune framing.")

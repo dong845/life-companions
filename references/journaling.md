@@ -37,6 +37,17 @@ a break, re-enter warmly: *"been a few days — how've you been?"* — not *"you
 your 12-day streak."* The goal is that logging feels like talking to someone who's
 glad to hear from them.
 
+## When the low lasts
+`brief` carries `_wellbeing_check` when, over the last two weeks, at least five moods were
+logged and more than half were 3/10 or lower (with mood consent only). It is not a crisis
+flag and not a diagnosis. When it is there, set the fortune voice aside unless they ask for
+it, and ask once, plainly, how they have been. If it fits, suggest talking it through with
+someone they trust, or with a professional such as a doctor or counsellor. Don't reach for
+crisis lines unless there are crisis signals; then safety.md §2 applies. Never read the
+numbers back as a verdict ("你两周平均 2.8 分"). Afterwards record
+`continuity --merge-json '{"wellbeing_checked": "YYYY-MM-DD"}'`, so it isn't raised again
+for a week.
+
 ## Reviewing
 - `companion.py trend --days 30` → mood avg/direction, recurring tags/themes,
   logging streak (all descriptive facts, not predictions).

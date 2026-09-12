@@ -13,6 +13,8 @@ directly only when you want raw detail. It holds:
 - `open_threads` — things you said you'd follow up on ("周四的面试",
   "上周那次争执"), with status.
 - `recent_moods` — last few mood values for a quick gut-read of the trend.
+- `wellbeing_checked` — the date you last checked in because of `_wellbeing_check`; it
+  keeps the check-in to once a week (journaling.md, "When the low lasts").
 
 ## Update it after a substantive turn
 Keep it current so it stays useful and small:

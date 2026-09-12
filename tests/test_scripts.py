@@ -2442,6 +2442,58 @@ class TestDailyCardReadsTheDayAgainstTheChart(unittest.TestCase):
         self.assertIs(synastry._relations_between, _branches.relations_between)
 
 
+class TestSustainedLowMood(HomeCase):
+    """Crisis has a protocol and an ordinary day has a card; the long middle had nothing.
+    `trend` could say `declining` and no document used it, so two weeks of 3/10 still got a
+    fortune card every morning and nobody asked how they were doing."""
+
+    def setUp(self):
+        super().setUp()
+        run("companion.py", "consent", "--set", "mood=yes", home=self.home)
+
+    def _log(self, moods):
+        import datetime
+        today = datetime.date.today()
+        for i, m in enumerate(moods):
+            run("companion.py", "add-entry", "--date",
+                (today - datetime.timedelta(days=i)).isoformat(), "--text", "嗯",
+                "--mood", str(m), home=self.home)
+
+    def test_two_weeks_of_mostly_low_moods_asks_for_a_check_in(self):
+        self._log([2, 3, 3, 6, 2, 3])
+        self.assertIn("_wellbeing_check", jrun("companion.py", "brief", home=self.home))
+        self.assertTrue(jrun("companion.py", "trend", "--days", "30",
+                             home=self.home)["sustained_low"]["triggered"])
+
+    def test_four_entries_are_not_enough(self):
+        self._log([2, 2, 2, 2])
+        self.assertNotIn("_wellbeing_check", jrun("companion.py", "brief", home=self.home))
+
+    def test_exactly_half_low_is_not_more_than_half(self):
+        self._log([2, 3, 3, 7, 7, 7])
+        self.assertNotIn("_wellbeing_check", jrun("companion.py", "brief", home=self.home))
+
+    def test_it_asks_at_most_once_a_week(self):
+        import datetime
+        self._log([2, 3, 3, 6, 2, 3])
+        run("companion.py", "continuity", "--merge-json",
+            json.dumps({"wellbeing_checked": datetime.date.today().isoformat()}), home=self.home)
+        self.assertNotIn("_wellbeing_check", jrun("companion.py", "brief", home=self.home))
+
+    def test_without_mood_consent_nothing_is_inferred(self):
+        self._log([2, 3, 3, 6, 2, 3])
+        run("companion.py", "consent", "--set", "mood=no", home=self.home)
+        self.assertNotIn("_wellbeing_check", jrun("companion.py", "brief", home=self.home))
+
+    def test_the_note_is_care_not_a_crisis_script(self):
+        self._log([2, 3, 3, 6, 2, 3])
+        note = json.dumps(jrun("companion.py", "brief", home=self.home)["_wellbeing_check"],
+                          ensure_ascii=False)
+        self.assertNotRegex(note, r"\d{3,}", "no phone numbers outside a crisis")
+        for word in ("抑郁", "depress"):
+            self.assertNotIn(word, note)
+
+
 class TestDeps(unittest.TestCase):
     def test_doctor_reports_without_installing(self):
         rep = jrun("companion.py", "doctor")

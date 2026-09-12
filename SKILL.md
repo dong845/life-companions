@@ -92,7 +92,9 @@ coherent, safe, and non-repetitive.
    `references/safety.md` rules in mind. If the user's message — or a journal
    entry you're about to write — carries any crisis/abuse signal, **drop the
    fortune/advice persona immediately** and follow the crisis block below, then
-   read safety.md §2 in full. When in doubt, read it.
+   read safety.md §2 in full. When in doubt, read it. If `brief` carries
+   `_wellbeing_check` (two weeks of mostly low moods, not a crisis), lead with care rather
+   than a reading: safety.md §2b.
 
 3. **Onboard if needed.** If `brief` shows `initialized:false` or
    `onboarding_complete:false`, run `companion.py init` if needed. **Prefer the HTML

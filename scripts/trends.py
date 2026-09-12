@@ -55,6 +55,33 @@ def _streak(dates):
     return streak
 
 
+LOW_MOOD_MAX = 3          # on the 0–10 scale, 3 or lower counts as low
+LOW_WINDOW_DAYS = 14
+LOW_MIN_ENTRIES = 5
+
+
+def _sustained_low(rows, today=None):
+    """Two weeks of mostly low moods: at least LOW_MIN_ENTRIES moods logged in the last
+    LOW_WINDOW_DAYS days, more than half of them LOW_MOOD_MAX or lower. A reason to ask how
+    someone is doing — not a diagnosis, and not a crisis flag."""
+    today = today or datetime.date.today()
+    start = today - datetime.timedelta(days=LOW_WINDOW_DAYS - 1)
+    moods = []
+    for r in rows:
+        if not isinstance(r.get("mood"), (int, float)) or not r.get("date"):
+            continue
+        try:
+            d = datetime.date.fromisoformat(str(r["date"])[:10])
+        except ValueError:
+            continue
+        if start <= d <= today:
+            moods.append(r["mood"])
+    low = sum(1 for m in moods if m <= LOW_MOOD_MAX)
+    return {"window_days": LOW_WINDOW_DAYS, "entries": len(moods), "low": low,
+            "low_max": LOW_MOOD_MAX,
+            "triggered": len(moods) >= LOW_MIN_ENTRIES and low * 2 > len(moods)}
+
+
 def aggregate(home=None, days=30):
     home = _home(home)
     index_path = os.path.join(home, "journal", "index.jsonl")
@@ -87,6 +114,7 @@ def aggregate(home=None, days=30):
     themes = Counter(t for r in recent for t in (r.get("themes") or []))
     people = (Counter(p for r in recent for p in (r.get("people") or []))
               if "relationships" not in withheld else Counter())
+    sustained = None if "mood" in withheld else _sustained_low(rows)
 
     # mood direction: compare first vs second half of the window
     direction = None
@@ -109,6 +137,7 @@ def aggregate(home=None, days=30):
         "top_tags": tags.most_common(6),
         "top_themes": themes.most_common(6),
         "recurring_people": [p for p, c in people.most_common(6) if c > 1],
+        "sustained_low": sustained,
         "withheld_without_consent": withheld,
         "_note": "Descriptive summary of what was logged. Not a prediction.",
     }

@@ -11,7 +11,9 @@ woven with your journal + continuity. Pairs with `references/journaling.md`.
 ## Flow
 1. **Safety + continuity first, always.** `companion.py brief` gives continuity +
    the last few entries in one call; add `trend --days 14` / `journal --since …` when
-   you want the fuller picture. A heavy entry → care, not fortune (safety.md).
+   you want the fuller picture. A heavy entry → care, not fortune (safety.md). If `brief`
+   carries `_wellbeing_check` — two weeks of mostly low moods — don't open with a card at
+   all: journaling.md, "When the low lasts".
 2. **Compute the day from real systems** (never hand-compute):
    ```bash
    python3 $D/scripts/bazi.py  --date <birth.date> [--time <birth.time>] --gender <m|f> \

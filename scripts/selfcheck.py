@@ -33,7 +33,8 @@ import sys
 # The canonical crisis resources. Any other phone-number-shaped string in a reply is
 # assumed invented until proven otherwise — a hallucinated helpline is the single
 # worst failure this skill can produce, and it is invisible to every other check.
-# Keep in sync with references/safety.md §2 and the SKILL.md crisis block.
+# The SKILL.md crisis table and references/safety.md §2 carry the same list, and
+# TestCrisisLinesForMoreRegions fails when a doc names a number that is not here.
 # ---------------------------------------------------------------------------
 KNOWN_HELPLINES = {
     "0800-0113", "08000113", "113",          # NL 113 Zelfmoordpreventie
@@ -45,6 +46,22 @@ KNOWN_HELPLINES = {
     "0800-2000", "08002000",                  # NL Veilig Thuis
     "1-800-799-7233", "18007997233",          # US DV hotline
     "112", "911", "999", "120", "110",        # emergency services
+    # Each read on its operator's or government's own page, 2026-09-13 (safety.md §2)
+    "18111", "2389 2222", "2382 0000", "2896 0000",          # Hong Kong
+    "18281", "18288", "2522 0434",                          # Hong Kong, abuse
+    "2852 5222", "2852 5777", "28261126", "28233030",       # Macau (28233030: abuse)
+    "1925", "1995",                                         # Taiwan (113 保護專線 above)
+    "1771", "+65-6669-1771", "1767", "9151 1767",           # Singapore
+    "1800 777 0000", "995",                                 # Singapore, abuse / ambulance
+    "+603-7627 2929", "15555", "15999", "019 26 15999",     # Malaysia
+    "13 11 14", "0477 13 11 14", "1300 659 467",            # Australia
+    "1800 737 732", "0458 737 732", "000",                  # Australia, abuse / emergency
+    "1737", "0508 828 865", "0800 456 450", "0800 733 843", "111",   # New Zealand
+    "0120-061-338", "0120-279-338", "0120-279-226",         # Japan
+    "0120-279-889", "8008", "119",                          # Japan, abuse (#8008) / emergency
+    "109", "1577-0199", "1366",                             # South Korea
+    "0800 1110111", "0800 1110222", "116 016",              # Germany (116 123 above)
+    "3114", "3919", "114",                                  # France (15, 17, 18 are too short to flag)
 }
 # A trailing '.' used to kill the match ("call 555-0142." escaped entirely), so only
 # digits and hyphens may follow.
@@ -56,6 +73,10 @@ HELPLINE_CONTEXT = re.compile(
     r"热线|专线|求助|拨打|打给?|致电|援助|干预中心|危机|自杀|心理|"
     r"helpline|hotline|crisis line|lifeline|call|text|dial|reach", re.I)
 NUM_TOKEN_RE = re.compile(r"\+?\d[\d\-. ]*\d|\d")
+# A few services carry digits in their name. "Call 1800RESPECT on 1800 737 732" is one
+# real line, but its 1800 read as a four-digit number of its own. The names are blanked
+# out before the scan; the number beside them still has to be a known line.
+SERVICE_NAMES_WITH_DIGITS = re.compile(r"1800 ?RESPECT|0508 ?TAUTOKO|0800 ?REFUGE", re.I)
 # Dates look exactly like phone numbers to that regex — and a fact-check block is FULL
 # of them ("时效: as of 2026-08"). Excluding them matters more than it sounds: a gate
 # that cries wolf on its own required artifact is a gate nobody runs twice.
@@ -737,6 +758,7 @@ def _check(text, module="none", locale=None):
     # reading the skill produces — the fastest way to make its most important check
     # get ignored.
     phone_scan = re.sub(r"\d{4}-\d{1,2}-\d{1,2}(?:[ T]\d{1,2}(?::\d{2}){0,2})?", " ", text)
+    phone_scan = SERVICE_NAMES_WITH_DIGITS.sub(lambda m: " " * len(m.group(0)), phone_scan)
     for m in NUM_TOKEN_RE.finditer(phone_scan):
         raw = m.group(0).strip()
         norm = raw.replace(" ", "")

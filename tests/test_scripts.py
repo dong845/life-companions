@@ -1700,6 +1700,75 @@ class TestHelplineGateReadsRealNumbersInContext(unittest.TestCase):
                          self.codes("热线每年接到 12,345 通电话，你并不孤单。请拨打 12356。"))
 
 
+class TestCrisisLinesForMoreRegions(unittest.TestCase):
+    """Hong Kong, Macau, Taiwan, Singapore, Malaysia, Australia, New Zealand, Japan,
+    South Korea, Germany and France had no line of their own, and the gate blocks every
+    number outside its list, so a correct local line was forced out of the reply. Each
+    number here was read on its operator's or government's own page on 2026-09-13."""
+
+    LINES = ["情緒通 18111，24 小時", "香港撒瑪利亞防止自殺會 2389 2222", "生命熱線 2382 0000",
+             "撒瑪利亞會 2896 0000", "芷若園 18281", "向晴熱線 18288", "和諧之家 2522 0434",
+             "澳門明愛生命熱線 2852 5222", "外語熱線 2852 5777", "社工局 24 小時電話熱線 28261126",
+             "家庭暴力求助專線 28233030", "安心專線 1925", "生命線 1995", "113 保護專線",
+             "national mindline 1771", "WhatsApp +65-6669-1771", "Samaritans of Singapore 1767",
+             "CareText 9151 1767", "NAVH 1800 777 0000", "call 995",
+             "Befrienders KL +603-7627 2929", "Talian HEAL 15555", "Talian Kasih 15999",
+             "WhatsApp 019 26 15999", "Lifeline 13 11 14", "text 0477 13 11 14",
+             "Suicide Call Back Service 1300 659 467",
+             "Call 1800RESPECT on 1800 737 732, text 0458 737 732", "call 000 now",
+             "call or text 1737", "Suicide Crisis Helpline 0508 828 865",
+             "0508 TAUTOKO (0508 828 865)", "Are You OK 0800 456 450",
+             "Call the Crisisline on 0800 REFUGE or 0800 733 843", "call 111 now",
+             "#いのちSOS 0120-061-338", "よりそいホットライン 0120-279-338", "福島県から 0120-279-226",
+             "DV相談＋ 0120-279-889", "DV相談ナビ #8008", "韩国自杀预防热线 109",
+             "정신건강 상담전화 1577-0199", "여성긴급전화 1366", "call 119",
+             "TelefonSeelsorge 0800 1110111 / 0800 1110222", "Hilfetelefon 116 016",
+             "call 3114", "call 3919", "SMS 114"]
+
+    def codes(self, t, m="crisis"):
+        import selfcheck
+        return {x["code"] for x in selfcheck.check(t, m)["findings"]}
+
+    def test_each_verified_line_passes(self):
+        for t in self.LINES:
+            c = self.codes(t)
+            self.assertNotIn("unknown-helpline", c, t)
+            self.assertNotIn("crisis-no-resource", c, t)
+
+    def test_near_misses_are_still_blocked(self):
+        for t in ["情緒通熱線 18112", "Lifeline 13 11 15", "#いのちSOS 热线 0120-061-339",
+                  "韩国自杀预防热线 1099", "Hilfetelefon hotline 116 017",
+                  "Call 1800RESPECT on 1800 737 733"]:
+            self.assertIn("unknown-helpline", self.codes(t), t)
+
+    def test_a_year_or_a_grouped_figure_names_no_resource(self):
+        # 000 and 1995 are real lines now; the 000 of `1,000` and the 1995 of `1995 年`
+        # still point nobody anywhere
+        for t in ["你不是一个人，我们每年陪伴超过 1,000 人。", "我 1995 年也经历过很难的时候。"]:
+            self.assertIn("crisis-no-resource", self.codes(t), t)
+
+    def test_every_number_in_the_crisis_docs_is_a_known_line(self):
+        # The SKILL.md table, safety.md §2 and KNOWN_HELPLINES are three copies of one
+        # list. Every number of three or more digits in the two docs must be a known line,
+        # with or without helpline words around it, so a line added to one copy and not
+        # the others fails here.
+        import selfcheck
+        skill = open(os.path.join(SKILL, "SKILL.md"), encoding="utf-8").read()
+        safety = open(os.path.join(SKILL, "references", "safety.md"), encoding="utf-8").read()
+        for name, sec in [("SKILL.md", skill[skill.index("## Crisis"):skill.index("## Language")]),
+                          ("safety.md §2", safety[safety.index("## 2. Crisis handling"):safety.index("## 3.")])]:
+            sec = selfcheck.SERVICE_NAMES_WITH_DIGITS.sub(lambda m: " " * len(m.group(0)), sec)
+            unknown = [m.group(0) for m in selfcheck.NUM_TOKEN_RE.finditer(sec)
+                       if len(selfcheck._digits(m.group(0))) >= 3
+                       and not (selfcheck._is_known_line(m.group(0))
+                                or selfcheck._is_a_year(sec, m)
+                                or selfcheck._in_a_grouped_figure(sec, m))]
+            self.assertEqual(unknown, [], name)
+            for region in ("Hong Kong", "Macau", "Taiwan", "Singapore", "Malaysia", "Australia",
+                           "New Zealand", "Japan", "South Korea", "Germany", "France"):
+                self.assertIn(region, sec, f"{name} has no {region}")
+
+
 class TestGateHolesFoundByAudit(unittest.TestCase):
     def check(self, t, m):
         import selfcheck

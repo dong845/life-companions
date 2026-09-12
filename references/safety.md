@@ -110,25 +110,55 @@ real detector; it will miss things and over-flag things. Trust context.
    no both-sidesing. Mysticism in a crisis is harmful.
 2. **Respond as a warm, plain human.** Acknowledge, don't minimize, don't
    interrogate, don't diagnose, don't moralize.
-3. **Surface real, localized help.** Resolve region from `identity.timezone` /
-   `birth.place` — **but only when you actually know it.** If BOTH are unset (the
+3. **Surface real, localized help.** Resolve region from where they are now: what they
+   said (`identity.location`) first, then `identity.timezone`; never `birth.place`, which
+   is where they were born. **Only when you actually know it.** If neither is set (the
    normal first-contact state — a stranger with no profile), do **not** guess a
    country: either ask "where are you (roughly)? so I point you to the right line",
    or lead with **findahelpline.com** (works worldwide, enter your country). Never
    default to a specific country's number for someone whose location you don't know.
-   Once region is known:
+   A zone is not a country: in the tz database Asia/Kuala_Lumpur links to
+   Asia/Singapore and Europe/Oslo to Europe/Berlin, so when the two disagree, the place
+   they named wins. Once region is known:
    - **Netherlands:** **113 Zelfmoordpreventie — 0800-0113** (free, 24/7) or chat at 113.nl.
    - **US/Canada:** **988** (call/text).
    - **China (mainland):** **全国心理援助热线 12356**（2025 起全国统一，24/7）；也有 **北京心理危机研究与干预中心 010-82951332**、**希望24热线 400-161-9995**.
    - **UK/ROI:** **Samaritans 116 123**.
+   - **Hong Kong:** **情緒通 18111**（政府，24 小時，電話或 WhatsApp，支援 12 種語言）；香港撒瑪利亞防止自殺會 **2389 2222**（24 小時）；生命熱線 **2382 0000**（24 小時）；撒瑪利亞會 **2896 0000**（24 小時，中文及多種語言）.
+   - **Macau:** 澳門明愛生命熱線 **2852 5222**（中文，24 小時）；外語熱線 **2852 5777**（星期日至二 14:00–22:00，星期四至六 10:00–18:00，星期三及公眾假期不開放）；社工局 24 小時電話熱線 **28261126**.
+   - **Taiwan:** **安心專線 1925**（衛福部，24 小時，免費）；生命線 **1995**.
+   - **Singapore:** **national mindline 1771** (24/7; WhatsApp +65-6669-1771); Samaritans of Singapore **1767** (24h; CareText 9151 1767 on WhatsApp).
+   - **Malaysia:** **Befrienders KL +603-7627 2929** (24h, free). Talian HEAL **15555** (Ministry of Health) is real too, but its page gives no hours: at night, Befrienders first.
+   - **Australia:** **Lifeline 13 11 14** (24/7; text 0477 13 11 14); Suicide Call Back Service **1300 659 467** (24/7).
+   - **New Zealand:** **1737** (call or text, 24/7); Suicide Crisis Helpline **0508 828 865** (free, 7 days a week).
+   - **Japan:** **#いのちSOS 0120-061-338**（24 時間、無料）；よりそいホットライン **0120-279-338**（24 時間、無料、外国語のガイダンスあり；福島県からは **0120-279-226**）.
+   - **South Korea:** **자살예방상담전화 109** (24h); 정신건강 상담전화 **1577-0199** (24h).
+   - **Germany:** **TelefonSeelsorge 0800 1110111 / 0800 1110222 / 116 123** (kostenfrei, Tag und Nacht).
+   - **France:** **3114** (numéro national de prévention du suicide, gratuit, 24h/24 et 7j/7).
    - **Unknown / elsewhere:** **findahelpline.com** (enter country) + local emergency services.
-   - **Abuse / domestic violence:** localize a specialized service (NL: **Veilig
-     Thuis 0800-2000**; US: **1-800-799-7233**; else findahelpline.com). Do **not**
-     coach communication tactics *at* an abuser and do **not** say "just leave" —
-     both can escalate danger. Believe them, validate, route to specialists,
-     respect their autonomy and timing.
+   - **Abuse / domestic violence:** localize a specialized service, else
+     findahelpline.com. Do **not** coach communication tactics *at* an abuser and do
+     **not** say "just leave" — both can escalate danger. Believe them, validate, route
+     to specialists, respect their autonomy and timing.
+     - NL: **Veilig Thuis 0800-2000** · US: **1-800-799-7233**
+     - Hong Kong: 芷若園 **18281**；向晴熱線 **18288**；和諧之家（婦女）**2522 0434**（都是 24 小時）
+     - Macau: 社工局 24 小時家庭暴力求助專線 **28233030**
+     - Taiwan: **113** 保護專線（24 小時）
+     - Singapore: National Anti-Violence and Sexual Harassment Helpline (NAVH) **1800 777 0000** (24h)
+     - Malaysia: **Talian Kasih 15999** (24/7; WhatsApp 019 26 15999)
+     - Australia: **1800RESPECT 1800 737 732** (24/7; text 0458 737 732)
+     - New Zealand: Are You OK **0800 456 450** (24/7); Women's Refuge Crisisline **0800 733 843**
+     - Japan: **DV相談＋ 0120-279-889**（24 時間）；DV相談ナビ **#8008** connects to the nearest prefectural centre
+     - South Korea: 여성긴급전화 **1366** (24h)
+     - Germany: Hilfetelefon Gewalt gegen Frauen **116 016** (24/7)
+     - France: **3919** (gratuit, anonyme, 24h/24 et 7j/7)
 4. **If there's immediate danger to life,** urge contacting local emergency
-   services now (112 in NL/EU, 911 in US).
+   services now: 112 in NL/EU, 911 in US; Hong Kong 999; Macau 999 (110 and 112 also
+   connect to it); Taiwan 110 police, 119 fire department; Singapore 999 police, 995
+   ambulance; Malaysia 999; Australia 000; New Zealand 111; Japan 110 police, 119 fire
+   and ambulance; South Korea 112 or 119; Germany 112 fire and rescue, 110 police;
+   France 112, or 15 SAMU, 17 police, 18 pompiers, and SMS 114 for deaf and
+   hard-of-hearing people.
 5. **Logging, and the line this skill will not cross.**
    - **First contact, no profile yet: write NOTHING.** This used to say you could
      record "a minimal safety entry of their own words" and *not mention it*. That was

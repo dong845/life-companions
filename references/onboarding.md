@@ -47,7 +47,10 @@ Then collect:
   If they aren't sure whether it was a 闰月, ask; don't pick one.
 - **Birth time** (HH:MM) — offer "know it exactly / roughly / don't know". If
   unknown, that's fine: BaZi still works; Western rising/houses won't. Store
-  `time_known` explicitly so it's never re-asked.
+  `time_known` explicitly so it's never re-asked, and store the answer as
+  `birth.time_accuracy` (`exact` / `approx` / `unknown`). For "roughly", ask how rough as
+  options (±30 min / ±1 h / ±2 h) into `birth.time_window_min`: a rough 09:00 stored as an
+  exact one makes every pillar computed from it look certain.
 - **Birthplace** (city) — store the name in `birth.place`, **and immediately derive
   and store `birth.lat`, `birth.lon`, and `birth.tz_at_birth`** from it. A city's
   coordinates and its timezone are stable public reference facts (not fabrication, not

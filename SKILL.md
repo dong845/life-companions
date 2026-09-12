@@ -334,6 +334,8 @@ python3 $D/scripts/bazi.py --date 1993-04-12 --time 07:35 --gender m --tz Asia/S
 #   --true-solar-time (needs --lon) moves only the 时柱, plus the 日柱 when the correction
 #   crosses midnight; 年柱/月柱/起运 stay on the real birth instant. Every 十神, 五行 count,
 #   大运 and 生肖 in the payload is read off the pillars it displays.
+#   --time-window N (from birth.time_window_min) lists every pillar a rough birth time could
+#   give; ambiguities flag 时辰 and 節 boundaries and the True Solar Time 时柱 — pass them on.
 python3 $D/scripts/astro.py --date 1993-04-12 --time 07:35 --tz Asia/Shanghai --on-date today --format json  # 星座 daily
 #   --tz matters in DAILY mode too: without it the birth clock is read as UT, and the
 #   daily card can report a different Sun sign than the natal chart for the same person.

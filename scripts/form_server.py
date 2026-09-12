@@ -232,8 +232,9 @@ def render_onboarding(profile):
                 <span>是闰月<span class='d'>比如「闰四月」。拿不准就别勾，我会核对那一年有没有闰月。</span></span></label></div>
             <div class='q'><label class='lab' for='bt'>出生时间</label>
               <input id='bt' name='birth_time' type='time'>
-              <label class='checkline'><input type='checkbox' name='birth_time_unknown'>
-                <span>不确定时间<span class='d'>没关系，八字照样能起，只是少了时柱。</span></span></label></div>
+              <div class='opts row'>{opt('birth_time_accuracy','exact','准确','出生证明上写的，或记得很清楚',True)}{opt('birth_time_accuracy','approx','大概','比如「九点左右」')}{opt('birth_time_accuracy','unknown','不知道','八字照样能起，只是少了时柱')}</div>
+              <label class='lab' for='btw' style='margin-top:8px'>选了「大概」的话，前后可能差多少？</label>
+              <select id='btw' name='birth_time_window'><option value='30'>±30 分钟</option><option value='60' selected>±1 小时</option><option value='120'>±2 小时</option></select></div>
           </div>
           <div class='grid2'>
             <div class='q'><label class='lab' for='bp'>出生地</label>
@@ -321,7 +322,10 @@ def write_onboarding(home, form):
     birth_ok = bool(g("birth_consent"))
     lunar_note = None
     if birth_ok:
-        time_unknown = bool(g("birth_time_unknown"))
+        # 准确 / 大概 / 不知道. "大概九点" used to be stored as an exact 09:00, so every pillar
+        # computed from it looked certain. The old checkbox still counts as 不知道.
+        accuracy = g("birth_time_accuracy") or ("unknown" if g("birth_time_unknown") else "exact")
+        time_unknown = accuracy == "unknown" or not g("birth_time")
         birth_date, date_input = g("birth_date") or None, None
         if g("birth_calendar") == "lunar":
             # Converted here, never by hand: leap months and 29-day months are where a
@@ -342,10 +346,18 @@ def write_onboarding(home, form):
                 lunar_note = (f"{label}换算不了：{why}。没有存出生日期，跟本人核对后再存。" if why
                               else f"{label}已按中国历法换算成公历 {solar}。出生在海外、时间又"
                                    "贴近午夜的，日期可能差一天，跟本人确认一下。")
+        window = None
+        if accuracy == "approx" and not time_unknown:
+            try:
+                window = max(1, min(240, int(g("birth_time_window") or 60)))
+            except ValueError:
+                window = 60
         patch["birth"] = {
             "date": birth_date,
-            "time": (None if time_unknown else (g("birth_time") or None)),
-            "time_known": (False if time_unknown else bool(g("birth_time"))),
+            "time": None if time_unknown else g("birth_time"),
+            "time_known": not time_unknown,
+            "time_accuracy": "unknown" if time_unknown else accuracy,
+            "time_window_min": window,
             "gender": g("gender") or None,
             "place": g("birth_place").strip() or None,
         }
@@ -369,6 +381,10 @@ def write_onboarding(home, form):
         todo.append(tz_note)
     if lunar_note:
         todo.append(lunar_note)
+    if birth_ok and patch["birth"].get("time_window_min"):
+        w = patch["birth"]["time_window_min"]
+        todo.append(f"出生时间是大概的（±{w} 分钟）：起八字时加 --time-window {w}，把这段时间里"
+                    "可能的柱都列出来，变动的柱按不确定来读。")
     if birth_ok and patch["birth"].get("place") and not patch["birth"].get("lat"):
         todo.append("生辰地点有了，但 birth.lat/lon/tz_at_birth 还是空的 —— 由城市推出来并"
                     "用 set-profile 存上（onboarding.md Tier 1），否则星盘永远算不出上升和宫位。")

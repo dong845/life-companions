@@ -30,6 +30,8 @@ birth:                       # sensitive — gated by consent.birth
     leap: false
   time: "07:35"              # local clock time; null if unknown
   time_known: true           # explicit false ⇒ never re-ask
+  time_accuracy: exact       # exact | approx | unknown — "大概九点" is approx, not exact
+  time_window_min: null      # approx only: ± minutes; pass to bazi.py --time-window
   gender: male               # male|female — needed for BaZi 大运 direction (阳男阴女…)
   place: "Beijing, CN"
   lat: 39.9042

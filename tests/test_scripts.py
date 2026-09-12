@@ -734,6 +734,122 @@ class TestSafetyScanBurdenPhrasing(unittest.TestCase):
             self.assertFalse(self.scan(t)["crisis_flag"], t)
 
 
+class TestBoundaryWarnings(unittest.TestCase):
+    """A chart is only as exact as the birth time behind it, and the engine said so in two
+    places only: the 23:00 子时 and 立春. 08:58 is 丙辰 and 09:02 is 丁巳 without a word; the
+    other eleven 節 move the month pillar just as silently; "around nine" had no way to be
+    said at all; and a chart that knew the longitude never mentioned that the True Solar
+    Time hour — the one many apps show — is a different pillar."""
+
+    @staticmethod
+    def chart(**kw):
+        import bazi
+        return bazi.compute(**kw)
+
+    @staticmethod
+    def _jie(year, name):
+        import datetime
+        from lunar_python import Solar
+        s = Solar.fromYmd(year, 6, 15).getLunar().getJieQiTable()[name]
+        return datetime.datetime(s.getYear(), s.getMonth(), s.getDay(), s.getHour(), s.getMinute())
+
+    def test_minutes_from_a_shichen_boundary_names_both_pillars(self):
+        for t in ("08:58", "09:02"):
+            r = self.chart(date="1993-04-12", time=t, gender="m", tz="Asia/Shanghai")
+            notes = [a for a in r["ambiguities"] if "时辰" in a and "分界" in a]
+            self.assertTrue(notes, (t, r["ambiguities"]))
+            self.assertIn("丙辰", notes[0])
+            self.assertIn("丁巳", notes[0])
+
+    def test_half_an_hour_from_a_boundary_stays_quiet(self):
+        r = self.chart(date="1993-04-12", time="09:30", gender="m", tz="Asia/Shanghai")
+        self.assertFalse(any("分界" in a for a in r["ambiguities"]), r["ambiguities"])
+
+    def test_every_jie_flags_the_month_pillar_not_only_lichun(self):
+        import datetime
+        moment = self._jie(2022, "芒种") + datetime.timedelta(minutes=40)
+        r = self.chart(date=moment.date().isoformat(), time=moment.strftime("%H:%M"),
+                       gender="f", tz="Asia/Shanghai")
+        self.assertTrue(any("芒种" in a and "月柱" in a for a in r["ambiguities"]),
+                        r["ambiguities"])
+
+    def test_hours_away_from_a_jie_says_the_month_pillar_is_safe(self):
+        import datetime
+        moment = self._jie(2022, "芒种") + datetime.timedelta(hours=20)
+        r = self.chart(date=moment.date().isoformat(), time=moment.strftime("%H:%M"),
+                       gender="f", tz="Asia/Shanghai")
+        notes = [a for a in r["ambiguities"] if "芒种" in a]
+        self.assertTrue(notes, r["ambiguities"])
+        self.assertIn("不受影响", notes[0])
+
+    def test_a_known_longitude_names_the_true_solar_time_hour(self):
+        base = dict(date="1993-04-12", time="07:40", gender="m", tz="Asia/Shanghai", lon=87.6)
+        r = self.chart(**base)
+        clock = r["computed"]["pillars"]["hour"]["ganzhi"]
+        solar = self.chart(**base, true_solar_time=True)["computed"]["pillars"]["hour"]["ganzhi"]
+        self.assertNotEqual(clock, solar)
+        notes = [a for a in r["ambiguities"] if "真太阳时" in a]
+        self.assertTrue(notes, r["ambiguities"])
+        self.assertIn(clock, notes[0])
+        self.assertIn(solar, notes[0])
+
+    def test_no_longitude_means_no_true_solar_time_note(self):
+        r = self.chart(date="1993-04-12", time="07:40", gender="m", tz="Asia/Shanghai")
+        self.assertFalse(any("真太阳时" in a for a in r["ambiguities"]), r["ambiguities"])
+
+    def test_an_approximate_time_lists_every_pillar_it_could_be(self):
+        r = self.chart(date="1993-04-12", time="09:00", gender="m", tz="Asia/Shanghai",
+                       time_window=30)
+        w = r["computed"]["time_window"]
+        self.assertEqual(w["minutes"], 30)
+        self.assertEqual(set(w["pillars"]["hour"]), {"丙辰", "丁巳"})
+        self.assertEqual(w["changes"], ["hour"])
+        self.assertTrue(any("±30" in a for a in r["ambiguities"]), r["ambiguities"])
+
+    def test_the_cli_takes_a_time_window(self):
+        code, out, err = run("bazi.py", "--date", "1993-04-12", "--time", "09:00", "--gender",
+                             "m", "--tz", "Asia/Shanghai", "--time-window", "60",
+                             "--format", "json")
+        self.assertEqual(code, 0, err)
+        self.assertIn("time_window", json.loads(out)["computed"])
+
+    def test_ziwei_flags_a_shichen_boundary_too(self):
+        import ziwei
+        r = ziwei.compute("1993-04-12", "08:58", "m", tz="Asia/Shanghai")
+        self.assertTrue(any("时辰" in a and "分界" in a for a in r["ambiguities"]),
+                        r["ambiguities"])
+
+
+class TestApproximateBirthTimeInTheForm(HomeCase):
+    """「大概九点」 had nowhere to go: the form offered a time or 'unknown', so a rough time
+    was stored as an exact one and every pillar computed from it looked certain."""
+
+    def _onboard(self, **birth):
+        import form_server
+        import yaml
+        form = {"name": ["X"], "locale": ["zh"], "region": ["cn"], "tone": ["concise"],
+                "birth_consent": ["on"], "birth_date": ["1993-04-12"],
+                "birth_place": ["Beijing, CN"], "gender": ["male"]}
+        form.update({k: [v] for k, v in birth.items()})
+        form_server.write_onboarding(self.home, form)
+        with open(os.path.join(self.home, "profile.yaml"), encoding="utf-8") as f:
+            return yaml.safe_load(f)["birth"]
+
+    def test_an_approximate_time_is_stored_with_its_window(self):
+        birth = self._onboard(birth_time="09:00", birth_time_accuracy="approx",
+                              birth_time_window="60")
+        self.assertEqual(birth["time"], "09:00")
+        self.assertTrue(birth["time_known"])
+        self.assertEqual(birth["time_accuracy"], "approx")
+        self.assertEqual(birth["time_window_min"], 60)
+
+    def test_choosing_unknown_drops_whatever_time_was_typed(self):
+        birth = self._onboard(birth_time="09:00", birth_time_accuracy="unknown")
+        self.assertIsNone(birth["time"])
+        self.assertFalse(birth["time_known"])
+        self.assertEqual(birth["time_accuracy"], "unknown")
+
+
 class TestTimezoneResolution(unittest.TestCase):
     """identity.timezone decides daily timing AND which country's crisis line the
     person is offered, so a confident wrong answer is worse than no answer."""

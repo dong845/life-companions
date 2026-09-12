@@ -593,11 +593,54 @@ def _extras(chart, hour_known):
     return {"mingong": mingong, "shengong": shengong, "taiyuan": taiyuan}
 
 
+# A recorded birth time is rarely right to the minute, so a chart sitting on a boundary
+# has to say so. The engine used to do that for 子时 and 立春 only.
+SHICHEN_MARGIN_MIN = 15      # a 時辰 changes on every odd hour
+JIE_MARGIN_HOURS = 24        # each 節 moves the 月柱 (立春 moves the 年柱 too, checked apart)
+MAX_TIME_WINDOW_MIN = 240
+_JIE = ("立春", "惊蛰", "清明", "立夏", "芒种", "小暑", "立秋", "白露", "寒露", "立冬", "大雪", "小寒")
+# lunar-python keys the table's edge entries (the neighbouring years) in pinyin
+_JIE_PINYIN = {"LI_CHUN": "立春", "JING_ZHE": "惊蛰", "QING_MING": "清明", "LI_XIA": "立夏",
+               "MANG_ZHONG": "芒种", "XIAO_SHU": "小暑", "LI_QIU": "立秋", "BAI_LU": "白露",
+               "HAN_LU": "寒露", "LI_DONG": "立冬", "DA_XUE": "大雪", "XIAO_HAN": "小寒"}
+
+
+def _nearest_jie(dt):
+    """(name, hours from `dt` to it — negative means born before it, moment) for the
+    nearest 節 other than 立春, which has its own check; (None, None, None) if the table
+    can't be read."""
+    try:
+        table = Solar.fromYmdHms(dt.year, dt.month, dt.day, 12, 0, 0).getLunar().getJieQiTable()
+    except Exception:  # pragma: no cover
+        return None, None, None
+    best = (None, None, None)
+    for key, solar in (table or {}).items():
+        name = _JIE_PINYIN.get(str(key), str(key))
+        if name not in _JIE or name == "立春":
+            continue
+        moment = datetime.datetime(solar.getYear(), solar.getMonth(), solar.getDay(),
+                                   solar.getHour(), solar.getMinute(), solar.getSecond())
+        gap = (dt - moment).total_seconds() / 3600.0
+        if best[1] is None or abs(gap) < abs(best[1]):
+            best = (name, gap, moment)
+    return best
+
+
+def _pillar_at(dt, late_zishi, which):
+    ec = Solar.fromYmdHms(dt.year, dt.month, dt.day, dt.hour, dt.minute, 0).getLunar().getEightChar()
+    ec.setSect(2 if late_zishi else 1)
+    return getattr(ec, f"get{which}")()
+
+
 def compute(date, time, gender, lon=None, true_solar_time=False,
-            standard_meridian=None, late_zishi=True, on_date=None, tz=None):
+            standard_meridian=None, late_zishi=True, on_date=None, tz=None,
+            time_window=None):
     y, m, d = [int(x) for x in date.split("-")]
     hour_known = time is not None
     hh, mm = (int(x) for x in time.split(":")) if hour_known else (12, 0)
+    given_meridian = standard_meridian
+    if time_window is not None and not 1 <= int(time_window) <= MAX_TIME_WINDOW_MIN:
+        raise ValueError(f"--time-window must be 1–{MAX_TIME_WINDOW_MIN} minutes")
 
     ambiguities = []
     civil = datetime.datetime(y, m, d, hh, mm)
@@ -625,6 +668,20 @@ def compute(date, time, gender, lon=None, true_solar_time=False,
     elif true_solar_time:
         ambiguities.append("出生时刻未知：真太阳时无从修正（时柱本来就不计算）。")
 
+    # Knowing the longitude but charting on the clock is a real choice, and a common reason
+    # two charts of one person disagree. If True Solar Time would give another 时柱, say which.
+    if hour_known and lon is not None and not true_solar_time:
+        solar_clock = _apply_true_solar_time(civil, lon, standard_meridian)
+        clock_hour = _pillar_at(civil, late_zishi, "Time")
+        solar_hour = _pillar_at(solar_clock, late_zishi, "Time")
+        if clock_hour != solar_hour:
+            crossed = ("，而且跨过了零点，日柱也会不同" if solar_clock.date() != civil.date() else "")
+            ambiguities.append(
+                f"按真太阳时（经度 {lon:g}°）算，出生时刻是 {solar_clock.strftime('%H:%M')}，"
+                f"时柱会是{solar_hour}{crossed}；本盘按钟表时间取{clock_hour}。不同排盘软件"
+                "的默认做法不一样，对照时看到的时柱可能不同。想按真太阳时起盘，加 "
+                "--true-solar-time。")
+
     if hour_known and local.hour == 23:
         ambiguities.append(
             "23:00–24:00 出生属子时边界（早/晚子时分歧），当前采用"
@@ -636,6 +693,22 @@ def compute(date, time, gender, lon=None, true_solar_time=False,
         ambiguities.append("出生时刻未知：时柱不可计算，与时柱相关的十神/藏干省略。")
         ambiguities.append("出生时刻未知也会影响起运：起运时刻由出生到节气的间隔折算，"
                            "时辰不同可差数月，大运的换运年份因此有出入。")
+
+    # A 時辰 turns on every odd hour. Within a few minutes of one, the recorded time decides
+    # the 时柱, and recorded times are often a few minutes off. Judged on the clock the chart
+    # actually uses (the TST clock when TST is on).
+    if hour_known:
+        minutes = local.hour * 60 + local.minute
+        edge = min(range(-60, 24 * 60 + 61, 120), key=lambda b: abs(minutes - b))
+        gap = abs(minutes - edge)
+        if gap <= SHICHEN_MARGIN_MIN:
+            turn = local.replace(hour=0, minute=0) + datetime.timedelta(minutes=edge)
+            before = _pillar_at(turn - datetime.timedelta(minutes=1), late_zishi, "Time")
+            after = _pillar_at(turn, late_zishi, "Time")
+            ambiguities.append(
+                f"出生时刻 {local.strftime('%H:%M')} 离时辰分界（{turn.strftime('%H:%M')}）只有 "
+                f"{gap} 分钟：分界之前是{before}时，之后是{after}时。记录差几分钟，时柱就会换"
+                "一柱，请确认出生时间。")
 
     # The INSTANT (年柱/月柱, 立春, 大运, 起运): the civil clock on a Beijing wall clock.
     # Always from `civil`, never from `local`.
@@ -665,6 +738,23 @@ def compute(date, time, gender, lon=None, true_solar_time=False,
                if not hour_known else
                "差几十分钟年柱就会换一柱，请确认出生时刻（含出生地时区）准确。")
         )
+
+    # The other eleven 節 move the 月柱 exactly as 立春 moves the 年柱, and nothing said so.
+    jie, jie_gap, jie_moment = _nearest_jie(instant)
+    if jie is not None:
+        when = jie_moment.strftime("%Y-%m-%d %H:%M")
+        if not hour_known:
+            if jie_moment.date() == instant.date():
+                ambiguities.append(
+                    f"这一天{jie}交节（{when}）——出生时刻未知，月柱取决于出生在交节之前还是"
+                    "之后，需要确认出生时间。")
+        elif abs(jie_gap) <= JIE_MARGIN_HOURS:
+            side = "之后" if jie_gap >= 0 else "之前"
+            head = (f"出生在{jie}（{when}）{side}约{abs(jie_gap):.1f}小时——月柱以{jie}交节"
+                    "的『时刻』为界")
+            ambiguities.append(head + (
+                "，出生时间或时区差几个小时月柱就会换一柱，请确认。" if abs(jie_gap) < 6 else
+                "；出生时间和时区没有记错的话，月柱不受影响。"))
 
     def eight_char(dt):
         ec = Solar.fromYmdHms(dt.year, dt.month, dt.day, dt.hour, dt.minute, 0) \
@@ -763,6 +853,32 @@ def compute(date, time, gender, lon=None, true_solar_time=False,
             "用神喜忌及一切吉凶解读为流派性的『反思视角』，非科学预测。"
         ),
     }
+
+    # "Around nine" is a real answer. Chart every ten minutes across the window and report
+    # which pillars actually move, instead of pretending the recorded minute is exact.
+    if time_window is not None:
+        if not hour_known:
+            ambiguities.append("没有出生时间，时间范围（--time-window）不起作用。")
+        else:
+            w = int(time_window)
+            seen = {k: [] for k in ("year", "month", "day", "hour")}
+            for off in sorted(set(range(-w, w + 1, 10)) | {-w, w}):
+                t = civil + datetime.timedelta(minutes=off)
+                sample = compute(t.date().isoformat(), t.strftime("%H:%M"), gender, lon=lon,
+                                 true_solar_time=true_solar_time,
+                                 standard_meridian=given_meridian, late_zishi=late_zishi,
+                                 tz=tz)["computed"]["pillars"]
+                for k in seen:
+                    if sample[k]["ganzhi"] not in seen[k]:
+                        seen[k].append(sample[k]["ganzhi"])
+            changes = [k for k in seen if len(seen[k]) > 1]
+            result["computed"]["time_window"] = {"minutes": w, "pillars": seen,
+                                                 "changes": changes}
+            label = {"year": "年柱", "month": "月柱", "day": "日柱", "hour": "时柱"}
+            ambiguities.append(
+                f"出生时间按 ±{w} 分钟估：" + ("；".join(
+                    f"{label[k]}可能是 {' / '.join(seen[k])}" for k in changes)
+                    + "。其余各柱在这个范围里不变。" if changes else "四柱在这个范围里都不变。"))
     return result
 
 
@@ -830,6 +946,9 @@ def main():
                          "default 晚子时 keeps it on the same day")
     ap.add_argument("--on-date", default=None,
                     help="Add a 流年/流月/流日 daily block for this date (YYYY-MM-DD, or 'today')")
+    ap.add_argument("--time-window", type=int, default=None, metavar="MINUTES",
+                    help="the birth time is only known to ± this many minutes (e.g. 60 for "
+                         "'around nine'): lists every pillar the chart could have in that window")
     ap.add_argument("--format", choices=["json", "text"], default="json")
     args = ap.parse_args()
 
@@ -843,6 +962,7 @@ def main():
             true_solar_time=args.true_solar_time,
             standard_meridian=args.standard_meridian, tz=args.tz,
             late_zishi=not args.early_zishi, on_date=on_date,
+            time_window=args.time_window,
         )
     except (ValueError, TypeError) as e:
         print(json.dumps({"ok": False, "error": f"bad input: {e}. "

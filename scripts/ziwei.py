@@ -226,6 +226,15 @@ def compute(date, time=None, gender="m", on_year=None, tz=None):
     year_gan, year_zhi = year_gz[0], year_gz[1]
     hour_zhi = lunar.getTimeZhi()
     hour_i = IDX[hour_zhi]
+    if hour_known:
+        # In 斗数 the whole chart hangs off the 时辰, and a 时辰 turns on every odd hour.
+        minutes = dt.hour * 60 + dt.minute
+        edge = min(range(-60, 24 * 60 + 61, 120), key=lambda b: abs(minutes - b))
+        if abs(minutes - edge) <= 15:
+            ambiguities.append(
+                f"出生时刻离时辰分界只有 {abs(minutes - edge)} 分钟（按起盘用的钟点 "
+                f"{dt.strftime('%H:%M')}）：命宫、身宫、文昌文曲、火铃、地空地劫都跟着时辰走，"
+                "记录差几分钟整张盘就会换，请确认出生时间。")
     if not hour_known:
         ambiguities.append("出生时刻未知：紫微斗数的命宫、身宫、文昌文曲、火铃、地空地劫"
                            "全部依赖时辰——这张盘算不了。补上出生时间才有意义。")

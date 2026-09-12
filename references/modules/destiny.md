@@ -33,8 +33,17 @@ python3 $D/scripts/bazi.py \
   --tz <birth.tz_at_birth>                     # ← ALWAYS pass this when you have it \
   [--lon <birth.lon> --true-solar-time]        # only if conventions.true_solar_time
   [--early-zishi]                               # only if conventions.zishi_rule == early
+  [--time-window <birth.time_window_min>]      # when birth.time_accuracy == approx
   --format json
 ```
+**Boundaries and rough times.** When `birth.time_accuracy` is `approx`, pass
+`--time-window <birth.time_window_min>`. The payload's `time_window` lists every pillar
+the chart could have inside that window, and `changes` names the ones that actually move:
+read those as uncertain and say so; read the rest normally. The ambiguities also flag a
+birth within 15 minutes of a 时辰 boundary (naming both 时柱), a birth within a day of any
+節 (the 月柱; 立春 has its own note for the 年柱), and — when a longitude is known but TST
+is off — the 时柱 True Solar Time would give. Pass these on in plain words. They are the
+places a chart is least sure of itself, and the usual reason two apps disagree.
 **`--tz` is not optional for a birth outside China.** 節氣 are absolute astronomical
 instants and the engine resolves them on a Beijing clock, so without the birthplace
 timezone a European or American birth can come back with the **wrong year or month

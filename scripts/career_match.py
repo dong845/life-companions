@@ -435,65 +435,100 @@ _ALIASES = {
     "产品经理": "product manager", "程序员": "programmer software developer",
     "软件工程师": "software developer", "算法": "data scientist research computer",
     "机器学习": "data scientist computer research", "人工智能": "computer research scientist",
-    "数据": "data scientist statistician database", "数据分析": "data scientist operations research",
+    "数据": "data scientist database", "数据分析": "data scientist operations research",
+    "统计": "statistician",
     "医生": "physician", "护士": "nurse", "老师": "teacher", "教师": "teacher",
-    "律师": "lawyer", "会计": "accountant", "设计师": "designer",
+    "律师": "lawyer", "会计": "accountant", "设计师": "designer", "平面": "graphic",
     "记者": "reporter journalist", "翻译": "interpreters translators",
-    "心理咨询": "counselor psychologist", "社工": "social worker",
+    "心理咨询": "counseling psychologists counselors", "社工": "social worker",
     "厨师": "chef cook", "摄影": "photographer", "建筑师": "architect",
     "护理": "nurse", "影像": "imaging radiologic", "放射": "radiologic imaging",
     "核磁": "magnetic resonance imaging", "磁共振": "magnetic resonance imaging",
+    "mri": "magnetic resonance imaging",
     "理疗": "physical therapist", "药剂": "pharmacist", "销售": "sales",
     "市场": "marketing market research", "人力资源": "human resources",
     "运营": "operations management", "研究员": "research scientist",
     "教授": "professor teacher postsecondary", "咨询顾问": "management analyst",
-    "ux": "web digital designer", "ui": "web digital designer",
+    "ux": "web digital interface", "ui": "web digital interface",
     "product manager": "management analyst project management",
 }
+# Aliases that point at NEIGHBOURS because O*NET has no such occupation. A hit that leans
+# on one of these can open a conversation; it is never a strong mapping.
+_APPROXIMATE = {"产品经理", "product manager", "运营", "研究员"}
+
+_LATIN = re.compile(r"[a-z0-9]+")
+_CJK = re.compile(r"[一-鿿]+")
 
 
-def _tokens(s):
+def _words(s):
+    """Latin and CJK runs as separate words, so 「MRI技师」 is mri + 技师, not one token."""
     s = s.lower()
-    for zh, en in _ALIASES.items():
-        if zh in s:
-            s += " " + en
-    parts = re.split(r"[^a-z0-9一-鿿]+", s)
-    return {p for p in parts if p and p not in _STOP and not p.isdigit()}
+    return [w for w in _LATIN.findall(s) + _CJK.findall(s)
+            if w not in _STOP and not w.isdigit()]
+
+
+def _alias_in(key, text):
+    # A Latin key must stand alone: as a bare substring, 「ui」 matched inside "equipment".
+    # Chinese has no spaces between words, so a Chinese key matches anywhere.
+    if key.isascii():
+        return re.search(r"(?<![a-z0-9])" + re.escape(key) + r"(?![a-z0-9])", text) is not None
+    return key in text
+
+
+def _query_words(query):
+    """What the person said plus the O*NET words it stands for, and whether any of it
+    leans on an approximate alias. Aliases expand the QUERY only — run over occupation
+    titles as well, they turned "Agricultural Equipment Operators" into a designer."""
+    text = query.lower()
+    approximate = False
+    for key, en in _ALIASES.items():
+        if _alias_in(key, text):
+            text += " " + en
+            approximate = approximate or key in _APPROXIMATE
+    return set(_words(text)), approximate
+
+
+def _same_word(a, b):
+    # exact, or an ending apart: "statistic" finds "Statisticians"
+    return a == b or (len(a) > 3 and (b.startswith(a) or a.startswith(b)))
 
 
 def find_occupations(query, occupations, limit=8):
     """Rank shipped occupations by how well their title matches `query`.
 
-    Returns [{soc_code, title, job_zone, has_numeric_interests, has_work_values,
-    score}], best first, and **an empty list when nothing matches** — that is the
-    honest answer, not a reason to reach for the nearest title.
-    """
-    q = _tokens(query)
+    Returns [{soc_code, title, job_zone, has_numeric_interests, has_work_values, score,
+    match}], best first, and **an empty list when nothing matches** — that is the honest
+    answer, not a reason to reach for the nearest title.
+
+    `match` is "strong" for an exact title, or when the query covers two or more words
+    of the title (or all of a one-word title) without leaning on an approximate alias.
+    Anything less is "weak": 「建筑师」 and Database Architects share "architect", and one
+    shared word is not a mapping. Strong hits sort first."""
+    q, approximate = _query_words(query)
     if not q:
         return []
     out = []
     for o in occupations:
         title = o.get("title", "")
-        t = _tokens(title)
+        t = set(_words(title))
         if not t:
             continue
-        overlap = q & t
-        if not overlap:
-            # allow a prefix hit so "statistic" finds "Statisticians"
-            overlap = {a for a in q for b in t if len(a) > 3 and (b.startswith(a) or a.startswith(b))}
-            if not overlap:
-                continue
-        score = len(overlap) / len(q | t)
-        if query.strip().lower() == title.lower():
-            score = 1.0
+        # count TITLE words covered, so "data" and "database" can't both count as one
+        # shared word twice
+        covered = {b for b in t if any(_same_word(a, b) for a in q)}
+        if not covered:
+            continue
+        exact = query.strip().lower() == title.lower()
+        strong = exact or (not approximate and (len(covered) >= 2 or covered == t))
         out.append({
             "soc_code": o.get("soc_code"), "title": title,
             "job_zone": o.get("job_zone"),
             "has_numeric_interests": o.get("riasec") is not None,
             "has_work_values": o.get("work_values") is not None,
-            "score": round(score, 3),
+            "score": 1.0 if exact else round(len(covered) / len(q | t), 3),
+            "match": "strong" if strong else "weak",
         })
-    out.sort(key=lambda r: (-r["score"], r["title"]))
+    out.sort(key=lambda r: (r["match"] != "strong", -r["score"], r["title"]))
     return out[:limit]
 
 
@@ -748,18 +783,23 @@ if __name__ == "__main__":
     if args.find:
         occs, _ = load_occupations()
         hits = find_occupations(args.find, occs)
-        payload = {
-            "query": args.find, "matches": hits,
-            "_note": (
-                "Confirm the mapping with the person before scoring — «你说的X，我按 O*NET "
-                "的「<title>」来算，行吗?» Scoring them against a title they didn't mean is "
-                "a wrong answer that looks right."
-                if hits else
-                "NO MATCH in the 188 shipped occupations. Do NOT substitute the nearest "
-                "title. Say the role isn't in the dataset, ask which of the shipped ones "
-                "is closest in day-to-day WORK (not job title), or give an interests-only "
-                "read with no occupation congruence at all."),
-        }
+        if not hits:
+            note = (f"NO MATCH in the {len(occs)} shipped occupations. Do NOT substitute the "
+                    "nearest title. Say the role isn't in the dataset, ask which of the shipped "
+                    "ones is closest in day-to-day WORK (not job title), or give an "
+                    "interests-only read with no occupation congruence at all.")
+        elif all(h["match"] == "weak" for h in hits):
+            note = ("Every candidate is a WEAK match: one shared word, or an alias that points "
+                    "at neighbouring occupations because O*NET has no such job. Say plainly "
+                    "that none of these is the job they named, ask which is closest in "
+                    "day-to-day WORK, or give an interests-only read. Don't score a weak "
+                    "match as if it were their job.")
+        else:
+            note = ("Confirm the mapping with the person before scoring — «你说的X，我按 O*NET "
+                    "的「<title>」来算，行吗?» Scoring them against a title they didn't mean is "
+                    "a wrong answer that looks right. Only a `strong` candidate is the job "
+                    "itself; a `weak` one is a neighbour.")
+        payload = {"query": args.find, "matches": hits, "_note": note}
         if args.json:
             print(json.dumps(payload, ensure_ascii=False, indent=2))
         else:
@@ -768,7 +808,7 @@ if __name__ == "__main__":
             for h in hits:
                 flags = ("numeric-interests" if h["has_numeric_interests"] else "code-only") + \
                         (" +values" if h["has_work_values"] else "")
-                print(f"  {h['score']:.2f}  {h['title']} ({h['soc_code']}) "
+                print(f"  {h['score']:.2f}  {h['match']:6s} {h['title']} ({h['soc_code']}) "
                       f"[zone {h['job_zone']}, {flags}]")
             print("\n" + payload["_note"])
         raise SystemExit(0)

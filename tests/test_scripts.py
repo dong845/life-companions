@@ -1684,6 +1684,65 @@ class TestCareerMatch(unittest.TestCase):
         self.assertIn("o*net", blob)
 
 
+class TestFindMatchesWhatPeopleSay(unittest.TestCase):
+    """`--find` ran its synonym table over the occupation TITLES as well as the query, by
+    substring. 「ui」 sits inside "equipment", so 「UI设计师」 came back topped by Agricultural
+    Equipment Operators. 「MRI技师」 was one unsplittable token and matched nothing, though MRI
+    technologists are in the data. 「平面设计师」 tied Fashion, Graphic and Interior Designers
+    and alphabetical order put Fashion first. And a single shared word — 「建筑师」 and
+    Database Architects share "architect" — came back looking exactly like a real match."""
+
+    @classmethod
+    def setUpClass(cls):
+        import career_match as cm
+        cls.cm = cm
+        cls.occs, _ = cm.load_occupations()
+
+    def find(self, q):
+        return self.cm.find_occupations(q, self.occs)
+
+    def test_a_short_latin_alias_never_matches_inside_a_word(self):
+        hits = self.find("UI设计师")
+        self.assertEqual(hits[0]["title"], "Web and Digital Interface Designers",
+                         [h["title"] for h in hits[:3]])
+        self.assertFalse(any("Equipment" in h["title"] for h in hits),
+                         [h["title"] for h in hits])
+
+    def test_latin_written_against_chinese_is_split(self):
+        for q in ("MRI技师", "MRI 技师"):
+            hits = self.find(q)
+            self.assertTrue(hits, q)
+            self.assertEqual(hits[0]["title"], "Magnetic Resonance Imaging Technologists", q)
+
+    def test_the_qualifier_decides_between_same_head_nouns(self):
+        self.assertEqual(self.find("平面设计师")[0]["title"], "Graphic Designers")
+
+    def test_a_single_shared_word_is_labelled_weak(self):
+        # neither has a counterpart in the shipped list; one shared word is not a mapping
+        for q in ("建筑师", "老师"):
+            hits = self.find(q)
+            self.assertTrue(hits, q)
+            self.assertTrue(all(h["match"] == "weak" for h in hits), (q, hits[:2]))
+
+    def test_an_approximate_alias_never_reads_as_strong(self):
+        # O*NET has no product-manager occupation; the alias points at neighbours
+        self.assertTrue(all(h["match"] == "weak" for h in self.find("产品经理")))
+
+    def test_real_mappings_are_strong(self):
+        for q, title in (("核磁共振技师", "Magnetic Resonance Imaging Technologists"),
+                         ("数据科学家", "Data Scientists"), ("Statisticians", "Statisticians"),
+                         ("平面设计师", "Graphic Designers"), ("MRI技师",
+                          "Magnetic Resonance Imaging Technologists")):
+            hit = next((h for h in self.find(q) if h["title"] == title), None)
+            self.assertIsNotNone(hit, q)
+            self.assertEqual(hit["match"], "strong", (q, hit))
+
+    def test_cli_says_when_every_candidate_is_weak(self):
+        code, out, _ = run("career_match.py", "--find", "建筑师", "--json")
+        self.assertEqual(code, 0, out)
+        self.assertIn("weak", json.loads(out)["_note"])
+
+
 class TestCareerValidity(unittest.TestCase):
     """Three measurement defects, all of which produced a confident-looking result
     that carried no information — the failure mode this skill exists to avoid."""

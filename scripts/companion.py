@@ -27,7 +27,8 @@ Subcommands:
   trend [--days N]          descriptive journal trends (delegates to trends.py)
   journal [--since --tag]   re-read the actual prose entries
   search [--tag --text --since --until]
-  forget --birth | --month YYYY-MM | --all --yes
+  forget --birth | --month YYYY-MM | --entry DATE [--nth N] | --person NAME
+         [--with-entries] | --relationships | --mood | --all --yes
 """
 import argparse
 import datetime
@@ -199,6 +200,59 @@ def _refuse_ungated(home, category):
         "where": where,
         "_next": (f"Ask the person plainly first, then `consent --set {category}=yes`. "
                   f"If they decline, skip the module gracefully — don't work around this."),
+    }
+
+
+# How each category is deleted, for every message that has to say so.
+_FORGET_CMD = {
+    "birth": "`forget --birth`",
+    "relationships": "`forget --relationships`, or `forget --person NAME` for one person",
+    "mood": "`forget --mood`",
+}
+
+
+def _relationships_path(home):
+    return os.path.join(_paths(home)["modules"], "relationships.yaml")
+
+
+def _retained(home):
+    """What is still stored in each consent category, in words.
+
+    Revoking consent stops use; it does not delete. Whoever revokes has to be told what is
+    still on disk and how to remove it, or "I withdrew consent" quietly means "it is all
+    still there"."""
+    p = _paths(home)
+    out = {}
+    birth = _load_yaml(p["profile"]).get("birth") or {}
+    n_birth = sum(1 for k, v in birth.items() if k != "conventions" and v is not None)
+    if n_birth:
+        out["birth"] = f"{n_birth} birth field(s) in profile.yaml"
+    rows = trends_mod._load(p["index"])
+    rel = _relationships_path(home)
+    people = (_load_yaml(rel).get("people") or {}) if os.path.exists(rel) else {}
+    naming = sum(1 for r in rows if r.get("people"))
+    if people or naming:
+        out["relationships"] = (f"{len(people)} tracked person/people in "
+                                f"state/modules/relationships.yaml; {naming} journal row(s) "
+                                "naming someone")
+    moods = sum(1 for r in rows if r.get("mood") is not None)
+    if moods:
+        out["mood"] = f"{moods} mood value(s) in the journal"
+    return out
+
+
+def _refuse_ungranted_read(home, category):
+    """Reads are gated as well as writes. A revoked category that is still read keeps
+    reaching every reply, and that is not what revoking means."""
+    if _granted(home, category):
+        return None
+    label, _ = CONSENT_GATED[category]
+    return {
+        "ok": False,
+        "error": f"consent.{category} is not granted — {label} is withheld",
+        "retained": _retained(home).get(category),
+        "_next": (f"Don't use it. Ask first: `consent --set {category}=yes` restores access "
+                  f"to what is stored. To delete it instead: {_FORGET_CMD[category]}."),
     }
 
 
@@ -437,13 +491,26 @@ def cmd_consent(args):
     home = home_dir(args.home)
     p = _paths(home)
     consent = _load_yaml(p["consent"])
+    withdrawn = []
     for pair in args.set:
         k, _, v = pair.partition("=")
+        k = k.strip()
         granted = v.strip().lower() in ("yes", "true", "1", "y")
-        consent[k.strip()] = {"granted": granted, "date": _today()}
+        if not granted:
+            withdrawn.append(k)
+        consent[k] = {"granted": granted, "date": _today()}
     _save_yaml(p["consent"], consent)
-    print(json.dumps({"ok": True, "consent": {k: val.get("granted")
-                      for k, val in consent.items()}}, ensure_ascii=False))
+    out = {"ok": True, "consent": {k: val.get("granted") for k, val in consent.items()}}
+    # Saying no stops every script from reading or using the category (see
+    # _refuse_ungranted_read). It deletes nothing, so a mistaken revoke costs nothing, and
+    # the reply has to say what is still stored and how to remove it.
+    kept = {k: v for k, v in _retained(home).items() if k in withdrawn}
+    if kept:
+        out["retained"] = kept
+        out["_next"] = ("Nothing was deleted. The scripts stop using these now; tell the "
+                        "person that plainly, and how to delete them if they want: "
+                        + "; ".join(f"{k} → {_FORGET_CMD[k]}" for k in kept))
+    print(json.dumps(out, ensure_ascii=False))
 
 
 def cmd_continuity(args):
@@ -543,9 +610,33 @@ def cmd_brief(args):
     if not args.full_profile:
         prof = {k: v for k, v in prof.items() if k != "context"}
 
+    # A category without consent is withheld here, not deleted. Every reply is built from
+    # brief, so this is where "revoked" has to take effect.
+    ok = {c: _granted(home, c) for c in CONSENT_GATED}
+    consent_notes = []
+    birth = prof.get("birth") or {}
+    if not ok["birth"] and any(v is not None for k, v in birth.items() if k != "conventions"):
+        prof["birth"] = {k: (v if k == "conventions" else None) for k, v in birth.items()}
+        prof["birth"]["_withheld"] = True
+        consent_notes.append("consent.birth is not granted: the stored birth fields are withheld, "
+                             "not deleted. Don't chart without asking; `consent --set birth=yes` "
+                             "restores them and `forget --birth` deletes them.")
+    if not ok["mood"] and (cont.get("recent_moods")
+                           or any(r.get("mood") is not None for r in rows)):
+        consent_notes.append("consent.mood is not granted: mood values are withheld, not "
+                             "deleted; `forget --mood` deletes them.")
+    if not ok["relationships"] and _retained(home).get("relationships"):
+        consent_notes.append("consent.relationships is not granted: relationship records are "
+                             "withheld, and the rolling summary or threads may still mention "
+                             "people, so don't draw on those. `forget --relationships` or "
+                             "`forget --person NAME` deletes them.")
+
     recent = []
     for r in rows[-args.recent:] if args.recent else []:
-        recent.append({k: r.get(k) for k in ("date", "mood", "tags", "themes", "crisis_flag")})
+        row = {k: r.get(k) for k in ("date", "mood", "tags", "themes", "crisis_flag")}
+        if not ok["mood"]:
+            row["mood"] = None
+        recent.append(row)
 
     due = _due_followups(home, args.days)
     out = {
@@ -557,7 +648,7 @@ def cmd_brief(args):
         "continuity": {
             "rolling_summary": cont.get("rolling_summary"),
             "open_threads": cont.get("open_threads") or [],
-            "recent_moods": cont.get("recent_moods") or [],
+            "recent_moods": (cont.get("recent_moods") or []) if ok["mood"] else [],
             "updated": cont.get("updated"),
         },
         "followups_due": due,
@@ -569,6 +660,8 @@ def cmd_brief(args):
         "_note": _FOLLOWUP_NOTE if due else
                  "Nothing due for follow-up. Don't manufacture a callback.",
     }
+    if consent_notes:
+        out["_consent_notes"] = consent_notes
     if any(r.get("crisis_flag") for r in rows[-args.recent:]) if args.recent else False:
         out["_crisis_recent"] = ("A recent entry carries crisis_flag. Read "
                                  "references/safety.md §2 before replying; never reopen "
@@ -584,6 +677,11 @@ def cmd_cache(args):
     p = _paths(home)
     os.makedirs(p["modules"], exist_ok=True)
     path = os.path.join(p["modules"], f"{args.module}.yaml")
+    if not args.merge_json and args.module in CONSENT_GATED:
+        refusal = _refuse_ungranted_read(home, args.module)
+        if refusal:
+            print(json.dumps(refusal, ensure_ascii=False, indent=2))
+            raise SystemExit(3)
     data = _load_yaml(path, {})
     if args.merge_json:
         if args.module in CONSENT_GATED:
@@ -632,6 +730,14 @@ def cmd_add_entry(args):
         mood = None
         dropped.append("mood — consent.mood not granted (ask, then "
                        "`consent --set mood=yes`); the entry text was still saved")
+
+    # Another person's name is relationship data about someone who never consented, and
+    # `people` is exactly what pattern-tracking counts, so it is gated like that cache.
+    if people and consent.get("relationships", {}).get("granted") is not True:
+        people = []
+        dropped.append("people — consent.relationships not granted (other people's names "
+                       "belong to that category; ask, then `consent --set relationships=yes`); "
+                       "the entry text was still saved")
 
     scan = scan_text(args.text)
     # the model is the real crisis detector; --crisis lets it force the flag when it
@@ -753,10 +859,370 @@ def cmd_search(args):
     print(json.dumps({"matches": len(out), "entries": out}, ensure_ascii=False, indent=2))
 
 
+_MOOD_IN_HEADER = re.compile(r"^(## [^\n]*?) · mood \d+/10", re.M)
+
+
+def _write_index(home, rows):
+    _atomic_write(_paths(home)["index"],
+                  "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows))
+
+
+def _entry_text(home, row):
+    """The prose of one journal entry, found through its index row."""
+    if not row.get("file"):
+        return ""
+    fp = os.path.join(home, row["file"])
+    if not os.path.exists(fp):
+        return ""
+    with open(fp, encoding="utf-8") as f:
+        block = f.read()[row.get("offset") or 0:]
+    nxt = block.find("\n## ", 1)
+    return block[:nxt] if nxt != -1 else block
+
+
+def _nth_of_day(rows, row):
+    same = [r for r in rows if r.get("date") == row.get("date")]
+    return next((i for i, r in enumerate(same, 1) if r is row), None)
+
+
+def _preview(home, row, width=30):
+    lines = _entry_text(home, row).splitlines()[1:]
+    body = " ".join(l.strip() for l in lines
+                    if l.strip() and not l.startswith(("tags:", "> companion:")))
+    return body[:width]
+
+
+def _rewrite_journal(home, transform, files=None):
+    """Rewrite journal files entry by entry and keep every index offset true.
+
+    `transform(row, block)` returns the entry's new text, or None to delete it. Every row
+    in a touched file is checked against that file BEFORE anything is written, and one
+    mismatch aborts the lot: a hand-edited file refuses loudly instead of deleting the
+    wrong words. Returns (rows_after, None) or (None, error)."""
+    p = _paths(home)
+    rows = trends_mod._load(p["index"])
+    by_file = {}
+    for r in rows:
+        by_file.setdefault(r.get("file"), []).append(r)
+    after, plans = {}, {}
+    for f, frs in by_file.items():
+        if files is not None and f not in files:
+            continue
+        path = os.path.join(home, f or "")
+        if not f or not os.path.exists(path):
+            return None, f"the index points at {f}, which is missing. Nothing was changed."
+        with open(path, encoding="utf-8") as fh:
+            content = fh.read()
+        for r in frs:
+            off = r.get("offset")
+            if (not isinstance(off, int)
+                    or not content[off:].lstrip("\n").startswith(f"## {r.get('date')}")):
+                return None, (f"the index no longer matches {f}: the entry for "
+                              f"{r.get('date')} is not at offset {off}. Nothing was changed. "
+                              "The file looks hand-edited; `forget --month` still removes the "
+                              "whole month, or fix the file by hand.")
+        frs = sorted(frs, key=lambda r: r["offset"])
+        pieces = [content[:frs[0]["offset"]]]
+        pos = len(pieces[0])
+        for i, r in enumerate(frs):
+            end = frs[i + 1]["offset"] if i + 1 < len(frs) else len(content)
+            new = transform(r, content[r["offset"]:end])
+            if new is None:
+                after[id(r)] = None
+                continue
+            after[id(r)] = dict(r, offset=pos)
+            pieces.append(new)
+            pos += len(new)
+        plans[path] = "".join(pieces)
+    for path, text in plans.items():
+        if text.strip():
+            _atomic_write(path, text)
+        elif os.path.exists(path):
+            os.remove(path)
+    out = [after[id(r)] if id(r) in after else r for r in rows]
+    out = [r for r in out if r is not None]
+    _write_index(home, out)
+    return out, None
+
+
+def _residue(home, needle):
+    """Files under home that still contain `needle`, so a delete can check its own work."""
+    hits = []
+    for dp, _dn, fn in os.walk(home):
+        for name in fn:
+            fp = os.path.join(dp, name)
+            try:
+                with open(fp, encoding="utf-8", errors="ignore") as fh:
+                    if needle in fh.read():
+                        hits.append(os.path.relpath(fp, home))
+            except OSError:
+                continue
+    return sorted(hits)
+
+
+def _drop_form_marker(home, predicate):
+    """Delete .form_result.json when predicate(its JSON) is true."""
+    marker = os.path.join(home, ".form_result.json")
+    if not os.path.exists(marker):
+        return False
+    try:
+        with open(marker, encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        data = {}
+    if not predicate(data if isinstance(data, dict) else {}):
+        return False
+    os.remove(marker)
+    return True
+
+
+def _set_consent(home, category, granted):
+    p = _paths(home)
+    consent = _load_yaml(p["consent"])
+    consent[category] = {"granted": granted, "date": _today()}
+    _save_yaml(p["consent"], consent)
+
+
+def _forget_birth(home):
+    p = _paths(home)
+    prof = _load_yaml(p["profile"])
+    prof["birth"] = {"date": None, "time": None, "time_known": None, "place": None,
+                     "lat": None, "lon": None, "tz_at_birth": None,
+                     "conventions": (prof.get("birth") or {}).get("conventions", {})}
+    prof["updated"] = _today()
+    _save_yaml(p["profile"], prof)
+    _set_consent(home, "birth", False)
+    destiny = os.path.join(p["modules"], "destiny.yaml")        # the cached natal chart
+    if os.path.exists(destiny):
+        os.remove(destiny)
+    done = ["birth data + cached charts removed"]
+    # The onboarding form's result marker carried the birth date, and nothing deleted it.
+    if _drop_form_marker(home, lambda m: m.get("form") == "onboarding" or m.get("birth_date")):
+        done.append("onboarding form result marker removed")
+    return done
+
+
+def _forget_month(home, month):
+    p = _paths(home)
+    done = []
+    month_path = os.path.join(p["journal"], f"{month}.md")
+    if os.path.exists(month_path):
+        os.remove(month_path)
+    rows = trends_mod._load(p["index"])
+    kept = [r for r in rows if not str(r.get("date", "")).startswith(month)]
+    _write_index(home, kept)
+    done.append(f"journal {month} removed ({len(rows) - len(kept)} entries)")
+
+    # What the companion learned that month also sits in the relationship log, the working
+    # memory and the module caches. Deleting only the journal left it all in place.
+    rel = _relationships_path(home)
+    if os.path.exists(rel):
+        data = _load_yaml(rel)
+        people = data.get("people") or {}
+        gone, trimmed, n = [], [], 0
+        for name in list(people):
+            rec = people[name]
+            incs = rec.get("incidents") if isinstance(rec, dict) else None
+            if not isinstance(incs, list):
+                continue
+            keep = [i for i in incs
+                    if not (isinstance(i, dict) and str(i.get("date", "")).startswith(month))]
+            if len(keep) == len(incs):
+                continue
+            n += len(incs) - len(keep)
+            if keep:
+                rec["incidents"] = keep
+                trimmed.append(name)
+            else:
+                # known only from that month: their tendencies and patterns can only have
+                # come from it, so nothing about them survives
+                del people[name]
+                gone.append(name)
+        if n:
+            _save_yaml(rel, data)
+            done.append(f"{n} relationship incident(s) from {month} removed"
+                        + (f"; {len(gone)} person/people known only from {month} removed"
+                           if gone else ""))
+        if trimmed:
+            done.append("kept the rest of " + "、".join(trimmed) + "'s record: tendencies and "
+                        f"patterns may partly come from {month}; `forget --person NAME` "
+                        "removes a whole record")
+
+    cont = _load_yaml(p["continuity"], {})
+    if cont:
+        threads = cont.get("open_threads") or []
+        keep = [t for t in threads
+                if not (isinstance(t, dict) and str(t.get("opened", "")).startswith(month))]
+        changed = len(keep) != len(threads)
+        if changed:
+            cont["open_threads"] = keep
+            done.append(f"{len(threads) - len(keep)} follow-up thread(s) opened in {month} removed")
+        # The rolling summary and recent moods carry no dates. Written during or after that
+        # month, they may quote it and there is no way to tell, so they go; they rebuild.
+        updated = str(cont.get("updated") or "")
+        if not updated or updated >= f"{month}-01":
+            for key, empty in (("rolling_summary", ""), ("recent_moods", [])):
+                if cont.get(key):
+                    cont[key] = empty
+                    changed = True
+                    done.append(f"continuity {key} cleared (it may have drawn on {month})")
+        if changed:
+            cont["updated"] = _today()
+            _save_yaml(p["continuity"], cont)
+
+    intake = os.path.join(p["modules"], "career_intake.yaml")
+    if os.path.exists(intake):
+        data = _load_yaml(intake)
+        if str((data.get("latest") or {}).get("ts", "")).startswith(month):
+            data.pop("latest", None)
+            _save_yaml(intake, data)
+            done.append(f"career check submitted in {month} removed")
+    if _drop_form_marker(home, lambda m: str(m.get("ts", "")).startswith(month)):
+        done.append(f"form result marker from {month} removed")
+    return done
+
+
+def _forget_entry(home, date, nth):
+    rows = trends_mod._load(_paths(home)["index"])
+    day = [r for r in rows if str(r.get("date")) == date]
+    if not day:
+        return None, {"ok": False, "error": f"no journal entry on {date}"}
+    if len(day) > 1 and nth is None:
+        return None, {"ok": False,
+                      "error": f"{len(day)} entries on {date}; say which one with --nth",
+                      "candidates": [{"nth": i, "preview": _preview(home, r)}
+                                     for i, r in enumerate(day, 1)]}
+    n = nth or 1
+    if not 1 <= n <= len(day):
+        return None, {"ok": False,
+                      "error": f"--nth {n} is out of range: {date} has {len(day)} entr"
+                               f"{'y' if len(day) == 1 else 'ies'}"}
+    target = day[n - 1]
+    key = (target.get("file"), target.get("offset"))
+    _, err = _rewrite_journal(
+        home, lambda r, b: None if (r.get("file"), r.get("offset")) == key else b,
+        files={target.get("file")})
+    if err:
+        return None, {"ok": False, "error": err}
+    return [f"journal entry {date} #{n} deleted"
+            + (" (it carried a crisis flag)" if target.get("crisis_flag") else "")], None
+
+
+def _forget_person(home, name, with_entries):
+    p = _paths(home)
+    done, report = [], {}
+    rel = _relationships_path(home)
+    if os.path.exists(rel):
+        data = _load_yaml(rel)
+        people = data.get("people") or {}
+        if name in people:
+            del people[name]
+            _save_yaml(rel, data)
+            done.append(f"relationship record for {name} removed")
+
+    # Prose, threads and the summary are matched by substring, which is only safe for a
+    # name of two characters or more; a one-letter name would match half the journal.
+    searchable = len(name) >= 2
+    if not searchable:
+        report["_note"] = (f"「{name}」 is a single character, so journal prose, threads and "
+                           "the summary were not searched; check those by hand.")
+    rows = trends_mod._load(p["index"])
+    mentioning = [r for r in rows if name in (r.get("people") or [])
+                  or (searchable and name in _entry_text(home, r))]
+    if with_entries and mentioning:
+        keys = {(r.get("file"), r.get("offset")) for r in mentioning}
+        _, err = _rewrite_journal(
+            home, lambda r, b: None if (r.get("file"), r.get("offset")) in keys else b,
+            files={r.get("file") for r in mentioning})
+        if err:
+            return None, {"ok": False, "error": err}
+        done.append(f"{len(mentioning)} journal entr{'y' if len(mentioning) == 1 else 'ies'} "
+                    f"mentioning {name} deleted")
+    elif mentioning:
+        report["entries_still_mentioning"] = [
+            {"date": r.get("date"), "nth": _nth_of_day(rows, r)} for r in mentioning]
+        report["_next"] = (f"Their prose was kept. `forget --person {name} --with-entries` "
+                           "deletes those entries too, or `forget --entry DATE --nth N` one "
+                           "at a time.")
+
+    rows = trends_mod._load(p["index"])
+    if any(name in (r.get("people") or []) for r in rows):
+        for r in rows:
+            if r.get("people"):
+                r["people"] = [x for x in r["people"] if x != name]
+        _write_index(home, rows)
+        done.append(f"{name} removed from the journal index")
+
+    cont = _load_yaml(p["continuity"], {})
+    if cont and searchable:
+        threads = cont.get("open_threads") or []
+        keep = [t for t in threads if name not in str(t)]
+        cleared = name in str(cont.get("rolling_summary") or "")
+        if cleared:
+            cont["rolling_summary"] = ""
+            done.append("continuity rolling_summary cleared (it mentioned them; it rebuilds)")
+        if len(keep) != len(threads):
+            cont["open_threads"] = keep
+            done.append(f"{len(threads) - len(keep)} follow-up thread(s) about {name} removed")
+        if cleared or len(keep) != len(threads):
+            cont["updated"] = _today()
+            _save_yaml(p["continuity"], cont)
+
+    if searchable:
+        left = [f for f in _residue(home, name)
+                if with_entries or not f.startswith("journal" + os.sep)]
+        if left:
+            report["still_mentioned_in"] = left
+    report["done"] = done
+    return report, None
+
+
+def _forget_relationships(home):
+    p = _paths(home)
+    done = []
+    rel = _relationships_path(home)
+    if os.path.exists(rel):
+        os.remove(rel)
+        done.append("state/modules/relationships.yaml deleted")
+    rows = trends_mod._load(p["index"])
+    named = sum(1 for r in rows if r.get("people"))
+    if named:
+        for r in rows:
+            r["people"] = []
+        _write_index(home, rows)
+        done.append(f"names removed from {named} journal row(s)")
+    _set_consent(home, "relationships", False)
+    done.append("consent.relationships revoked")
+    note = ("The prose of those journal entries was kept, and the rolling summary or threads "
+            "may still mention people. `forget --person NAME --with-entries` removes one "
+            "person completely." if named else None)
+    return done, note
+
+
+def _forget_mood(home):
+    p = _paths(home)
+    rows, err = _rewrite_journal(home, lambda r, b: _MOOD_IN_HEADER.sub(r"\1", b, count=1))
+    if err:
+        return None, {"ok": False, "error": err}
+    n = sum(1 for r in rows if r.get("mood") is not None)
+    for r in rows:
+        r["mood"] = None
+    _write_index(home, rows)
+    done = [f"{n} mood value(s) removed from the journal"]
+    cont = _load_yaml(p["continuity"], {})
+    if cont.get("recent_moods"):
+        cont["recent_moods"] = []
+        cont["updated"] = _today()
+        _save_yaml(p["continuity"], cont)
+        done.append("continuity recent_moods cleared")
+    _set_consent(home, "mood", False)
+    done.append("consent.mood revoked")
+    return done, None
+
+
 def cmd_forget(args):
     home = home_dir(args.home)
     p = _paths(home)
-    done = []
     if args.all:
         if not args.yes:
             print(json.dumps({"ok": False, "error": "refusing to wipe without --yes"}))
@@ -786,31 +1252,57 @@ def cmd_forget(args):
             shutil.rmtree(home)
         print(json.dumps({"ok": True, "wiped": home}, ensure_ascii=False))
         return
+
+    def usage(msg):
+        print(json.dumps({"ok": False, "error": msg}, ensure_ascii=False))
+        raise SystemExit(2)
+
+    def refuse(payload):
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+        raise SystemExit(3)
+
+    if args.month and not re.fullmatch(r"\d{4}-\d{2}", args.month):
+        usage(f"--month must be YYYY-MM (got {args.month!r})")
+    if args.entry:
+        try:
+            datetime.date.fromisoformat(args.entry)
+        except ValueError:
+            usage(f"--entry must be YYYY-MM-DD (got {args.entry!r})")
+    if args.nth is not None and not args.entry:
+        usage("--nth only makes sense with --entry")
+    if args.with_entries and not args.person:
+        usage("--with-entries only makes sense with --person NAME")
+    if args.person is not None and not args.person.strip():
+        usage("--person needs a name")
+
+    done, extra = [], {}
     if args.birth:
-        prof = _load_yaml(p["profile"])
-        prof["birth"] = {"date": None, "time": None, "time_known": None, "place": None,
-                         "lat": None, "lon": None, "tz_at_birth": None,
-                         "conventions": prof.get("birth", {}).get("conventions", {})}
-        prof["updated"] = _today()
-        _save_yaml(p["profile"], prof)
-        consent = _load_yaml(p["consent"])
-        consent["birth"] = {"granted": False, "date": _today()}
-        _save_yaml(p["consent"], consent)
-        # delete cached natal chart
-        destiny = os.path.join(p["modules"], "destiny.yaml")
-        if os.path.exists(destiny):
-            os.remove(destiny)
-        done.append("birth data + cached charts removed")
+        done += _forget_birth(home)
     if args.month:
-        month_path = os.path.join(p["journal"], f"{args.month}.md")
-        if os.path.exists(month_path):
-            os.remove(month_path)
-        # drop index rows for that month
-        rows = trends_mod._load(p["index"])
-        kept = [r for r in rows if not (r.get("date", "").startswith(args.month))]
-        _atomic_write(p["index"], "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in kept))
-        done.append(f"journal {args.month} removed ({len(rows) - len(kept)} entries)")
-    print(json.dumps({"ok": True, "done": done or ["nothing matched"]}, ensure_ascii=False))
+        done += _forget_month(home, args.month)
+    if args.entry:
+        d, err = _forget_entry(home, args.entry, args.nth)
+        if err:
+            refuse(err)
+        done += d
+    if args.person:
+        rep, err = _forget_person(home, args.person.strip(), args.with_entries)
+        if err:
+            refuse(err)
+        done += rep.pop("done")
+        extra.update(rep)
+    if args.relationships:
+        d, note = _forget_relationships(home)
+        done += d
+        if note:
+            extra["_note"] = note
+    if args.mood:
+        d, err = _forget_mood(home)
+        if err:
+            refuse(err)
+        done += d
+    print(json.dumps({"ok": True, "done": done or ["nothing matched"], **extra},
+                     ensure_ascii=False, indent=2))
 
 
 def main():
@@ -893,6 +1385,19 @@ def main():
     fg = sub.add_parser("forget")
     fg.add_argument("--birth", action="store_true")
     fg.add_argument("--month", default=None, help="YYYY-MM")
+    fg.add_argument("--entry", default=None, metavar="YYYY-MM-DD",
+                    help="delete ONE journal entry from that day (add --nth if it has several)")
+    fg.add_argument("--nth", type=int, default=None,
+                    help="with --entry: which entry of that day, 1 = the earliest")
+    fg.add_argument("--person", default=None, metavar="NAME",
+                    help="delete what is stored about one person: their relationship record, "
+                         "their name in the journal index, and threads/summary naming them")
+    fg.add_argument("--with-entries", action="store_true",
+                    help="with --person: also delete the journal entries that mention them")
+    fg.add_argument("--relationships", action="store_true",
+                    help="delete the whole relationships category and revoke its consent")
+    fg.add_argument("--mood", action="store_true",
+                    help="delete every stored mood value and revoke mood consent")
     fg.add_argument("--all", action="store_true")
     fg.add_argument("--yes", action="store_true")
     fg.set_defaults(func=cmd_forget)

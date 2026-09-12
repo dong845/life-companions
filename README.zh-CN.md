@@ -111,13 +111,21 @@ git clone --depth 1 https://github.com/dong845/life-companions.git ~/.claude/ski
 
 **同意分类、可撤销**：生辰、感情、情绪各自单独授权。没授权就不收集、不推断、不存储。
 
-**删除是真删**，对它说就行，文件是真的会消失：
+**删除是真删**，对它说就行。删的不只是那一个文件：日记、索引、关系记录、工作记忆、表单留下的
+标记里对应的内容会一起清掉（测试会在删完之后把整个目录搜一遍）：
 
 | 你说 | 实际执行 |
 |---|---|
 | 「删掉我的生辰数据」 | `companion.py forget --birth` |
 | 「忘掉六月」 | `companion.py forget --month 2026-06` |
+| 「把刚才那条删了」 | `companion.py forget --entry 2026-06-18 --nth 2` |
+| 「关于他的都删了」 | `companion.py forget --person 小李 --with-entries` |
+| 「不要再记感情的事」 | `companion.py forget --relationships` |
+| 「情绪分数都删了」 | `companion.py forget --mood` |
 | 「全部清空」 | `companion.py forget --all --yes` |
+
+**撤回同意和删除是两件事。** 说「别再用我的生辰」，所有脚本马上停止读取这一类数据，但文件先留着，
+并且告诉你还留着什么、用哪条命令删。误撤回不会丢东西。
 
 所有计算都是**离线**的，八字、星盘、职业匹配都不联网，所以你的数据不会离开这台机器，
 也不产生任何 API 费用。

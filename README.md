@@ -132,14 +132,22 @@ can read it) and **is never uploaded anywhere**:
 
 **Consent is per category and revocable.** Birth data, relationship details and mood
 history are each granted separately. Without consent it isn't collected, inferred or
-stored.
+stored. Revoking is not deleting: the moment you say no, every script stops reading that
+category, but the files stay and you are told what is still stored and how to delete it,
+so a mistaken revoke loses nothing.
 
-**Deletion is real.** Just ask, and files actually disappear:
+**Deletion is real, and it reaches every copy.** Just ask. It removes the matching
+content from the journal, its index, the relationship log, the working memory and the
+caches, not only the one obvious file (the tests search the whole folder afterwards):
 
 | Say | Runs |
 |---|---|
 | "delete my birth data" | `companion.py forget --birth` |
 | "forget June" | `companion.py forget --month 2026-06` |
+| "delete what I just logged" | `companion.py forget --entry 2026-06-18 --nth 2` |
+| "delete everything about him" | `companion.py forget --person Sam --with-entries` |
+| "stop keeping relationship notes" | `companion.py forget --relationships` |
+| "delete my mood scores" | `companion.py forget --mood` |
 | "wipe everything" | `companion.py forget --all --yes` |
 
 Every computation is **offline**. BaZi, charts and career matching make no network

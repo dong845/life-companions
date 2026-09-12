@@ -349,8 +349,11 @@ def write_onboarding(home, form):
                "mood_consent": bool(g("mood_consent")),
                "todo": todo,
                "ts": datetime.datetime.now().isoformat(timespec="seconds")}
+    # The marker only has to say that a submit happened. It used to carry the birth date,
+    # which then outlived `forget --birth` in a file nobody thought of as birth data.
+    marker = {k: v for k, v in summary.items() if k != "birth_date"}
     with open(os.path.join(home, ".form_result.json"), "w", encoding="utf-8") as f:
-        json.dump(summary, f, ensure_ascii=False)
+        json.dump(marker, f, ensure_ascii=False)
     return summary, "档案已建好——语言、语气、所在地都记下了。" + (
         "生辰也存好了，随时可以起命盘。" if birth_ok else "想看命盘的话，之后补上生辰就行。")
 

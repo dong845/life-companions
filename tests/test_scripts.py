@@ -1760,6 +1760,252 @@ class TestCareerValidity(unittest.TestCase):
         self.assertEqual(len(names), len(self.occ))
 
 
+def _home_text(home):
+    """Every byte of every file under a companion home, for residue searches."""
+    out = []
+    for dp, _, fn in os.walk(home):
+        for f in fn:
+            with open(os.path.join(dp, f), encoding="utf-8", errors="ignore") as fh:
+                out.append(fh.read())
+    return "\n".join(out)
+
+
+def _index_rows(home):
+    path = os.path.join(home, "journal", "index.jsonl")
+    if not os.path.exists(path):
+        return []
+    with open(path, encoding="utf-8") as f:
+        return [json.loads(l) for l in f if l.strip()]
+
+
+class TestRevokedConsentStopsUse(HomeCase):
+    """Revoking consent flipped one boolean in consent.yaml and changed nothing else:
+    relationship_patterns.py kept analysing the person, `brief` kept serving the birth
+    block, `trend` kept averaging moods — and add-entry stored another person's name with
+    no relationships consent at all. The contract now: revoking STOPS every read and write
+    of that category, says what is still stored, and names the command that deletes it.
+    Deleting stays its own explicit step (`forget`), so a mistaken revoke loses nothing."""
+
+    def _seed_relationships(self):
+        run("companion.py", "consent", "--set", "relationships=yes", "mood=yes", home=self.home)
+        run("companion.py", "cache", "--module", "relationships", "--merge-json", json.dumps(
+            {"people": {"小李": {"relationship": "partner", "incidents": [
+                {"date": "2026-08-10", "gist": "吵架", "lens": "pursue-withdraw"},
+                {"date": "2026-08-20", "gist": "冷战", "lens": "pursue-withdraw"}]}}}),
+            home=self.home)
+        for day in ("2026-08-10", "2026-08-20"):
+            run("companion.py", "add-entry", "--date", day, "--text", "又和小李闹别扭",
+                "--people", "小李", "--mood", "3", home=self.home)
+
+    def test_people_are_not_stored_without_relationships_consent(self):
+        r = jrun("companion.py", "add-entry", "--text", "和小李吵架了", "--people", "小李",
+                 home=self.home)
+        self.assertTrue(r["ok"])
+        self.assertTrue(any("people" in d for d in r.get("dropped", [])), r)
+        self.assertEqual(_index_rows(self.home)[0]["people"], [])
+
+    def test_revoking_says_what_is_kept_and_how_to_delete_it(self):
+        self._seed_relationships()
+        r = jrun("companion.py", "consent", "--set", "relationships=no", home=self.home)
+        self.assertTrue(r["ok"])
+        self.assertIn("relationships", r.get("retained", {}), r)
+        self.assertIn("forget --relationships", json.dumps(r, ensure_ascii=False))
+
+    def test_revoked_relationships_are_not_read_any_more(self):
+        self._seed_relationships()
+        run("companion.py", "consent", "--set", "relationships=no", home=self.home)
+        code, out, _ = run("relationship_patterns.py", "--format", "json", home=self.home)
+        self.assertEqual(code, 3, out)
+        self.assertNotIn("小李", out)
+        code, out, _ = run("companion.py", "cache", "--module", "relationships", home=self.home)
+        self.assertEqual(code, 3, out)
+        self.assertNotIn("小李", out)
+        t = jrun("companion.py", "trend", "--days", "36500", home=self.home)
+        self.assertNotIn("小李", json.dumps(t, ensure_ascii=False))
+
+    def test_revoked_birth_is_withheld_from_brief_but_not_deleted(self):
+        run("companion.py", "consent", "--set", "birth=yes", home=self.home)
+        run("companion.py", "set-profile", "--merge-json",
+            json.dumps({"birth": {"date": "1993-04-12", "time": "07:35"}}), home=self.home)
+        run("companion.py", "consent", "--set", "birth=no", home=self.home)
+        b = jrun("companion.py", "brief", home=self.home)
+        self.assertNotIn("1993-04-12", json.dumps(b, ensure_ascii=False))
+        with open(os.path.join(self.home, "profile.yaml"), encoding="utf-8") as f:
+            self.assertIn("1993-04-12", f.read(), "revoking must not delete; that is forget")
+        run("companion.py", "consent", "--set", "birth=yes", home=self.home)
+        self.assertEqual(jrun("companion.py", "brief", home=self.home)
+                         ["profile"]["birth"]["date"], "1993-04-12")
+
+    def test_revoked_mood_is_withheld_from_brief_and_trend(self):
+        run("companion.py", "consent", "--set", "mood=yes", home=self.home)
+        for m in ("3", "4", "5", "6"):
+            run("companion.py", "add-entry", "--text", "x", "--mood", m, home=self.home)
+        run("companion.py", "continuity", "--merge-json",
+            json.dumps({"recent_moods": [3, 4]}), home=self.home)
+        run("companion.py", "consent", "--set", "mood=no", home=self.home)
+        t = jrun("companion.py", "trend", "--days", "30", home=self.home)
+        self.assertIsNone(t["mood_avg"])
+        self.assertIsNone(t["mood_direction"])
+        b = jrun("companion.py", "brief", home=self.home)
+        self.assertEqual(b["continuity"]["recent_moods"], [])
+        self.assertTrue(all(r["mood"] is None for r in b["journal"]["recent"]))
+
+
+class TestForgetLeavesNoTrace(HomeCase):
+    """「删除是真删」 was true of the one file each command named and false everywhere else.
+    `forget --month` removed the journal file and left the month's quarrel in the rolling
+    summary, its follow-up thread and the person's incident log; `forget --birth` left the
+    birth date in the onboarding form's result marker; and the only way to delete one
+    entry — including the crisis entry safety.md promises can be deleted — was to delete
+    the whole month. These search the WHOLE home afterwards, because residue lands
+    wherever nobody thought to look."""
+
+    def test_forget_month_removes_that_month_from_every_store(self):
+        import yaml
+        run("companion.py", "consent", "--set", "relationships=yes", "mood=yes", home=self.home)
+        run("companion.py", "add-entry", "--date", "2026-07-02", "--text", "七月很平静",
+            "--mood", "6", home=self.home)
+        run("companion.py", "add-entry", "--date", "2026-08-10", "--text",
+            "AUG-SECRET 和小李吵架", "--people", "小李", "--mood", "3", home=self.home)
+        run("companion.py", "cache", "--module", "relationships", "--merge-json", json.dumps(
+            {"people": {
+                "小李": {"incidents": [
+                    {"date": "2026-07-01", "gist": "七月的小事", "lens": "criticism"},
+                    {"date": "2026-08-10", "gist": "AUG-SECRET 争吵", "lens": "pursue-withdraw"}]},
+                "老王": {"incidents": [
+                    {"date": "2026-08-12", "gist": "AUG-SECRET 同事冲突", "lens": "criticism"}]}}}),
+            home=self.home)
+        run("companion.py", "continuity", "--merge-json", json.dumps(
+            {"rolling_summary": "AUG-SECRET 和小李反复吵架",
+             "open_threads": [
+                 {"thread": "AUG-SECRET 好好谈一次", "opened": "2026-08-10", "status": "open"},
+                 {"thread": "七月的计划", "opened": "2026-07-02", "status": "open"}],
+             "recent_moods": [3]}), home=self.home)
+        r = jrun("companion.py", "forget", "--month", "2026-08", home=self.home)
+        self.assertTrue(r["ok"], r)
+        self.assertNotIn("AUG-SECRET", _home_text(self.home))
+        _, out, _ = run("companion.py", "journal", home=self.home)
+        self.assertIn("七月很平静", out)
+        with open(os.path.join(self.home, "state", "modules", "relationships.yaml"),
+                  encoding="utf-8") as f:
+            people = (yaml.safe_load(f) or {})["people"]
+        self.assertEqual([i["date"] for i in people["小李"]["incidents"]], ["2026-07-01"])
+        self.assertNotIn("老王", people, "nothing is left of someone known only from August")
+        with open(os.path.join(self.home, "state", "continuity.yaml"), encoding="utf-8") as f:
+            cont = yaml.safe_load(f)
+        self.assertEqual([t["thread"] for t in cont["open_threads"]], ["七月的计划"])
+
+    def test_forget_birth_removes_it_from_the_form_marker_too(self):
+        import form_server
+        form_server.write_onboarding(self.home, {
+            "name": ["X"], "locale": ["zh"], "region": ["cn"], "tone": ["concise"],
+            "birth_consent": ["on"], "birth_date": ["1993-04-12"], "birth_time": ["07:35"],
+            "birth_place": ["Beijing, CN"], "gender": ["m"]})
+        self.assertIn("1993-04-12", _home_text(self.home), "setup must really store it")
+        run("companion.py", "forget", "--birth", home=self.home)
+        self.assertNotIn("1993-04-12", _home_text(self.home))
+
+    def _four_entries(self):
+        for day, text in (("2026-08-01", "第一条 早上"), ("2026-08-02", "第二条 MIDDLE-A"),
+                          ("2026-08-02", "第三条 MIDDLE-B"), ("2026-08-03", "第四条 最后")):
+            run("companion.py", "add-entry", "--date", day, "--text", text, home=self.home)
+
+    def test_forget_one_entry_keeps_the_rest_readable(self):
+        self._four_entries()
+        r = jrun("companion.py", "forget", "--entry", "2026-08-02", "--nth", "2",
+                 home=self.home)
+        self.assertTrue(r["ok"], r)
+        self.assertNotIn("MIDDLE-B", _home_text(self.home))
+        _, out, _ = run("companion.py", "journal", "--limit", "10", home=self.home)
+        for keep in ("第一条", "MIDDLE-A", "第四条"):
+            self.assertIn(keep, out)
+        rows = _index_rows(self.home)
+        self.assertEqual(len(rows), 3)
+        for row in rows:      # every surviving row still points at its own entry
+            with open(os.path.join(self.home, row["file"]), encoding="utf-8") as f:
+                self.assertTrue(f.read()[row["offset"]:].lstrip("\n")
+                                .startswith(f"## {row['date']}"), row)
+
+    def test_forget_entry_refuses_an_ambiguous_date(self):
+        self._four_entries()
+        r = jrun("companion.py", "forget", "--entry", "2026-08-02", home=self.home)
+        self.assertFalse(r["ok"])
+        self.assertEqual(len(r.get("candidates", [])), 2, r)
+        self.assertIn("MIDDLE-B", _home_text(self.home), "an ambiguous call deletes nothing")
+
+    def test_forget_entry_refuses_when_the_index_no_longer_matches_the_file(self):
+        self._four_entries()
+        path = os.path.join(self.home, "journal", "2026-08.md")
+        with open(path, encoding="utf-8") as f:
+            body = f.read()
+        with open(path, "w", encoding="utf-8") as f:
+            f.write("hand-edited preface\n" + body)
+        code, out, _ = run("companion.py", "forget", "--entry", "2026-08-03", home=self.home)
+        self.assertEqual(code, 3, out)       # a refusal, not an unknown-flag usage error
+        self.assertIn("no longer matches", out)
+        self.assertIn("第四条", _home_text(self.home))
+
+    def _people_setup(self):
+        run("companion.py", "consent", "--set", "relationships=yes", home=self.home)
+        run("companion.py", "add-entry", "--date", "2026-08-10", "--text", "和小李吵架了",
+            "--people", "小李", home=self.home)
+        run("companion.py", "add-entry", "--date", "2026-08-11", "--text", "今天读书",
+            home=self.home)
+        run("companion.py", "cache", "--module", "relationships", "--merge-json", json.dumps(
+            {"people": {"小李": {"incidents": [
+                            {"date": "2026-08-10", "gist": "吵架", "lens": "criticism"}]},
+                        "阿May": {"incidents": [
+                            {"date": "2026-08-11", "gist": "聊天", "lens": "bid"}]}}}),
+            home=self.home)
+        run("companion.py", "continuity", "--merge-json", json.dumps(
+            {"rolling_summary": "最近和小李关系紧张", "open_threads": [
+                {"thread": "跟小李道歉", "opened": "2026-08-10", "status": "open"},
+                {"thread": "读完那本书", "opened": "2026-08-11", "status": "open"}]}),
+            home=self.home)
+
+    def test_forget_person_with_entries_removes_them_everywhere(self):
+        self._people_setup()
+        r = jrun("companion.py", "forget", "--person", "小李", "--with-entries", home=self.home)
+        self.assertTrue(r["ok"], r)
+        text = _home_text(self.home)
+        self.assertNotIn("小李", text)
+        for keep in ("今天读书", "阿May", "读完那本书"):
+            self.assertIn(keep, text)
+
+    def test_forget_person_alone_lists_the_entries_that_still_mention_them(self):
+        self._people_setup()
+        r = jrun("companion.py", "forget", "--person", "小李", home=self.home)
+        self.assertTrue(r["ok"], r)
+        self.assertEqual([e["date"] for e in r["entries_still_mentioning"]], ["2026-08-10"])
+        _, out, _ = run("companion.py", "journal", home=self.home)
+        self.assertIn("和小李吵架了", out, "the prose stays until they ask for it too")
+
+    def test_forget_relationships_removes_the_category(self):
+        self._people_setup()
+        r = jrun("companion.py", "forget", "--relationships", home=self.home)
+        self.assertTrue(r["ok"], r)
+        self.assertFalse(os.path.exists(
+            os.path.join(self.home, "state", "modules", "relationships.yaml")))
+        self.assertTrue(all(row["people"] == [] for row in _index_rows(self.home)))
+        self.assertFalse(jrun("companion.py", "status", home=self.home)
+                         ["consent"]["relationships"])
+
+    def test_forget_mood_strips_every_mood_value(self):
+        import re
+        run("companion.py", "consent", "--set", "mood=yes", home=self.home)
+        for m in ("3", "7"):
+            run("companion.py", "add-entry", "--text", "x", "--mood", m, home=self.home)
+        run("companion.py", "continuity", "--merge-json",
+            json.dumps({"recent_moods": [3, 7]}), home=self.home)
+        r = jrun("companion.py", "forget", "--mood", home=self.home)
+        self.assertTrue(r["ok"], r)
+        self.assertTrue(all(row["mood"] is None for row in _index_rows(self.home)))
+        self.assertIsNone(re.search(r"mood \d+/10", _home_text(self.home)))
+        self.assertEqual(jrun("companion.py", "brief", home=self.home)
+                         ["continuity"]["recent_moods"], [])
+        self.assertFalse(jrun("companion.py", "status", home=self.home)["consent"]["mood"])
+
+
 class TestDeps(unittest.TestCase):
     def test_doctor_reports_without_installing(self):
         rep = jrun("companion.py", "doctor")

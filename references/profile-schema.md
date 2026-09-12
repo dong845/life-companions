@@ -76,7 +76,10 @@ every `trend` average, which is presented as a computed fact). It is `null` for
 text-only entries, and `add-entry` returns a `dropped` list when `consent.mood` is not
 granted so the drop is never silent;
 `crisis_flag` lets `safety_scan`/`trends` scan cheaply; `people` powers
-relationship pattern-tracking; `offset` points back into the prose.
+relationship pattern-tracking and is therefore gated by `consent.relationships`
+(`add-entry` drops it without that consent and says so in `dropped`); `offset` points
+back into the prose. `forget --entry` / `--person` / `--mood` rewrite the file and every
+offset together, and refuse outright if the file no longer matches the index.
 
 ## `state/continuity.yaml` — loaded first every turn
 ```yaml

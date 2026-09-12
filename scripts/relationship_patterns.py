@@ -307,7 +307,25 @@ def main():
     args = ap.parse_args()
     if args.selftest:
         raise SystemExit(0 if _selftest() else 1)
-    people = load_people(home_dir(args.home))
+    home = home_dir(args.home)
+    # Revoking relationships consent has to stop this read too. The records are about
+    # someone else, and a "revoked" category that still gets analysed isn't revoked.
+    consent = {}
+    consent_path = os.path.join(home, "consent.yaml")
+    if os.path.exists(consent_path):
+        with open(consent_path, encoding="utf-8") as f:
+            consent = yaml.safe_load(f) or {}
+    if (consent.get("relationships") or {}).get("granted") is not True:
+        refusal = {"ok": False,
+                   "error": ("consent.relationships is not granted — relationship records "
+                             "are withheld"),
+                   "_next": ("Ask first: `companion.py consent --set relationships=yes` "
+                             "restores access to anything stored; `companion.py forget "
+                             "--relationships` deletes it.")}
+        print(json.dumps(refusal, ensure_ascii=False, indent=2) if args.format == "json"
+              else f"{refusal['error']}\n{refusal['_next']}")
+        raise SystemExit(3)
+    people = load_people(home)
     r = scan(people, only=args.person)
     print(_text(r) if args.format == "text" else json.dumps(r, ensure_ascii=False, indent=2))
 

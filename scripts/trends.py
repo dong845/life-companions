@@ -66,10 +66,27 @@ def aggregate(home=None, days=30):
     recent = [r for r in rows
               if r.get("date") and datetime.date.fromisoformat(r["date"]) >= cutoff]
 
-    moods = [r["mood"] for r in recent if isinstance(r.get("mood"), (int, float))]
+    # Consent-gated categories are withheld here too. A trend is shown to the person as a
+    # computed FACT, so an average over moods they asked us to stop using is exactly what
+    # revoking consent has to stop.
+    consent = {}
+    consent_path = os.path.join(home, "consent.yaml")
+    if os.path.exists(consent_path):
+        import sys
+        if os.path.dirname(os.path.abspath(__file__)) not in sys.path:
+            sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        from _deps import ensure
+        with open(consent_path, encoding="utf-8") as f:
+            consent = ensure("PyYAML", "yaml").safe_load(f) or {}
+    withheld = [c for c in ("mood", "relationships")
+                if (consent.get(c) or {}).get("granted") is not True]
+
+    moods = ([r["mood"] for r in recent if isinstance(r.get("mood"), (int, float))]
+             if "mood" not in withheld else [])
     tags = Counter(t for r in recent for t in (r.get("tags") or []))
     themes = Counter(t for r in recent for t in (r.get("themes") or []))
-    people = Counter(p for r in recent for p in (r.get("people") or []))
+    people = (Counter(p for r in recent for p in (r.get("people") or []))
+              if "relationships" not in withheld else Counter())
 
     # mood direction: compare first vs second half of the window
     direction = None
@@ -92,6 +109,7 @@ def aggregate(home=None, days=30):
         "top_tags": tags.most_common(6),
         "top_themes": themes.most_common(6),
         "recurring_people": [p for p, c in people.most_common(6) if c > 1],
+        "withheld_without_consent": withheld,
         "_note": "Descriptive summary of what was logged. Not a prediction.",
     }
 

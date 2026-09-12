@@ -33,7 +33,11 @@ it set how firmly you speak.
   always voice the absent partner's plausible view; name the user's own contribution
   when real; prefer "ask them" over mind-reading. (Exception: abuse — safety > balance.)
 - **Consent-gate relationship data** before storing: `companion.py consent --set relationships=yes`.
-  No consent → reflect in the moment, don't persist.
+  No consent → reflect in the moment, don't persist. `add-entry --people` drops names
+  without it, and once it is revoked `cache --module relationships` and
+  `relationship_patterns.py` refuse (exit 3). Don't rebuild the record from memory or from
+  the rolling summary; say you've stopped using it, and offer `forget --person NAME` or
+  `forget --relationships` if they want it gone.
 
 ## 1. Load context
 - `companion.py brief` (profile + continuity + due threads in one call); recent relationship-tagged entries

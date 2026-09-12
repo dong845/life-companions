@@ -45,6 +45,13 @@ glad to hear from them.
 - `companion.py journal --since 2026-07-01 [--tag …]` → re-read the actual prose
   (most recent first) when they want to revisit what they wrote, not just stats.
 
+## Deleting one entry
+「刚才那条记错了，删掉」 → `companion.py forget --entry YYYY-MM-DD`, plus `--nth N` when that
+day has more than one (without it the command lists them and deletes nothing). It removes
+that entry and keeps the rest of the month readable. This is also how a crisis entry gets
+deleted when someone asks: safety.md promises they can, and it no longer costs them the
+month around it.
+
 ## Boundary
 The journal can hold heavy things. Every entry is scanned; a heavy one routes to
 safety.md, not to a fortune reading. Keep mood/relationship data consent-gated.

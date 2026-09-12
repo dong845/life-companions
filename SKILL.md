@@ -215,8 +215,11 @@ facts. The reading gets to say what they feel about it. It does not get a vote.
   each consent-gated (`companion.py consent`), and this is **enforced in code**, not
   merely asked of you: `set-profile` refuses a birth block and `cache --module
   relationships` refuses third-party notes until consent is recorded (exit 3 with a
-  refusal payload). Ask plainly first — don't work around a refusal. Everything is
-  local; "forget" commands really delete.
+  refusal payload), and `add-entry --people` drops names without it. Ask plainly first
+  — don't work around a refusal. **Revoking stops use; `forget` deletes**: after
+  `consent --set X=no` the scripts refuse to read X and report what is still stored,
+  and each `forget` (safety.md §4) removes its data from every store, not just one
+  file. Everything is local.
 - **Crisis overrides all.** See the block immediately below — it is inline because
   a fabricated helpline number is the worst thing this skill could ever produce, and
   a rule that lives only in a file you were told to read "when in doubt" is a rule
@@ -249,8 +252,8 @@ both can escalate danger. Believe them, validate, route to specialists, respect 
 timing. On a **first contact with no profile yet, store nothing** — no consent means no
 storage, and that rule matters most, not least, for the most sensitive words someone
 will type here. For someone who has already consented to journaling, log it with
-`add-entry --crisis`, say so in one plain line, and tell them they can delete it. Never
-log covertly.
+`add-entry --crisis`, say so in one plain line, and tell them they can delete it
+(`forget --entry DATE [--nth N]` removes exactly that entry). Never log covertly.
 Then **read `references/safety.md` §2 in full** — this table is the part that must never
 be missing, not the whole procedure.
 
@@ -318,6 +321,11 @@ python3 $D/scripts/companion.py cache --module destiny   # what reading you alre
 python3 $D/scripts/companion.py trend --days 30
 python3 $D/scripts/companion.py journal --since 2026-07-01   # re-read prose entries
 python3 $D/scripts/companion.py forget --birth        # real deletion
+python3 $D/scripts/companion.py forget --entry 2026-08-10 --nth 2      # ONE entry (lists them if you omit --nth)
+python3 $D/scripts/companion.py forget --person 小李 --with-entries    # everything about one person
+#   also --month YYYY-MM · --relationships · --mood · --all --yes. Each removes what it names
+#   from EVERY store (journal, index, relationship log, continuity, caches, form marker).
+#   `consent --set X=no` only STOPS use: scripts refuse to read X and report what is kept.
 python3 $D/scripts/bazi.py --date 1993-04-12 --time 07:35 --gender m --tz Asia/Shanghai --on-date today --format json  # 生肖/五行tips
 #   --tz is the BIRTHPLACE zone (profile birth.tz_at_birth). 節氣 are absolute instants
 #   resolved on a Beijing clock, so omitting it can hand back the wrong year/month

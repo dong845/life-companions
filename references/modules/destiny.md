@@ -45,6 +45,14 @@ payload records both frames under `conventions`. With no `--tz` the chart still
 computes, but it says out loud that it assumed the birth clock was Beijing time —
 surface that to the person rather than letting it pass.
 
+**True Solar Time changes the clock, not the moment of birth.** With `--true-solar-time`
+the 时柱 is read off the longitude-corrected clock, and so is the 日柱 when the correction
+crosses midnight (the payload says so when it does). 年柱, 月柱, 立春 and 起运 stay on the
+real birth instant. TST used to shift that instant too, so switching it on could move
+立春 and give a western-China birth a different year pillar and a 大运 running the other
+way. Everything the payload derives — 十神, the 五行 tally, 大运, 生肖, 命宫/胎元 — is read
+off the pillars it displays; if you ever see them disagree, that is a bug, not a school.
+
 It's deterministic and fast — recompute freely (v1 doesn't cache). The JSON splits
 `computed` (facts) from `heuristic` (the labeled 扶抑 strength guess) and lists
 `ambiguities`. **Surface the ambiguities honestly** — unknown time, a 23:00 子时
@@ -369,9 +377,14 @@ one-way valve: the traditional relations are computed honestly, and the verdict 
 unavailable.
 
 ```bash
-python3 $D/scripts/synastry.py --a <A date> [--a-time HH:MM] --a-gender m \
-                               --b <B date> [--b-time HH:MM] --b-gender f --format json
+python3 $D/scripts/synastry.py --a <A date> [--a-time HH:MM] --a-gender m --a-tz <A's birthplace zone> \
+                               --b <B date> [--b-time HH:MM] --b-gender f --b-tz <B's birthplace zone> \
+                               [--a-lon … --b-lon … --true-solar-time] [--early-zishi] --format json
 ```
+Give each side the same timezone and conventions you would give bazi.py for that person.
+Without them the comparison assumed both births were on Beijing time, so an overseas
+partner's 属相 cell could differ from their own 命盘. Each side's warnings come back
+labelled A： / B：.
 Consent-gate the partner's birth data first (`relationships=yes`), and only use what
 was volunteered — a third party never consented to being charted.
 

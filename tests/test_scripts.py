@@ -392,6 +392,191 @@ class TestBaZiTimezone(unittest.TestCase):
         self.assertNotIn("strength", r["computed"])
 
 
+class TestBaZiOneChartTwoClocks(unittest.TestCase):
+    """A birth outside Beijing time is read on two clocks: 年/月柱 from the 節氣 instant,
+    日/時柱 from the local clock. The first timezone fix swapped only the two DISPLAYED
+    pillars; everything derived from the chart kept reading the other frame. An Amsterdam
+    birth was shown 癸酉 and handed a 猴 生肖, a 大运 running the wrong way from the wrong
+    month, a 五行 tally of different characters, and 年/月 十神 counted from the NEXT day's
+    day master. True Solar Time broke it from the other side: it shifted the instant that
+    gets compared with the 節氣, so switching it on could move 立春 itself."""
+
+    CASES = (
+        dict(date="1993-02-03", time="21:00", gender="m", tz="Europe/Amsterdam"),
+        dict(date="1993-02-03", time="15:00", gender="f", tz="America/New_York"),
+        dict(date="1993-02-04", time="05:00", gender="m", tz="Asia/Shanghai",
+             lon=87.6, true_solar_time=True),
+        dict(date="1993-04-12", time="07:35", gender="m"),      # control: one clock
+    )
+
+    @staticmethod
+    def _jiazi(gz):
+        import bazi
+        gans, zhis = list(bazi.GAN_ELEMENT), list(bazi.ZHI_MAIN_ELEMENT)
+        return next(i for i in range(60) if gans[i % 10] == gz[0] and zhis[i % 12] == gz[1])
+
+    def _problems(self, r, male):
+        import bazi
+        c = r["computed"]
+        p = {k: v for k, v in c["pillars"].items() if v}
+        dm = p["day"]["gan"]
+        out = []
+        for key, pil in p.items():
+            if key != "day" and pil["ten_god_gan"] != bazi._ten_god(dm, pil["gan"]):
+                out.append(f"{key} 十神 {pil['ten_god_gan']} != {bazi._ten_god(dm, pil['gan'])}")
+            want = [bazi._ten_god(dm, h) for h in pil["hidden_gan"]]
+            if pil["ten_god_hidden"] != want:
+                out.append(f"{key} 藏干十神 {pil['ten_god_hidden']} != {want}")
+        main = {e: 0 for e in bazi.ELEMENTS}
+        hidden = dict(main)
+        for pil in p.values():
+            main[bazi.GAN_ELEMENT[pil["gan"]]] += 1
+            main[bazi.ZHI_MAIN_ELEMENT[pil["zhi"]]] += 1
+            for h in pil["hidden_gan"]:
+                hidden[bazi.GAN_ELEMENT[h]] += 1
+        if c["element_tally"]["main_only"] != main:
+            out.append(f"五行 {c['element_tally']['main_only']} != displayed {main}")
+        if c["element_tally"]["with_hidden"] != {e: main[e] + hidden[e] for e in main}:
+            out.append("五行(含藏干) disagrees with the displayed pillars")
+        lp = c["luck_pillars"]
+        forward = (bazi.GAN_YINYANG[p["year"]["gan"]] == "阳") == male
+        if lp["direction"].startswith("顺") != forward:
+            out.append(f"大运 {lp['direction']} disagrees with year stem {p['year']['gan']}")
+        first = (self._jiazi(p["month"]["ganzhi"]) + (1 if forward else -1)) % 60
+        if self._jiazi(lp["pillars"][0]["ganzhi"]) != first:
+            out.append(f"first 大运 {lp['pillars'][0]['ganzhi']} does not follow "
+                       f"month {p['month']['ganzhi']}")
+        if c["daily"]["zodiac_day"]["animal"] != bazi.ZHI_ANIMAL[p["year"]["zhi"]]:
+            out.append(f"生肖 {c['daily']['zodiac_day']['animal']} != year branch "
+                       f"{p['year']['zhi']}")
+        return out
+
+    def test_everything_derived_reads_the_pillars_it_displays(self):
+        import bazi, datetime
+        for case in self.CASES:
+            r = bazi.compute(**case, on_date=datetime.date(2026, 9, 12))
+            self.assertEqual(self._problems(r, case["gender"] == "m"), [], case)
+
+    def test_true_solar_time_moves_the_hour_not_the_jieqi(self):
+        # Urumqi keeps Beijing time. 05:00 is 83 minutes after 立春 1993 (03:37). TST
+        # pulls the local clock back past 03:37 — but 立春 has already happened.
+        import bazi
+        base = dict(date="1993-02-04", time="05:00", gender="m", tz="Asia/Shanghai", lon=87.6)
+        plain = bazi.compute(**base)["computed"]
+        tst = bazi.compute(**base, true_solar_time=True)["computed"]
+        for key in ("year", "month"):
+            self.assertEqual(plain["pillars"][key]["ganzhi"], tst["pillars"][key]["ganzhi"], key)
+        self.assertEqual(tst["pillars"]["year"]["ganzhi"], "癸酉")
+        self.assertEqual(plain["luck_pillars"]["direction"], tst["luck_pillars"]["direction"])
+        self.assertNotEqual(plain["pillars"]["hour"]["zhi"], tst["pillars"]["hour"]["zhi"],
+                            "TST must still move the hour pillar")
+
+    def test_tst_across_midnight_says_the_day_pillar_moved(self):
+        # 00:30 in Urumqi is about 22:20 the previous evening on the TST clock
+        import bazi
+        r = bazi.compute("1993-04-12", "00:30", "m", tz="Asia/Shanghai", lon=87.6,
+                         true_solar_time=True)
+        self.assertTrue(any("日柱" in a for a in r["ambiguities"]), r["ambiguities"])
+
+    def test_zishi_boundary_is_judged_on_the_clock_actually_used(self):
+        # 01:40 in Urumqi is about 23:30 on the TST clock — inside the 早/晚子时 hour
+        import bazi
+        r = bazi.compute("1993-04-12", "01:40", "m", tz="Asia/Shanghai", lon=87.6,
+                         true_solar_time=True)
+        self.assertTrue(any("子时" in a for a in r["ambiguities"]), r["ambiguities"])
+
+    def test_one_clock_charts_match_the_library_exactly(self):
+        # where both clocks agree, nothing may move: pillars, 十神 and 命宫/身宫/胎元 must
+        # equal lunar-python's own methods
+        import bazi
+        from lunar_python import Solar
+        for y, m, d, hh in ((1993, 4, 12, 7), (1995, 8, 30, 14), (1988, 11, 3, 23),
+                            (2001, 7, 21, 0), (1979, 2, 4, 12), (1966, 9, 9, 18)):
+            date = f"{y}-{m:02d}-{d:02d}"
+            res = bazi.compute(date, f"{hh:02d}:10", "m")["computed"]
+            ours = res["pillars"]
+            ec = Solar.fromYmdHms(y, m, d, hh, 10, 0).getLunar().getEightChar()
+            ec.setSect(2)
+            for key, which in (("year", "Year"), ("month", "Month"), ("day", "Day"),
+                               ("hour", "Time")):
+                self.assertEqual(ours[key]["ganzhi"], getattr(ec, f"get{which}")(), (date, key))
+                self.assertEqual(ours[key]["ten_god_hidden"],
+                                 list(getattr(ec, f"get{which}ShiShenZhi")()), (date, key))
+                if key != "day":
+                    self.assertEqual(ours[key]["ten_god_gan"],
+                                     getattr(ec, f"get{which}ShiShenGan")(), (date, key))
+            self.assertEqual(res["extras"], {"mingong": ec.getMingGong(),
+                                             "shengong": ec.getShenGong(),
+                                             "taiyuan": ec.getTaiYuan()}, date)
+
+    def test_taiyuan_follows_the_displayed_month(self):
+        # 胎元 = month stem +1, month branch +3 — so it must track the month pillar shown
+        import bazi
+        gans, zhis = list(bazi.GAN_ELEMENT), list(bazi.ZHI_MAIN_ELEMENT)
+        for case in self.CASES:
+            c = bazi.compute(**case)["computed"]
+            mg, mz = c["pillars"]["month"]["gan"], c["pillars"]["month"]["zhi"]
+            want = gans[(gans.index(mg) + 1) % 10] + zhis[(zhis.index(mz) + 3) % 12]
+            self.assertEqual(c["extras"]["taiyuan"], want, case)
+
+    def test_unknown_hour_gives_no_minggong_or_shengong(self):
+        # both hang off the birth hour; with no hour the engine read 12:00 and printed a
+        # real-looking 命宫 — the same fabrication 紫微 was already fixed for
+        import bazi
+        ex = bazi.compute("1993-04-12", None, "f")["computed"]["extras"]
+        self.assertIsNone(ex["mingong"])
+        self.assertIsNone(ex["shengong"])
+        self.assertIsNotNone(ex["taiyuan"], "胎元 needs only the month pillar")
+
+
+class TestSynastryUsesTheChartsBaZiComputes(unittest.TestCase):
+    """合婚 compared charts built with no timezone, no True Solar Time and no 早/晚子时
+    setting — while its own warning told the model to add a --tz flag this script did
+    not accept. For an Amsterdam birth the 合婚 year pillar (the 属相 cell) could differ
+    from the person's own 命盘, so every 冲合 reported was about a chart nobody had."""
+
+    A = dict(date="1993-02-03", time="21:00", gender="m", tz="Europe/Amsterdam")
+    B = dict(date="1995-08-30", time="14:20", gender="f", tz="America/New_York")
+
+    def _synastry(self, *extra):
+        code, out, err = run("synastry.py", "--a", self.A["date"], "--a-time", self.A["time"],
+                             "--a-gender", "m", "--a-tz", self.A["tz"],
+                             "--b", self.B["date"], "--b-time", self.B["time"],
+                             "--b-gender", "f", "--b-tz", self.B["tz"], *extra)
+        self.assertEqual(code, 0, err)
+        return json.loads(out)
+
+    @staticmethod
+    def _gz(result):
+        return {k: (v["ganzhi"] if v else None)
+                for k, v in result["computed"]["pillars"].items()}
+
+    def test_each_side_is_the_chart_bazi_computes(self):
+        import bazi
+        r = self._synastry()
+        self.assertEqual(r["computed"]["a"]["pillars"], self._gz(bazi.compute(**self.A)))
+        self.assertEqual(r["computed"]["b"]["pillars"], self._gz(bazi.compute(**self.B)))
+
+    def test_chart_conventions_reach_both_sides(self):
+        import bazi
+        r = self._synastry("--a-lon", "4.9", "--b-lon", "-74.0",
+                           "--true-solar-time", "--early-zishi")
+        conv = dict(true_solar_time=True, late_zishi=False)
+        self.assertEqual(r["computed"]["a"]["pillars"],
+                         self._gz(bazi.compute(**self.A, lon=4.9, **conv)))
+        self.assertEqual(r["computed"]["b"]["pillars"],
+                         self._gz(bazi.compute(**self.B, lon=-74.0, **conv)))
+
+    def test_missing_tz_warning_names_flags_this_script_has(self):
+        r = jrun("synastry.py", "--a", "1993-04-12", "--a-time", "07:35",
+                 "--b", "1995-08-30", "--b-time", "14:20")
+        text = " ".join(r["ambiguities"])
+        self.assertIn("--a-tz", text)
+        self.assertIn("--b-tz", text)
+        self.assertEqual(len(r["ambiguities"]), len(set(r["ambiguities"])),
+                         f"duplicated warnings: {r['ambiguities']}")
+
+
 class TestTimezoneResolution(unittest.TestCase):
     """identity.timezone decides daily timing AND which country's crisis line the
     person is offered, so a confident wrong answer is worse than no answer."""

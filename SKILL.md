@@ -322,6 +322,9 @@ python3 $D/scripts/bazi.py --date 1993-04-12 --time 07:35 --gender m --tz Asia/S
 #   --tz is the BIRTHPLACE zone (profile birth.tz_at_birth). 節氣 are absolute instants
 #   resolved on a Beijing clock, so omitting it can hand back the wrong year/month
 #   pillar for any birth outside UTC+8 — the payload says when it had to assume.
+#   --true-solar-time (needs --lon) moves only the 时柱, plus the 日柱 when the correction
+#   crosses midnight; 年柱/月柱/起运 stay on the real birth instant. Every 十神, 五行 count,
+#   大运 and 生肖 in the payload is read off the pillars it displays.
 python3 $D/scripts/astro.py --date 1993-04-12 --time 07:35 --tz Asia/Shanghai --on-date today --format json  # 星座 daily
 #   --tz matters in DAILY mode too: without it the birth clock is read as UT, and the
 #   daily card can report a different Sun sign than the natal chart for the same person.
@@ -329,7 +332,9 @@ python3 $D/scripts/astro.py --date 1993-04-12 --time 07:35 --natal --lat 52.16 -
 python3 $D/scripts/career_match.py --find "产品经理"   # map their WORDS to a real O*NET occupation first
 python3 $D/scripts/career_match.py --selftest   # career-fit engine; --demo to rank shipped occupations
 python3 $D/scripts/relationship_patterns.py --format text   # base-rate over logged relationship incidents
-python3 $D/scripts/synastry.py --a 1993-04-12 --b 1995-08-30 --format text   # 合婚: traditional relations, NO verdict
+python3 $D/scripts/synastry.py --a 1993-04-12 --a-time 07:35 --a-tz Asia/Shanghai --b 1995-08-30 --b-tz Europe/Amsterdam --format text   # 合婚: NO verdict
+#   each side takes the same --a-tz/--b-tz (and --a-lon/--b-lon) as bazi.py; --true-solar-time
+#   and --early-zishi apply to both, so each chart is the one that person's own 命盘 shows.
 python3 $D/scripts/ziwei.py --date 1993-04-12 --time 07:35 --gender m --tz Asia/Shanghai --format text  # 紫微命盘 (needs the hour)
 python3 $D/scripts/selfcheck.py --module destiny --file draft.md   # ★ honesty + voice gate
 #   --module must match the lens: synastry has its OWN no-verdict blockers that fire

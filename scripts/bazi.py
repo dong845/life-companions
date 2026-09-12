@@ -516,6 +516,83 @@ def _sxtwl_year_boundary_check(y, m, d, on_lichun_day=False):
 
 
 # ---------------------------------------------------------------------------
+# One chart, two clocks.
+#
+# A birth is read on two clocks, and mixing them up is how this engine has gone wrong
+# more than once:
+#   * the INSTANT: the civil birth clock moved onto Beijing time. 節氣 are absolute
+#     astronomical moments, so 年柱/月柱, the 立春 check, 大运 direction and 起运 are all
+#     decided on it. True Solar Time must never touch it: TST reinterprets a clock, it
+#     does not move the moment of birth.
+#   * the LOCAL clock: the civil clock, or its True Solar Time. 日柱/時柱 hang off the
+#     local day and the local 時辰.
+# lunar-python builds a chart from ONE datetime, so two clocks mean two EightChar objects.
+# The first timezone fix swapped only the two displayed pillars; the 五行 tally, 十神, 大运,
+# 生肖 and 命宫 kept reading the local-clock chart, so an Amsterdam birth was shown one
+# year pillar and read against another. TST had the opposite bug: it shifted the instant,
+# so switching it on could move 立春. Everything derived now goes through one _FramedChart.
+_SHISHEN_METHODS = {f"get{w}ShiShen{p}": (w, p)
+                    for w in ("Year", "Month", "Day", "Time") for p in ("Gan", "Zhi")}
+
+
+class _FramedChart:
+    """年/月 from the 節氣 frame, 日/時 from the local clock, and 十神 always counted from
+    the day master actually shown. The library's own 十神 methods use the day stem of
+    whichever clock their pillar was read on, which for an evening birth west of Beijing
+    is the NEXT day's."""
+
+    def __init__(self, jieqi_chart, local_chart):
+        self._jq = jieqi_chart
+        self._local = local_chart
+
+    def __getattr__(self, name):
+        if name in _SHISHEN_METHODS:
+            which, part = _SHISHEN_METHODS[name]
+            src = self._jq if which in ("Year", "Month") else self._local
+            day_gan = self._local.getDayGan()
+            if part == "Gan":
+                return lambda: _ten_god(day_gan, getattr(src, f"get{which}Gan")())
+            return lambda: [_ten_god(day_gan, h) for h in getattr(src, f"get{which}HideGan")()]
+        src = self._jq if name.startswith(("getYear", "getMonth")) else self._local
+        return getattr(src, name)
+
+
+def _extras(chart, hour_known):
+    """命宫 / 身宫 / 胎元 by lunar-python's own formulas, fed the pillars actually shown.
+
+    The library derives them from one clock's month and hour, so a chart read on two
+    clocks got them from the wrong month. And with no birth hour the engine read its
+    12:00 placeholder and printed a real-looking 命宫, the fabrication 紫微 was already
+    fixed for: 命宫 and 身宫 hang off the hour, so without one they are None. The
+    formulas are pinned against the library on one-clock charts in tests/test_scripts.py."""
+    from lunar_python import EightChar
+    from lunar_python.util import LunarUtil
+    year_gan = LunarUtil.GAN.index(chart.getYearGan()) - 1            # 0-based, 甲 = 0
+    month_gan = LunarUtil.GAN.index(chart.getMonthGan()) - 1
+    month_zhi = chart.getMonthZhi()
+    taiyuan = (LunarUtil.GAN[(month_gan + 1) % 10 + 1]                 # getTaiYuan
+               + LunarUtil.ZHI[(LunarUtil.ZHI.index(month_zhi) - 1 + 3) % 12 + 1])
+    if not hour_known:
+        return {"mingong": None, "shengong": None, "taiyuan": taiyuan}
+    time_zhi = chart.getTimeZhi()
+
+    def stem(offset):
+        gi = (year_gan + 1) * 2 + offset
+        while gi > 10:
+            gi -= 10
+        return LunarUtil.GAN[gi]
+
+    m_i = EightChar.MONTH_ZHI.index(month_zhi)                         # 寅 = 1 … 丑 = 12
+    off = m_i + EightChar.MONTH_ZHI.index(time_zhi)                    # getMingGong
+    off = 26 - off if off >= 14 else 14 - off
+    mingong = stem(off) + EightChar.MONTH_ZHI[off]
+    off = m_i + LunarUtil.ZHI.index(time_zhi)                          # getShenGong
+    if off > 12:
+        off -= 12
+    shengong = stem(off) + EightChar.MONTH_ZHI[off]
+    return {"mingong": mingong, "shengong": shengong, "taiyuan": taiyuan}
+
+
 def compute(date, time, gender, lon=None, true_solar_time=False,
             standard_meridian=None, late_zishi=True, on_date=None, tz=None):
     y, m, d = [int(x) for x in date.split("-")]
@@ -523,23 +600,32 @@ def compute(date, time, gender, lon=None, true_solar_time=False,
     hh, mm = (int(x) for x in time.split(":")) if hour_known else (12, 0)
 
     ambiguities = []
-    dt = datetime.datetime(y, m, d, hh, mm)
+    civil = datetime.datetime(y, m, d, hh, mm)
 
     # The standard meridian belongs to the BIRTHPLACE's zone, not to China. It used to
     # default to 120°E for everyone, so an unmodified TST run silently corrected a
     # European birth against Beijing's meridian — hours of error.
     if standard_meridian is None:
-        standard_meridian = (_offset_hours(tz, dt) * 15.0) if tz is not None else 120.0
+        standard_meridian = (_offset_hours(tz, civil) * 15.0) if tz is not None else 120.0
 
-    if true_solar_time and lon is not None:
-        dt = _apply_true_solar_time(dt, lon, standard_meridian)
+    # The LOCAL clock (日柱/時柱). True Solar Time only ever changes this one.
+    local = civil
+    tst_applied = bool(true_solar_time and lon is not None and hour_known)
+    if tst_applied:
+        local = _apply_true_solar_time(civil, lon, standard_meridian)
         ambiguities.append(
-            "真太阳时已启用：时刻按经度+均时差修正，可能改变时柱。"
-        )
+            f"真太阳时已启用：时柱按修正后的钟点 {local.strftime('%H:%M')} 取（经度+均时差）；"
+            "年柱、月柱和起运按出生的实际时刻对节气，真太阳时不改变它们。")
+        if local.date() != civil.date():
+            ambiguities.append(
+                f"真太阳时把钟点移过了零点（{local.strftime('%Y-%m-%d %H:%M')}）：日柱按"
+                "这一天取，和按钟表时间取的日柱不同。")
     elif true_solar_time and lon is None:
         ambiguities.append("请求真太阳时但未提供经度，已回退为民用标准时。")
+    elif true_solar_time:
+        ambiguities.append("出生时刻未知：真太阳时无从修正（时柱本来就不计算）。")
 
-    if hour_known and hh == 23:
+    if hour_known and local.hour == 23:
         ambiguities.append(
             "23:00–24:00 出生属子时边界（早/晚子时分歧），当前采用"
             + ("晚子时（子时不换日，日柱用当日）" if late_zishi
@@ -551,11 +637,9 @@ def compute(date, time, gender, lon=None, true_solar_time=False,
         ambiguities.append("出生时刻未知也会影响起运：起运时刻由出生到节气的间隔折算，"
                            "时辰不同可差数月，大运的换运年份因此有出入。")
 
-    # 立春 is a MOMENT: a birth within a few hours of it flips the whole year pillar.
-    # Surface that as an ambiguity — it is exactly the kind of thing the person must be
-    # told, and it is invisible unless the script says it.
-    # 節氣 comparisons happen on the Beijing clock; everything local stays local.
-    dt_cn, tz_shift = _to_china_clock(dt, tz)
+    # The INSTANT (年柱/月柱, 立春, 大运, 起运): the civil clock on a Beijing wall clock.
+    # Always from `civil`, never from `local`.
+    instant, tz_shift = _to_china_clock(civil, tz)
     if tz is None:
         ambiguities.append(
             "未提供出生地时区（--tz）：本引擎的節氣/立春表以东八区为准，此盘按"
@@ -564,11 +648,14 @@ def compute(date, time, gender, lon=None, true_solar_time=False,
     elif abs(tz_shift) > 1e-9:
         ambiguities.append(
             f"出生地时区 {tz}：节气按绝对时刻比对（等效北京时间 "
-            f"{dt_cn.strftime('%Y-%m-%d %H:%M')}），年柱月柱据此定；日柱与时柱仍按"
+            f"{instant.strftime('%Y-%m-%d %H:%M')}），年柱月柱据此定；日柱与时柱仍按"
             f"当地钟点。海外出生的日/时柱取法各家不同，此为本引擎的公开约定。")
 
-    lichun_gap, lichun_moment = _lichun_gap_hours(dt_cn)
-    on_lichun_day = bool(lichun_moment and lichun_moment.date() == dt_cn.date())
+    # 立春 is a MOMENT: a birth within a few hours of it flips the whole year pillar.
+    # Surface that as an ambiguity — it is exactly the kind of thing the person must be
+    # told, and it is invisible unless the script says it.
+    lichun_gap, lichun_moment = _lichun_gap_hours(instant)
+    on_lichun_day = bool(lichun_moment and lichun_moment.date() == instant.date())
     if lichun_gap is not None and abs(lichun_gap) <= 24:
         side = "之后" if lichun_gap >= 0 else "之前"
         ambiguities.append(
@@ -579,35 +666,34 @@ def compute(date, time, gender, lon=None, true_solar_time=False,
                "差几十分钟年柱就会换一柱，请确认出生时刻（含出生地时区）准确。")
         )
 
-    solar = Solar.fromYmdHms(dt.year, dt.month, dt.day, dt.hour, dt.minute, 0)
-    lunar = solar.getLunar()
-    ec = lunar.getEightChar()
-    # 年柱/月柱 hang off 節氣 (absolute instants) and are read from the Beijing-clock
-    # equivalent; 日柱/時柱 hang off the local day and local 時辰 and stay on the birth
-    # clock. Same object when no tz is given, so behaviour is unchanged without --tz.
-    ec_jq = ec
-    if tz is not None and abs(tz_shift) > 1e-9:
-        ec_jq = Solar.fromYmdHms(dt_cn.year, dt_cn.month, dt_cn.day,
-                                 dt_cn.hour, dt_cn.minute, 0).getLunar().getEightChar()
-        ec_jq.setSect(2 if late_zishi else 1)
-    # Verified vs lunar-python: sect 2 (晚子时/子时不换日) keeps a 23:00–24:00 birth on
-    # TODAY's 日柱; sect 1 (早子时/子时换日) rolls it to the NEXT day's 日柱. Default sect 2.
-    ec.setSect(2 if late_zishi else 1)
+    def eight_char(dt):
+        ec = Solar.fromYmdHms(dt.year, dt.month, dt.day, dt.hour, dt.minute, 0) \
+            .getLunar().getEightChar()
+        # Verified vs lunar-python: sect 2 (晚子时/子时不换日) keeps a 23:00–24:00 birth on
+        # TODAY's 日柱; sect 1 (早子时/子时换日) rolls it to the NEXT day's 日柱. Default sect 2.
+        ec.setSect(2 if late_zishi else 1)
+        return ec
+
+    ec_local = eight_char(local)
+    # The same object when both clocks agree, so a China birth computes exactly as before.
+    ec_jieqi = ec_local if instant == local else eight_char(instant)
+    chart = _FramedChart(ec_jieqi, ec_local)
+    solar = Solar.fromYmdHms(local.year, local.month, local.day, local.hour, local.minute, 0)
 
     gender_code = 1 if gender.lower().startswith("m") else 0
 
     pillars = {
-        "year": _pillar(ec_jq, "Year"),
-        "month": _pillar(ec_jq, "Month"),
-        "day": _pillar(ec, "Day"),
+        "year": _pillar(chart, "Year"),
+        "month": _pillar(chart, "Month"),
+        "day": _pillar(chart, "Day"),
     }
     if hour_known:
-        pillars["hour"] = _pillar(ec, "Time")
+        pillars["hour"] = _pillar(chart, "Time")
     else:
         pillars["hour"] = None
 
-    day_gan = ec.getDayGan()
-    tally = _element_tally(ec, hour_known)
+    day_gan = chart.getDayGan()
+    tally = _element_tally(chart, hour_known)
     strength = _strength_heuristic(day_gan, tally)
     strength_label = strength["label"]
     favor_sets = _favor_sets(day_gan, strength_label)
@@ -630,10 +716,12 @@ def compute(date, time, gender, lon=None, true_solar_time=False,
                     "jieqi_frame": ("birthplace tz → Beijing clock (節氣 are absolute "
                                     "instants)" if tz is not None
                                     else "ASSUMED: birth clock is Beijing time"),
-                    "day_hour_frame": "local birth clock",
+                    "jieqi_instant_beijing_clock": instant.strftime("%Y-%m-%d %H:%M"),
+                    "day_hour_frame": ("True Solar Time of the birth clock" if tst_applied
+                                       else "local birth clock"),
                     "standard_meridian": standard_meridian,
-                    # honest: reflects whether TST was ACTUALLY applied (needs lon)
-                    "true_solar_time": bool(true_solar_time and lon is not None),
+                    # honest: reflects whether TST was ACTUALLY applied (needs lon + hour)
+                    "true_solar_time": tst_applied,
                     "zishi_rule": "late" if late_zishi else "early",
                     "canggan_weighting": "main+hidden (disclosed)",
                     "engine": "lunar-python (MIT), 节气-based boundaries",
@@ -647,19 +735,20 @@ def compute(date, time, gender, lon=None, true_solar_time=False,
                 "as_text": f"{GAN_YINYANG[day_gan]}{GAN_ELEMENT[day_gan]}（{day_gan}）",
             },
             "element_tally": tally,
-            "extras": {
-                "mingong": ec.getMingGong(),
-                "shengong": ec.getShenGong(),
-                "taiyuan": ec.getTaiYuan(),
-            },
+            "extras": _extras(chart, hour_known),
             "current_age_approx": current_age,
-            "luck_pillars": _luck_pillars(ec, gender_code, day_gan, favor_sets, current_age),
+            # 大运 hang off the instant: direction from the year stem shown, the sequence
+            # from the month pillar shown, 起运 from the real distance to the 節.
+            "luck_pillars": _luck_pillars(ec_jieqi, gender_code, day_gan, favor_sets,
+                                          current_age),
             "current_annual_pillar": _current_liunian(solar),
             "upcoming_annual_pillars": _upcoming_annual_pillars(day_gan, favor_sets, y, years=10),
-            "daily": (_daily_pillars(day_gan, favor_sets, on_date, ec.getYearZhi())
+            "daily": (_daily_pillars(day_gan, favor_sets, on_date, chart.getYearZhi())
                       if on_date else None),
+            # sxtwl is date-granular, so give it the date the 節氣 frame actually uses
             "cross_check_sxtwl": _cross_check(
-                y, m, d, pillars["year"]["ganzhi"], on_lichun_day, ambiguities),
+                instant.year, instant.month, instant.day, pillars["year"]["ganzhi"],
+                on_lichun_day, ambiguities),
         },
         "heuristic": {  # ---- clearly labeled, NOT a fact ----
             "strength": strength,

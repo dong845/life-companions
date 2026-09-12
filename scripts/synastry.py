@@ -193,7 +193,12 @@ def compare(a_args, b_args):
                   "people fit — and a shared thin element is not a shared problem."),
     }
 
-    ambiguities = list(a["ambiguities"]) + list(b["ambiguities"])
+    # Say whose chart each warning is about, in this script's own flag names: bazi.py
+    # asks for `--tz`, which here is `--a-tz` / `--b-tz`. The unlabelled version printed
+    # the same sentence twice and told the model to pass a flag synastry.py rejected.
+    ambiguities = list(dict.fromkeys(
+        [f"A：{x.replace('--tz', '--a-tz')}" for x in a["ambiguities"]]
+        + [f"B：{x.replace('--tz', '--b-tz')}" for x in b["ambiguities"]]))
     if not ap.get("hour") or not bp.get("hour"):
         ambiguities.append("有一方（或双方）出生时刻未知：时柱不参与比对，这一格的关系读不出来。")
 
@@ -272,18 +277,37 @@ def _text(r):
 
 def main():
     ap = argparse.ArgumentParser(description="Traditional relations between two BaZi charts")
-    ap.add_argument("--a", required=True, help="person A birth date YYYY-MM-DD")
-    ap.add_argument("--a-time", default=None)
-    ap.add_argument("--a-gender", default="m", choices=["m", "f", "male", "female"])
-    ap.add_argument("--b", required=True, help="person B birth date YYYY-MM-DD")
-    ap.add_argument("--b-time", default=None)
-    ap.add_argument("--b-gender", default="f", choices=["m", "f", "male", "female"])
+    for who, default_gender in (("a", "m"), ("b", "f")):
+        W = who.upper()
+        ap.add_argument(f"--{who}", required=True, help=f"person {W} birth date YYYY-MM-DD")
+        ap.add_argument(f"--{who}-time", default=None)
+        ap.add_argument(f"--{who}-gender", default=default_gender,
+                        choices=["m", "f", "male", "female"])
+        # Each side must be the chart bazi.py would give that person. Without these the
+        # comparison assumed both births were on Beijing time.
+        ap.add_argument(f"--{who}-tz", default=None,
+                        help=f"person {W}'s BIRTHPLACE timezone, IANA name or UTC-offset "
+                             "hours: the same as bazi.py --tz, and just as necessary for a "
+                             "birth outside UTC+8")
+        ap.add_argument(f"--{who}-lon", type=float, default=None,
+                        help=f"person {W}'s birth longitude (only used with --true-solar-time)")
+    ap.add_argument("--true-solar-time", action="store_true",
+                    help="True Solar Time for BOTH charts (needs --a-lon and --b-lon). One "
+                         "convention for the whole comparison: mixing them compares two "
+                         "different kinds of chart")
+    ap.add_argument("--early-zishi", action="store_true",
+                    help="early-zishi rule for BOTH charts (default late, as in bazi.py)")
     ap.add_argument("--format", choices=["json", "text"], default="json")
     args = ap.parse_args()
+    conventions = {"true_solar_time": args.true_solar_time, "late_zishi": not args.early_zishi}
     try:
-        r = compare({"date": args.a, "time": args.a_time, "gender": args.a_gender},
-                    {"date": args.b, "time": args.b_time, "gender": args.b_gender})
-    except (ValueError, TypeError) as e:
+        r = compare({"date": args.a, "time": args.a_time, "gender": args.a_gender,
+                     "tz": bazi.parse_tz(args.a_tz) if args.a_tz else None,
+                     "lon": args.a_lon, **conventions},
+                    {"date": args.b, "time": args.b_time, "gender": args.b_gender,
+                     "tz": bazi.parse_tz(args.b_tz) if args.b_tz else None,
+                     "lon": args.b_lon, **conventions})
+    except (ValueError, TypeError, KeyError) as e:
         print(json.dumps({"ok": False, "error": f"bad input: {e}"}, ensure_ascii=False))
         raise SystemExit(2)
     print(_text(r) if args.format == "text"

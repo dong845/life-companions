@@ -227,6 +227,63 @@ class TestConsentAndForget(HomeCase):
             self.assertNotIn("1993-04-12", f.read())
 
 
+class TestLunarBirthdays(HomeCase):
+    """Many people — and most of their parents — know a birthday only by the lunar
+    calendar. Every engine takes a solar date and nothing converted, so the model had to
+    convert by hand, which this skill forbids for good reason: leap months and 29-day
+    months are exactly where a hand conversion goes wrong, and lunar-python rolls nothing
+    over silently only if someone asks it."""
+
+    def convert(self, *args):
+        code, out, err = run("companion.py", "lunar-to-solar", *args, home=self.home)
+        return code, out
+
+    def test_a_lunar_date_converts(self):
+        code, out = self.convert("1993", "3", "21")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(json.loads(out)["solar"], "1993-04-12")
+
+    def test_a_leap_month_is_its_own_month(self):
+        leap = json.loads(self.convert("2020", "4", "10", "--leap")[1])
+        plain = json.loads(self.convert("2020", "4", "10")[1])
+        self.assertEqual((leap["solar"], plain["solar"]), ("2020-06-01", "2020-05-02"))
+
+    def test_dates_that_do_not_exist_are_refused(self):
+        for args, why in ((("2021", "4", "1", "--leap"), "没有闰"),
+                          (("2020", "1", "30"), "只有 29 天"),
+                          (("2020", "13", "1"), "1–12")):
+            code, out = self.convert(*args)
+            self.assertEqual(code, 2, (args, out))
+            payload = json.loads(out)
+            self.assertFalse(payload["ok"], args)
+            self.assertIn(why, payload["error"], args)
+
+    def _onboard(self, **birth):
+        import form_server
+        form = {"name": ["X"], "locale": ["zh"], "region": ["cn"], "tone": ["concise"],
+                "birth_consent": ["on"], "birth_time": ["07:35"],
+                "birth_place": ["Beijing, CN"], "gender": ["male"]}
+        form.update({k: [v] for k, v in birth.items()})
+        summary, _ = form_server.write_onboarding(self.home, form)
+        import yaml
+        with open(os.path.join(self.home, "profile.yaml"), encoding="utf-8") as f:
+            return summary, yaml.safe_load(f)["birth"]
+
+    def test_the_onboarding_form_takes_a_lunar_birthday(self):
+        summary, birth = self._onboard(birth_calendar="lunar", birth_lunar_year="1993",
+                                       birth_lunar_month="3", birth_lunar_day="21")
+        self.assertEqual(str(birth["date"]), "1993-04-12")
+        self.assertEqual(birth["date_input"]["calendar"], "lunar")
+        self.assertIs(birth["date_input"]["leap"], False)
+
+    def test_an_impossible_lunar_birthday_is_not_stored_and_says_why(self):
+        summary, birth = self._onboard(birth_calendar="lunar", birth_lunar_year="2021",
+                                       birth_lunar_month="4", birth_lunar_day="1",
+                                       birth_lunar_leap="on")
+        self.assertIsNone(birth["date"])
+        self.assertTrue(any("没有闰" in t for t in summary["todo"]), summary["todo"])
+
+
 class TestBaZi(unittest.TestCase):
     """The 立春 boundary is where a chart is genuinely uncertain — and where the
     engine and its cross-check are guaranteed to disagree for a benign reason."""
@@ -1281,7 +1338,10 @@ class TestNoRealUserDataInRepo(unittest.TestCase):
                  "1993-04-20", "1995-09-23", "1998-03-20", "1991-01-20",
                  # sits between 春节 and 立春 in 1993 — the window where the lunar year
                  # and the 立春 year disagree
-                 "1993-01-28", "2020-05-25"}
+                 "1993-01-28", "2020-05-25",
+                 # the same synthetic birthday written on the lunar calendar: the
+                 # date_input example in profile-schema.md
+                 "1993-03-21"}
 
     def test_no_birth_dates_outside_the_synthetic_set(self):
         import re

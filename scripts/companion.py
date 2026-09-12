@@ -17,6 +17,7 @@ Subcommands:
                             continuity + due follow-ups + recent entries, in one JSON
   init                      create the private home (idempotent)
   status                    onboarding state, consent, journal counts (slim `brief`)
+  lunar-to-solar Y M D [--leap]  a lunar-calendar birthday -> the solar date the engines take
   read-profile [--json]     dump profile.yaml for the model to load
   set-profile --merge-json  deep-merge a JSON patch into profile.yaml
   consent --set k=yes|no    record consent per category (birth/relationships/mood)
@@ -442,6 +443,49 @@ def cmd_resolve_tz(args):
                   if hits else
                   "No match — ASK for a nearby major city or the country. Do NOT guess a "
                   "timezone: it drives the daily chart and which crisis helpline they get."),
+    }, ensure_ascii=False, indent=2))
+
+
+def lunar_to_solar(year, month, day, leap=False):
+    """A lunar-calendar date -> (solar ISO date, None), or (None, reason) when that lunar
+    date does not exist. Every engine takes a solar date, and converting by hand is what
+    this skill forbids: leap months and 29-day months are exactly where it goes wrong."""
+    if not 1 <= month <= 12:
+        return None, f"农历月份只有 1–12（收到 {month}）"
+    if not 1 <= day <= 30:
+        return None, f"农历日期只有 1–30（收到 {day}）"
+    lp = _ensure("lunar-python", "lunar_python")
+    try:
+        leap_month = lp.LunarYear.fromYear(year).getLeapMonth()
+        if leap and leap_month != month:
+            return None, (f"{year} 年没有闰月" if not leap_month else
+                          f"{year} 年没有闰{month}月（这一年闰的是 {leap_month} 月）")
+        days = lp.LunarMonth.fromYm(year, -month if leap else month).getDayCount()
+        if day > days:
+            return None, f"{year} 年{'闰' if leap else ''}{month}月只有 {days} 天（收到 {day}）"
+        solar = lp.Lunar.fromYmd(year, -month if leap else month, day).getSolar()
+    except Exception as e:      # lunar-python raises a bare Exception for dates it can't place
+        return None, f"无法换算农历 {year} 年 {month} 月 {day} 日：{e}"
+    return solar.toYmd(), None
+
+
+def cmd_lunar_to_solar(args):
+    solar, why = lunar_to_solar(args.year, args.month, args.day, args.leap)
+    if why:
+        print(json.dumps({
+            "ok": False, "error": why,
+            "_next": ("Check the date with the person. A lunar month has 29 or 30 days, and only "
+                      "some years have a leap month — one at most."),
+        }, ensure_ascii=False, indent=2))
+        raise SystemExit(2)
+    print(json.dumps({
+        "ok": True, "solar": solar,
+        "lunar": {"year": args.year, "month": args.month, "day": args.day,
+                  "leap": bool(args.leap)},
+        "_note": ("Converted on the Chinese calendar's own day boundary. For a birth abroad "
+                  "close to midnight the solar date can be a day off, so confirm it with the "
+                  "person. Store the solar date as birth.date and this input as "
+                  "birth.date_input."),
     }, ensure_ascii=False, indent=2))
 
 
@@ -1317,6 +1361,13 @@ def main():
     rt = sub.add_parser("resolve-tz", help="city/country -> IANA timezone (offline)")
     rt.add_argument("place", help="what the person called their location, e.g. 柏林 / New York")
     rt.set_defaults(func=cmd_resolve_tz)
+
+    ls = sub.add_parser("lunar-to-solar", help="a lunar-calendar birthday -> solar date (offline)")
+    ls.add_argument("year", type=int)
+    ls.add_argument("month", type=int)
+    ls.add_argument("day", type=int)
+    ls.add_argument("--leap", action="store_true", help="the date falls in that year's leap month")
+    ls.set_defaults(func=cmd_lunar_to_solar)
 
     br = sub.add_parser("brief", help="every-turn snapshot in ONE call "
                                       "(status + profile + continuity + due follow-ups)")

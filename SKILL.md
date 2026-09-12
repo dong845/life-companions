@@ -307,6 +307,7 @@ AGENTS.md                    entry point for harnesses that read AGENTS.md
 ```bash
 python3 $D/scripts/companion.py doctor          # python + deps + what degrades if missing
 python3 $D/scripts/companion.py resolve-tz 柏林   # their words -> IANA zone (offline; asks if unsure)
+python3 $D/scripts/companion.py lunar-to-solar 1993 3 21 [--leap]   # 农历生日 -> 公历; refuses dates that don't exist. Never convert by hand
 python3 $D/scripts/companion.py brief           # ★ the every-turn snapshot, one call
 python3 $D/scripts/companion.py init
 python3 $D/scripts/companion.py status          # slim version of brief

@@ -36,7 +36,7 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 COMPANION = os.path.join(_HERE, "companion.py")
 if _HERE not in sys.path:
     sys.path.insert(0, _HERE)
-from companion import resolve_timezone as _resolve_tz  # noqa: E402
+from companion import resolve_timezone as _resolve_tz, lunar_to_solar as _lunar_to_solar  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -219,8 +219,17 @@ def render_onboarding(profile):
         </label>
         <div class='vault' id='vault'>
           <div class='grid2'>
-            <div class='q'><label class='lab' for='bd'>出生日期（公历）</label>
-              <input id='bd' name='birth_date' type='date'></div>
+            <div class='q'><span class='lab'>出生日期</span>
+              <div class='opts row'>{opt('birth_calendar','solar','公历','',True)}{opt('birth_calendar','lunar','农历','')}</div>
+              <input id='bd' name='birth_date' type='date' aria-label='公历出生日期'>
+              <p class='hint'>只记得农历就选「农历」，填这三格，我来换算：</p>
+              <div style='display:flex;gap:8px;flex-wrap:wrap'>
+                <input name='birth_lunar_year' type='number' min='1901' max='2099' placeholder='农历年，如 1993' style='max-width:10em'>
+                <input name='birth_lunar_month' type='number' min='1' max='12' placeholder='月 1–12' style='max-width:6em'>
+                <input name='birth_lunar_day' type='number' min='1' max='30' placeholder='日 1–30' style='max-width:6em'>
+              </div>
+              <label class='checkline'><input type='checkbox' name='birth_lunar_leap'>
+                <span>是闰月<span class='d'>比如「闰四月」。拿不准就别勾，我会核对那一年有没有闰月。</span></span></label></div>
             <div class='q'><label class='lab' for='bt'>出生时间</label>
               <input id='bt' name='birth_time' type='time'>
               <label class='checkline'><input type='checkbox' name='birth_time_unknown'>
@@ -310,15 +319,38 @@ def write_onboarding(home, form):
              "onboarding_complete": True}
 
     birth_ok = bool(g("birth_consent"))
+    lunar_note = None
     if birth_ok:
         time_unknown = bool(g("birth_time_unknown"))
+        birth_date, date_input = g("birth_date") or None, None
+        if g("birth_calendar") == "lunar":
+            # Converted here, never by hand: leap months and 29-day months are where a
+            # hand conversion goes wrong, and an impossible date must not be stored.
+            try:
+                y, m, d = (int(g(f"birth_lunar_{k}")) for k in ("year", "month", "day"))
+            except ValueError:
+                birth_date = None
+                lunar_note = ("选了农历，但年/月/日没填全。没有存出生日期，问清楚后用 "
+                              "companion.py lunar-to-solar 换算再存。")
+            else:
+                leap = bool(g("birth_lunar_leap"))
+                solar, why = _lunar_to_solar(y, m, d, leap)
+                label = f"农历 {y} 年{'闰' if leap else ''}{m}月{d}日"
+                date_input = {"calendar": "lunar", "lunar": f"{y:04d}-{m:02d}-{d:02d}",
+                              "leap": leap}
+                birth_date = solar
+                lunar_note = (f"{label}换算不了：{why}。没有存出生日期，跟本人核对后再存。" if why
+                              else f"{label}已按中国历法换算成公历 {solar}。出生在海外、时间又"
+                                   "贴近午夜的，日期可能差一天，跟本人确认一下。")
         patch["birth"] = {
-            "date": g("birth_date") or None,
+            "date": birth_date,
             "time": (None if time_unknown else (g("birth_time") or None)),
             "time_known": (False if time_unknown else bool(g("birth_time"))),
             "gender": g("gender") or None,
             "place": g("birth_place").strip() or None,
         }
+        if date_input:
+            patch["birth"]["date_input"] = date_input
     # Record consent BEFORE writing anything it gates. The form collects the birth
     # checkbox and the birth fields in one submission, and this used to write the
     # profile first — which is backwards semantically (consent precedes collection) and
@@ -335,6 +367,8 @@ def write_onboarding(home, form):
     todo = []
     if tz_note:
         todo.append(tz_note)
+    if lunar_note:
+        todo.append(lunar_note)
     if birth_ok and patch["birth"].get("place") and not patch["birth"].get("lat"):
         todo.append("生辰地点有了，但 birth.lat/lon/tz_at_birth 还是空的 —— 由城市推出来并"
                     "用 set-profile 存上（onboarding.md Tier 1），否则星盘永远算不出上升和宫位。")
@@ -345,7 +379,7 @@ def write_onboarding(home, form):
                "name": identity.get("name"), "locale": identity.get("locale"),
                "tone": patch["preferences"]["tone"], "timezone": tz,
                "location": identity.get("location"),
-               "birth_consent": birth_ok, "birth_date": g("birth_date") if birth_ok else None,
+               "birth_consent": birth_ok, "birth_date": patch["birth"]["date"] if birth_ok else None,
                "mood_consent": bool(g("mood_consent")),
                "todo": todo,
                "ts": datetime.datetime.now().isoformat(timespec="seconds")}

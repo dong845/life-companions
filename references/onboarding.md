@@ -37,7 +37,14 @@ Write with `companion.py set-profile --merge-json '{"identity":{…},"preference
 First **ask consent**: birth data is sensitive; it stays on this machine.
 `companion.py consent --set birth=yes` (if no → skip these modules gracefully).
 Then collect:
-- **Birth date** (solar/公历 YYYY-MM-DD) — required for BaZi.
+- **Birth date** — required for BaZi. Ask which calendar they know it in, as options
+  (公历 / 农历). Many people, and most parents, only know the lunar date. For 农历 run
+  `companion.py lunar-to-solar YEAR MONTH DAY [--leap]` and store the solar result as
+  `birth.date`, with what they said in `birth.date_input`
+  (`{"calendar": "lunar", "lunar": "YYYY-MM-DD", "leap": false}`). **Never convert by
+  hand**: leap months and 29-day months are where that goes wrong, and the command refuses
+  a date that doesn't exist (e.g. a 闰月 in a year without one) instead of rolling it over.
+  If they aren't sure whether it was a 闰月, ask; don't pick one.
 - **Birth time** (HH:MM) — offer "know it exactly / roughly / don't know". If
   unknown, that's fine: BaZi still works; Western rising/houses won't. Store
   `time_known` explicitly so it's never re-asked.

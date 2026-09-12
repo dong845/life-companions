@@ -24,6 +24,10 @@ identity:
   locale: zh                 # output language: zh | en | bilingual
 birth:                       # sensitive — gated by consent.birth
   date: 1993-04-12           # ISO solar/公历; null if declined
+  date_input:                # what they actually gave, when it wasn't a solar date
+    calendar: lunar          # lunar | solar
+    lunar: "1993-03-21"      # converted by `companion.py lunar-to-solar`, never by hand
+    leap: false
   time: "07:35"              # local clock time; null if unknown
   time_known: true           # explicit false ⇒ never re-ask
   gender: male               # male|female — needed for BaZi 大运 direction (阳男阴女…)

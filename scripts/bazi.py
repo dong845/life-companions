@@ -41,6 +41,7 @@ from _deps import ensure as _ensure  # noqa: E402
 
 _ensure("lunar-python", "lunar_python")
 from lunar_python import Solar  # noqa: E402
+from _branches import relations_between  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -389,7 +390,7 @@ def _forward_gender(ec):
     return 1 if GAN_YINYANG[year_gan] == "阳" else 0
 
 
-def _daily_pillars(day_gan, favor_sets, on_date, year_zhi):
+def _daily_pillars(day_gan, favor_sets, on_date, year_zhi, natal=None):
     """
     流年 / 流月 / 流日 for a target date, each with the pillar-stem's 十神 vs the day
     master and a 喜/忌/平 tag (同扶抑 heuristic); PLUS today's 生肖运 (year branch vs
@@ -410,6 +411,16 @@ def _daily_pillars(day_gan, favor_sets, on_date, year_zhi):
         }
     out["zodiac_day"] = _zodiac_day(year_zhi, out["liuri"]["ganzhi"][1])
     out["wuxing_tips"] = _wuxing_tips(favor_sets)
+    # The day's branch against each of the person's own pillars, by the same tables 合婚
+    # reads between two charts. For a near-balanced chart every 喜/忌 above is 平 and the
+    # 五行 tips are empty, so this is the one day-specific signal it has.
+    if natal:
+        day_gz = out["liuri"]["ganzhi"]
+        out["natal_relations"] = [
+            {"pillar": key, "natal": natal[key]["ganzhi"],
+             "relations": relations_between(day_gz[1], natal[key]["zhi"]),
+             "same_pillar": day_gz == natal[key]["ganzhi"]}
+            for key in ("year", "month", "day", "hour") if natal.get(key)]
     return out
 
 
@@ -833,7 +844,7 @@ def compute(date, time, gender, lon=None, true_solar_time=False,
                                           current_age),
             "current_annual_pillar": _current_liunian(solar),
             "upcoming_annual_pillars": _upcoming_annual_pillars(day_gan, favor_sets, y, years=10),
-            "daily": (_daily_pillars(day_gan, favor_sets, on_date, chart.getYearZhi())
+            "daily": (_daily_pillars(day_gan, favor_sets, on_date, chart.getYearZhi(), natal=pillars)
                       if on_date else None),
             # sxtwl is date-granular, so give it the date the 節氣 frame actually uses
             "cross_check_sxtwl": _cross_check(

@@ -2376,6 +2376,72 @@ class TestComputeWithoutStoring(HomeCase):
             self.assertIn("这次算一下", f.read())
 
 
+class TestDailyCardReadsTheDayAgainstTheChart(unittest.TestCase):
+    """Nearly half of all charts are near-balanced (193 of 400 random births), and for them
+    the daily block carried no 喜/忌 on any day and empty 五行 tips for ever: what changed day
+    to day was the 流日 十神, a ten-day cycle, and a single 生肖 relation. The day's branch
+    against each of the person's own pillars is the arithmetic 合婚 already does between two
+    charts, and it gives every chart a real, day-specific texture."""
+
+    BIRTH = dict(date="1993-04-12", time="07:35", gender="m", tz="Asia/Shanghai")
+
+    def daily(self, on, **kw):
+        import bazi
+        return bazi.compute(**dict(self.BIRTH, **kw), on_date=on)["computed"]["daily"]
+
+    @staticmethod
+    def days(n=60):
+        import datetime
+        start = datetime.date(2026, 9, 1)
+        return [start + datetime.timedelta(days=i) for i in range(n)]
+
+    def test_each_natal_pillar_is_read_against_the_day(self):
+        d = self.daily(self.days(1)[0])
+        self.assertEqual([x["pillar"] for x in d["natal_relations"]],
+                         ["year", "month", "day", "hour"])
+
+    def test_it_uses_the_same_relation_tables_as_synastry(self):
+        import synastry
+        for on in self.days(12):
+            d = self.daily(on)
+            zhi = d["liuri"]["ganzhi"][1]
+            for x in d["natal_relations"]:
+                self.assertEqual([r["relation"] for r in x["relations"]],
+                                 [r["relation"] for r in
+                                  synastry._relations_between(zhi, x["natal"][1])], (on, x))
+
+    def test_a_clash_with_the_day_branch_shows_up(self):
+        # the natal day pillar is 癸亥, and a 巳 day clashes 亥
+        for on in self.days():
+            d = self.daily(on)
+            if d["liuri"]["ganzhi"][1] == "巳":
+                row = next(x for x in d["natal_relations"] if x["pillar"] == "day")
+                self.assertIn("六冲", [r["relation"] for r in row["relations"]])
+                return
+        self.fail("no 巳 day in 60 days")
+
+    def test_the_same_ganzhi_as_a_natal_pillar_is_flagged(self):
+        for on in self.days():
+            d = self.daily(on)
+            if d["liuri"]["ganzhi"] == "癸亥":
+                row = next(x for x in d["natal_relations"] if x["pillar"] == "day")
+                self.assertTrue(row["same_pillar"], row)
+                return
+        self.fail("no 癸亥 day in 60 days")
+
+    def test_no_birth_hour_means_no_hour_row(self):
+        d = self.daily(self.days(1)[0], time=None)
+        self.assertNotIn("hour", [x["pillar"] for x in d["natal_relations"]])
+
+    def test_the_relation_tables_live_in_one_place(self):
+        import synastry
+        try:
+            import _branches
+        except ImportError:
+            self.fail("scripts/_branches.py is missing")
+        self.assertIs(synastry._relations_between, _branches.relations_between)
+
+
 class TestDeps(unittest.TestCase):
     def test_doctor_reports_without_installing(self):
         rep = jrun("companion.py", "doctor")

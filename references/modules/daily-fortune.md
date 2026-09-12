@@ -63,6 +63,13 @@ Open with a one-line disclaimer note once, then, in the person's `locale`/`tone`
   star rating**. (Gender-note 财/官/食伤 where relevant.)
 - **🐯 生肖今日** — from `zodiac_day`: 属X · 今日与日支的关系(六合/冲/三合/害/刑)→
   its one-line tone. A real traditional relation, not vibes.
+- **🪢 今天和你的四柱** — from `natal_relations`: the day's branch against each of the
+  person's own pillars (年/月/日/时), by the same 六合/三合/三会/冲/害/破/刑 tables 合婚 uses,
+  plus `same_pillar` when the day repeats one of their pillars exactly (伏吟). 日支 sits
+  closest to the person in daily life; 月支 is work and rhythm. **For a near-balanced
+  chart — every 喜/忌 is 平 and the 五行 tips are empty — this is the day's real signal.**
+  Read what moved as texture ("今天的地支冲你的日支，传统上读作贴身那一格被摇动"), never as an
+  event, and skip the pillars where nothing happened.
 - **♓ 星座今日** — from astro.py: X座 · **今日月亮在…座** · any **逆行**(水逆 etc.) ·
   notable **本命相位**. Frame the positions as astronomical fact, the meaning as a
   reflective lens ("水逆传统上提醒…沟通/复盘慢一点" — never "水逆导致你…").

@@ -34,8 +34,13 @@ Collect once, up front, before any reading:
 Write with `companion.py set-profile --merge-json '{"identity":{…},"preferences":{…}}'`.
 
 ## Tier 1 — birth block (only for destiny / daily-fortune)
-First **ask consent**: birth data is sensitive; it stays on this machine.
-`companion.py consent --set birth=yes` (if no → skip these modules gracefully).
+First **ask consent**, as options — birth data is sensitive, and it stays on this machine:
+**存到本机** · **这次算一下，不存** · **不提供**.
+- 存到本机 → `companion.py consent --set birth=yes`, then collect the fields below.
+- 这次算一下，不存 → take the details from the conversation and compute directly
+  (destiny.md §1): no `set-profile` and no cache, which refuses without consent anyway.
+  Say plainly that nothing was kept and that a daily card will need the details again.
+- 不提供 → skip these modules gracefully.
 Then collect:
 - **Birth date** — required for BaZi. Ask which calendar they know it in, as options
   (公历 / 农历). Many people, and most parents, only know the lunar date. For 农历 run

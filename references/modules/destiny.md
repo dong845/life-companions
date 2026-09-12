@@ -23,6 +23,11 @@ and it must not turn into one in the reading.
   If not → `references/onboarding.md` Tier 1 (ask consent, collect birth block).
   Birth **date** is required; **time** may be unknown (BaZi still works — you just
   omit the hour pillar and flag it).
+- **They can have the chart without storing anything.** If they don't want their birth
+  data kept, compute straight from what they typed: no `set-profile`, and no `cache
+  --module destiny` (the cache holds the pillars, so it needs birth consent and refuses
+  without it). Say plainly that nothing was saved and that a later reading will need the
+  details again.
 
 ## 2. Compute (never by hand)
 Read the birth block, then run the flagship script with the profile's frozen
@@ -44,6 +49,7 @@ birth within 15 minutes of a 时辰 boundary (naming both 时柱), a birth withi
 節 (the 月柱; 立春 has its own note for the 年柱), and — when a longitude is known but TST
 is off — the 时柱 True Solar Time would give. Pass these on in plain words. They are the
 places a chart is least sure of itself, and the usual reason two apps disagree.
+
 **`--tz` is not optional for a birth outside China.** 節氣 are absolute astronomical
 instants and the engine resolves them on a Beijing clock, so without the birthplace
 timezone a European or American birth can come back with the **wrong year or month
@@ -437,7 +443,8 @@ in SKILL.md ("When two lenses touch the same question"); the short version:
   That's exactly when to say it isn't (safety.md §1 rule 7) and hand it over.
 
 ## 9. Remember what you already told them
-`state/modules/destiny.yaml` exists for this and was going unused — which is why a
+`state/modules/destiny.yaml` (birth consent only — a chart computed without storing is
+never cached) exists for this and was going unused — which is why a
 second reading weeks later could contradict the first, and why the entry disclaimer got
 repeated as if you'd never met. After delivering a 命盘, cache it:
 

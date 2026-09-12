@@ -179,6 +179,9 @@ CONSENT_GATED = {
                       "`consent --set relationships=yes`"),
     "mood": ("情绪 mood", "journal mood values: `consent --set mood=yes`"),
 }
+# Module caches that hold a consent-gated category. The destiny cache stores the pillars,
+# which are birth data in another form, so it is gated by birth consent like profile.birth.
+_MODULE_CONSENT = {"relationships": "relationships", "destiny": "birth"}
 
 
 def _granted(home, category):
@@ -226,8 +229,10 @@ def _retained(home):
     out = {}
     birth = _load_yaml(p["profile"]).get("birth") or {}
     n_birth = sum(1 for k, v in birth.items() if k != "conventions" and v is not None)
-    if n_birth:
-        out["birth"] = f"{n_birth} birth field(s) in profile.yaml"
+    cached_chart = os.path.exists(os.path.join(p["modules"], "destiny.yaml"))
+    if n_birth or cached_chart:
+        out["birth"] = (f"{n_birth} birth field(s) in profile.yaml"
+                        + ("; a cached chart in state/modules/destiny.yaml" if cached_chart else ""))
     rows = trends_mod._load(p["index"])
     rel = _relationships_path(home)
     people = (_load_yaml(rel).get("people") or {}) if os.path.exists(rel) else {}
@@ -721,15 +726,16 @@ def cmd_cache(args):
     p = _paths(home)
     os.makedirs(p["modules"], exist_ok=True)
     path = os.path.join(p["modules"], f"{args.module}.yaml")
-    if not args.merge_json and args.module in CONSENT_GATED:
-        refusal = _refuse_ungranted_read(home, args.module)
+    category = _MODULE_CONSENT.get(args.module)
+    if not args.merge_json and category:
+        refusal = _refuse_ungranted_read(home, category)
         if refusal:
             print(json.dumps(refusal, ensure_ascii=False, indent=2))
             raise SystemExit(3)
     data = _load_yaml(path, {})
     if args.merge_json:
-        if args.module in CONSENT_GATED:
-            refusal = _refuse_ungated(home, args.module)
+        if category:
+            refusal = _refuse_ungated(home, category)
             if refusal:
                 print(json.dumps(refusal, ensure_ascii=False, indent=2))
                 raise SystemExit(3)

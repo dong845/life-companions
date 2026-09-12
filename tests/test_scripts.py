@@ -1605,8 +1605,10 @@ class TestConsentIsEnforcedNotJustAsked(HomeCase):
     def test_ungated_writes_are_unaffected(self):
         self.assertTrue(jrun("companion.py", "set-profile", "--merge-json",
                              json.dumps({"identity": {"name": "A"}}), home=self.home)["ok"])
-        self.assertTrue(jrun("companion.py", "cache", "--module", "destiny",
-                             "--merge-json", json.dumps({"chart": {"p": "x"}}),
+        # (the destiny cache holds the pillars — birth data in another form — so it is
+        # gated by birth consent now; see TestComputeWithoutStoring)
+        self.assertTrue(jrun("companion.py", "cache", "--module", "career_intake",
+                             "--merge-json", json.dumps({"latest": {"answered": 0}}),
                              home=self.home)["ok"])
 
     def test_null_only_birth_patch_is_not_treated_as_collection(self):
@@ -2343,6 +2345,35 @@ class TestCareerScoringHasACommand(HomeCase):
             doc = f.read()
         self.assertIn("--score-intake", doc)
         self.assertNotIn("from career_match import score_person", doc)
+
+
+class TestComputeWithoutStoring(HomeCase):
+    """「算一次，别存」 had no path: declining to store birth data meant no chart at all, while
+    the destiny cache — the pillars, which are birth data in another form — could be written
+    with no consent whatever. A chart computes from what was typed; storing it, the cache
+    included, needs birth consent."""
+
+    PILLARS = {"chart": {"pillars": "癸酉 丙辰 癸亥 丙辰"}}
+
+    def test_the_destiny_cache_needs_birth_consent(self):
+        code, out, _ = run("companion.py", "cache", "--module", "destiny", "--merge-json",
+                           json.dumps(self.PILLARS), home=self.home)
+        self.assertEqual(code, 3, out)
+        self.assertFalse(os.path.exists(
+            os.path.join(self.home, "state", "modules", "destiny.yaml")))
+
+    def test_a_revoked_birth_consent_withholds_the_cached_chart(self):
+        run("companion.py", "consent", "--set", "birth=yes", home=self.home)
+        self.assertTrue(jrun("companion.py", "cache", "--module", "destiny", "--merge-json",
+                             json.dumps(self.PILLARS), home=self.home)["ok"])
+        run("companion.py", "consent", "--set", "birth=no", home=self.home)
+        code, out, _ = run("companion.py", "cache", "--module", "destiny", home=self.home)
+        self.assertEqual(code, 3, out)
+        self.assertNotIn("癸亥", out)
+
+    def test_onboarding_offers_computing_without_storing(self):
+        with open(os.path.join(SKILL, "references", "onboarding.md"), encoding="utf-8") as f:
+            self.assertIn("这次算一下", f.read())
 
 
 class TestDeps(unittest.TestCase):

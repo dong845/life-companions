@@ -11,7 +11,10 @@ misses something. It errs toward flagging; a flag means "slow down and look",
 never "auto-respond with a script".
 
 Patterns cover both English and Chinese because the output language is the user's
-choice. Returns categories, not a diagnosis.
+choice. Chinese is folded from traditional to simplified characters before matching
+(scripts/_zh.py): every pattern here is written in simplified, and a traditional-script
+"I want to kill myself" used to raise no flag at all. Returns categories, not a
+diagnosis.
 
 Usage:
   echo "text" | python3 safety_scan.py         # reads stdin
@@ -20,8 +23,13 @@ Usage:
 """
 import argparse
 import json
+import os
 import re
 import sys
+
+if os.path.dirname(os.path.abspath(__file__)) not in sys.path:
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _zh import to_simplified  # noqa: E402
 
 # Each category: list of regexes. Kept specific-ish to limit false positives,
 # but recall is prioritized over precision — this is a backstop.
@@ -38,6 +46,17 @@ PATTERNS = {
         r"自杀", r"结束(自己的|这一切|生命)", r"轻生", r"了结(自己|生命)",
         r"一了百了", r"走了算了", r"生无可恋",
         r"伤害自己", r"自残", r"想死", r"死了算了", r"没有活下去的意义",
+        # Perceived burdensomeness: believing the people around you would be better off
+        # without you. One of the clearest warning signs there is, and it contains none of
+        # the words above.
+        r"没有我[，,\s]*(大家|你们|他们|家里人?|爸妈|父母|所有人)(都)?(会|能|就)?(过得|变得)?"
+        r"(更好|更轻松|更开心)",
+        r"我(就是|只是|是|成了)(个|一个)?(累赘|负担|拖累|包袱)",
+        r"(觉得|感觉)自己(就是|只是|是|成了)?(个|一个)?(累赘|负担|拖累|包袱)",
+        r"我(不在|走|死)了[，,\s]*(大家|你们|他们|家里人?|爸妈|父母|所有人)?(就|会|都|也)?"
+        r"(更好|更轻松|解脱)",
+        r"\b(i'?m|i am)\s+(just\s+)?(a|such a)\s+burden\b",
+        r"\beveryone('?s| is| would be| will be)\s+better\s+off\b",
     ],
     "abuse_violence": [
         r"\bhit(s|ting)?\s+me\b", r"\bhurt(s|ing)?\s+me\b", r"\bafraid\s+of\s+(him|her|them|my)\b",
@@ -72,14 +91,17 @@ PATTERNS = {
 
 def scan_text(text):
     text = text or ""
-    low = text.lower()
+    low = to_simplified(text).lower()
+    # Folding is one character for one character, so a match's offsets point at the
+    # words that were actually written — unless lower() changed the length somewhere.
+    aligned = len(low) == len(text)
     hits = {}
     for cat, pats in PATTERNS.items():
         matched = []
         for p in pats:
             m = re.search(p, low)
             if m:
-                matched.append(m.group(0))
+                matched.append(text[m.start():m.end()] if aligned else m.group(0))
         if matched:
             hits[cat] = matched
     # severity: self_harm / abuse / coercive-control => high; only acute_distress => watch

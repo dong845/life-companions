@@ -577,6 +577,106 @@ class TestSynastryUsesTheChartsBaZiComputes(unittest.TestCase):
                          f"duplicated warnings: {r['ambiguities']}")
 
 
+class TestTraditionalChineseIsReadToo(unittest.TestCase):
+    """Hong Kong, Taiwan and much of the diaspora write traditional characters. Every
+    pattern in the honesty gate and the crisis scan was written in simplified, so the same
+    fatalistic sentence was blocked in one script and waved through in the other, and a
+    traditional-script 「I want to kill myself」 raised no crisis flag at all. Text is
+    folded to simplified before any pattern sees it."""
+
+    DISCLAIMER_T = ("命盤是按傳統規則算出來的；怎麼解讀是一種文化視角、幫你自我反思的鏡子，"
+                    "不是科學預測。")
+
+    def check(self, text, module):
+        import selfcheck
+        return selfcheck.check(text, module)
+
+    @staticmethod
+    def _blockers(r):
+        return sorted(x["code"] for x in r["findings"] if x["severity"] == "blocker")
+
+    def test_gate_blocks_the_same_sentence_in_either_script(self):
+        pairs = [("你命中注定会离婚。", "你命中註定會離婚。", "destiny"),
+                 ("这步大运你一定会破财，明年多半会生病。", "這步大運你一定會破財，明年多半會生病。",
+                  "destiny"),
+                 ("今日综合运势：88分，幸运数字 7。", "今日綜合運勢：88分，幸運數字 7。", "daily")]
+        for simp, trad, module in pairs:
+            s, t = self.check(simp, module), self.check(trad, module)
+            self.assertFalse(s["ok"], simp)
+            self.assertEqual(self._blockers(s), self._blockers(t), trad)
+
+    def test_evidence_quotes_what_was_actually_written(self):
+        r = self.check("你命中註定會離婚。", "destiny")
+        self.assertIn("註定", " ".join(x["evidence"] for x in r["findings"]))
+
+    def test_a_clean_traditional_reading_still_passes(self):
+        r = self.check(self.DISCLAIMER_T + "你盤裡正官(責任、規矩、把自己嵌進體系做好)藏得厚。",
+                       "destiny")
+        self.assertTrue(r["ok"], r["findings"])
+        self.assertEqual(r["warnings"], 0, r["findings"])
+
+    def test_crisis_scan_reads_traditional(self):
+        for t in ["我想自殺", "活著沒意思，撐不下去了", "我不想活了"]:
+            self.assertEqual(jrun("safety_scan.py", "--text", t)["severity"], "high", t)
+        self.assertIn("coercive_control",
+                      jrun("safety_scan.py", "--text", "他控制我的錢和手機，不讓我見朋友")["categories"])
+
+    def test_patterns_are_written_in_simplified(self):
+        # input is folded before matching, so a traditional character inside a pattern
+        # could never match anything — keep every pattern constant in simplified
+        try:
+            import _zh
+        except ImportError:
+            self.fail("scripts/_zh.py is missing")
+        import re as _re
+        import selfcheck, safety_scan
+
+        def strings(o):
+            if isinstance(o, str):
+                yield o
+            elif isinstance(o, _re.Pattern):
+                yield o.pattern
+            elif isinstance(o, dict):
+                for k, v in o.items():
+                    yield from strings(k)
+                    yield from strings(v)
+            elif isinstance(o, (list, tuple, set, frozenset)):
+                for v in o:
+                    yield from strings(v)
+
+        for mod in (selfcheck, safety_scan):
+            bad = sorted({ch for name, val in vars(mod).items() if not name.startswith("__")
+                          for s in strings(val) for ch in s if _zh.to_simplified(ch) != ch})
+            self.assertEqual(bad, [], mod.__name__)
+
+    def test_folding_keeps_every_offset_in_place(self):
+        try:
+            import _zh
+        except ImportError:
+            self.fail("scripts/_zh.py is missing")
+        t = "這步大運你一定會破財 — ok 123 🌤"
+        self.assertEqual(len(_zh.to_simplified(t)), len(t))
+        self.assertEqual(_zh.to_simplified(t), "这步大运你一定会破财 — ok 123 🌤")
+
+
+class TestSafetyScanBurdenPhrasing(unittest.TestCase):
+    """Believing the people around you would be better off without you is one of the
+    clearest warning signs there is, and it contains none of the words the list looked for."""
+
+    def scan(self, t):
+        return jrun("safety_scan.py", "--text", t)
+
+    def test_burden_phrasing_is_flagged(self):
+        for t in ["没有我大家会过得更好", "沒有我大家會過得更好", "我就是个累赘",
+                  "我不在了你们就解脱了", "I'm just a burden to everyone",
+                  "everyone would be better off without me"]:
+            self.assertTrue(self.scan(t)["crisis_flag"], t)
+
+    def test_ordinary_sentences_with_the_same_words_are_not(self):
+        for t in ["这个项目没有我也能做得更好", "背包太重，是个负担", "明天不在家，你们自己吃"]:
+            self.assertFalse(self.scan(t)["crisis_flag"], t)
+
+
 class TestTimezoneResolution(unittest.TestCase):
     """identity.timezone decides daily timing AND which country's crisis line the
     person is offered, so a confident wrong answer is worse than no answer."""

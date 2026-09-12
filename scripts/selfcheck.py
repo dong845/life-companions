@@ -599,7 +599,37 @@ def _find(text, patterns, code, severity, fix, respect_refusal=False):
     return out
 
 
+def _fold(text):
+    """Traditional → simplified, one character for one character (scripts/_zh.py)."""
+    import os
+    here = os.path.dirname(os.path.abspath(__file__))
+    if here not in sys.path:
+        sys.path.insert(0, here)
+    import _zh
+    return _zh.to_simplified(text)
+
+
 def check(text, module="none", locale=None):
+    """Run the honesty gate over a draft: {ok, module, blockers, warnings, findings}.
+
+    The draft is folded to simplified Chinese first. Every pattern below is written in
+    simplified, and a traditional-script draft used to pass the very sentence its
+    simplified twin was blocked for. Folding keeps the length, so each finding's
+    evidence is cut back out of the ORIGINAL text: the gate quotes the words that were
+    actually written."""
+    text = text or ""
+    folded = _fold(text)
+    r = _check(folded, module, locale)
+    if folded != text:
+        for x in r["findings"]:
+            ev = x.get("evidence") or ""
+            i = folded.find(ev) if ev else -1
+            if i >= 0:
+                x["evidence"] = text[i:i + len(ev)]
+    return r
+
+
+def _check(text, module="none", locale=None):
     f = []
 
     f += _find(text, FATALISM, "fatalism", "blocker",

@@ -1652,6 +1652,35 @@ class TestHelplineGateHoles(unittest.TestCase):
             self.assertFalse(any(x["code"] == "unknown-helpline" for x in r["findings"]), t)
 
 
+class TestHelplineGateReadsRealNumbersInContext(unittest.TestCase):
+    """The gate blocked real lines as soon as they were written the way people write
+    them. `12356 24 小时` tokenised as one number, 1235624, so the national line was
+    "invented" and the reply was told to drop it; the year in `2025 起全国统一` read as a
+    four-digit shortcode; a grouped figure like `12,345` left a stray `345` to flag."""
+
+    def codes(self, t, m="crisis"):
+        import selfcheck
+        return {x["code"] for x in selfcheck.check(t, m)["findings"]}
+
+    def test_a_real_number_followed_by_its_hours_passes(self):
+        for t in ["撑不住的话，拨打全国心理援助热线 12356 24 小时都有人接。",
+                  "Samaritans 116 123 24/7, free.",
+                  "1. 12356 全国心理援助热线",
+                  "全国心理援助热线 12356（2025 起全国统一，24/7）"]:
+            c = self.codes(t)
+            self.assertNotIn("unknown-helpline", c, t)
+            self.assertNotIn("crisis-no-resource", c, t)
+
+    def test_an_invented_number_next_to_hours_is_still_caught(self):
+        for t in ["拨打心理热线 12357 24 小时都有人接。", "Try 116 124 24/7.",
+                  "心理热线打 2025 就行。", "1. 12357 心理热线"]:
+            self.assertIn("unknown-helpline", self.codes(t), t)
+
+    def test_a_grouped_figure_is_not_a_phone_number(self):
+        self.assertNotIn("unknown-helpline",
+                         self.codes("热线每年接到 12,345 通电话，你并不孤单。请拨打 12356。"))
+
+
 class TestGateHolesFoundByAudit(unittest.TestCase):
     def check(self, t, m):
         import selfcheck

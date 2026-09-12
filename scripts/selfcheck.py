@@ -80,6 +80,46 @@ def _looks_like_a_phone(raw, near_helpline=False):
     return len(d) >= (3 if near_helpline else 6) or norm in KNOWN_HELPLINES
 
 
+# NUM_TOKEN_RE can't see where a number stops. People write a line the way it is said,
+# "12356 24 小时" or "1. 12356", and the token came out as 1235624 or 112356: the real
+# national line was reported as invented, a gate teaching the reply to drop the right
+# number. A token is a known line when a run of its space-separated groups is one, and
+# what is left over is a list marker before it ("1.") or an hour count after it ("24").
+_LIST_MARKER = re.compile(r"^\d{1,2}[.)]$")
+_SMALL_COUNT = re.compile(r"^\d{1,2}$")
+
+
+def _is_known_line(raw):
+    groups = raw.split()
+    for i in range(len(groups)):
+        if not all(_LIST_MARKER.match(g) for g in groups[:i]):
+            break
+        for j in range(len(groups), i, -1):
+            if (_digits("".join(groups[i:j])) in _KNOWN_DIGITS
+                    and all(_SMALL_COUNT.match(g) for g in groups[j:])):
+                return True
+    return False
+
+
+def _in_a_grouped_figure(s, m):
+    """`12,345` splits at the comma into 12 and 345. Neither half is a phone number, and
+    once 000 is a real line, the 000 of `1,000` must not count as one."""
+    return bool(re.search(r"\d,$", s[max(0, m.start() - 2):m.start()])
+                or re.match(r",\d{3}(?!\d)", s[m.end():m.end() + 5]))
+
+
+_YEAR_BEFORE = re.compile(r"(?:\b(?:since|in|from|as of|until|by)|于|从|自)\s*$", re.I)
+
+
+def _is_a_year(s, m):
+    """`2025 起全国统一` is a year, not a four-digit shortcode. So is the 1995 of `1995 年`,
+    even though 1995 is also Taiwan's 生命線."""
+    if not re.fullmatch(r"(?:19|20)\d{2}", m.group(0)):
+        return False
+    return (s[m.end():m.end() + 3].lstrip()[:1] in ("年", "起")
+            or bool(_YEAR_BEFORE.search(s[max(0, m.start() - 10):m.start()])))
+
+
 def _names_a_real_resource(text):
     """Does this reply actually point at a REAL crisis resource?
 
@@ -89,7 +129,8 @@ def _names_a_real_resource(text):
     if "findahelpline" in text.lower():
         return True
     for m in NUM_TOKEN_RE.finditer(text):
-        if _digits(m.group(0)) in _KNOWN_DIGITS:
+        if (_is_known_line(m.group(0)) and not _in_a_grouped_figure(text, m)
+                and not _is_a_year(text, m)):
             return True
     return False
 
@@ -699,7 +740,8 @@ def _check(text, module="none", locale=None):
     for m in NUM_TOKEN_RE.finditer(phone_scan):
         raw = m.group(0).strip()
         norm = raw.replace(" ", "")
-        if _digits(norm) in _KNOWN_DIGITS:
+        if (_is_known_line(raw) or _in_a_grouped_figure(phone_scan, m)
+                or _is_a_year(phone_scan, m)):
             continue
         window = phone_scan[max(0, m.start() - 40):m.end() + 20]
         if not _looks_like_a_phone(raw, near_helpline=bool(HELPLINE_CONTEXT.search(window))):

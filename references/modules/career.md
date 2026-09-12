@@ -37,8 +37,8 @@ then spread across all six RIASEC areas. The remaining 120 stay high-point-code-
 **Preferred: the HTML form.** Run `scripts/form_server.py --form career` (see
 `references/forms.md`) — the 21 Likert items + the 6-value ranking are far nicer in a
 form than in chat. On submit it writes `career_intake` (`companion.py cache --module
-career_intake` → `latest.answers` 0–4 per id + `latest.values_rank` + jobs); feed
-that to `career_match.py`. Fall back to the chat flow below only if the user can't use
+career_intake` → `latest.answers` 0–4 per id + `latest.values_rank` + jobs); score it
+with `career_match.py --score-intake`. Fall back to the chat flow below only if the user can't use
 a browser — an equally valid path, not a downgrade. When using chat, always give
 **selectable options** (`AskUserQuestion` where the harness has it, otherwise a
 numbered list they answer with numbers) — never free text for a choice.
@@ -60,7 +60,8 @@ numbered list they answer with numbers) — never free text for a choice.
    - Work Values: force-ranked ordering of the six O\*NET values (ipsative).
    - Both optional; interests-only is a complete, valid run.
 
-Score the collected profile with `career_match.py`. Report the **band + the
+Score the collected profile with `career_match.py --answers '<json>' [--values …]`
+(the form path uses `--score-intake`). Report the **band + the
 confidence note together**, and name which components were used and the
 **disclosed weights** applied (Interests 0.45 / Values 0.30 / Traits 0.25 when
 all present, renormalized over whatever is present).
@@ -171,10 +172,19 @@ When `locale` is `zh`, keep the O\*NET title in English and add a short Chinese 
 don't invent a localized occupation name.
 
 ```bash
+python3 $D/scripts/career_match.py --score-intake                  # score what the career form saved
+python3 $D/scripts/career_match.py --answers '{"1":3,"2":1,…,"21":0}' \
+    --values "Independence,Achievement,Working Conditions,Recognition,Support,Relationships"
+                                                                    # answers collected in chat
+python3 $D/scripts/career_match.py --score-intake --soc 15-2041.00  # one occupation, code from --find
 python3 $D/scripts/career_match.py --selftest   # verify the math
-python3 $D/scripts/career_match.py --demo        # rank shipped occupations for a sample profile
-# In use, import: from career_match import score_person, load_occupations, load_scoring_key
 ```
+**Always score through this command.** It runs `score_person_grouped`, so an answer set
+with no shape comes back refused (exit 3; say "can't measure", not "low match") and the
+two occupation groups arrive separately. There used to be no command, and the line here
+said to import `score_person`, which skips both guards: a model following it reported
+"Strong" matches for someone who had answered "neutral" to all 21 items. Exit 2 means
+the input is missing or malformed, and the payload says which.
 
 ## Honesty guardrails
 - Bands and qualitative language only — never a precise percentage, salary,

@@ -338,6 +338,9 @@ python3 $D/scripts/astro.py --date 1993-04-12 --time 07:35 --tz Asia/Shanghai --
 #   daily card can report a different Sun sign than the natal chart for the same person.
 python3 $D/scripts/astro.py --date 1993-04-12 --time 07:35 --natal --lat 52.16 --lon 4.49 --tz Europe/Amsterdam --format json  # full natal chart (星盘)
 python3 $D/scripts/career_match.py --find "产品经理"   # map their WORDS to a real O*NET occupation first
+python3 $D/scripts/career_match.py --score-intake     # score the career form; --answers JSON [--values LIST] for chat
+#   always score through this (exit 3 = the answers carry no shape: "can't measure", not
+#   "low match"); --soc CODE reports one occupation. Never import score_person directly.
 python3 $D/scripts/career_match.py --selftest   # career-fit engine; --demo to rank shipped occupations
 python3 $D/scripts/relationship_patterns.py --format text   # base-rate over logged relationship incidents
 python3 $D/scripts/synastry.py --a 1993-04-12 --a-time 07:35 --a-tz Asia/Shanghai --b 1995-08-30 --b-tz Europe/Amsterdam --format text   # 合婚: NO verdict

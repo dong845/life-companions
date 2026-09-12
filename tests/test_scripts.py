@@ -2006,6 +2006,80 @@ class TestForgetLeavesNoTrace(HomeCase):
         self.assertFalse(jrun("companion.py", "status", home=self.home)["consent"]["mood"])
 
 
+class TestCareerScoringHasACommand(HomeCase):
+    """Scoring a real person had no command. career.md told the model to import the module
+    and pointed it at `score_person`, which ranks all 188 occupations even for an answer set
+    with no shape — the refusal lives only in `score_person_grouped`. A model that followed
+    the doc's own import line reported 'Strong' matches for someone who had answered
+    'neutral' to all 21 items."""
+
+    SHAPED = {str(i): (4 if i in (5, 6, 7, 8) else 1) for i in range(1, 22)}
+    VALUES = ["Independence", "Achievement", "Working Conditions", "Recognition",
+              "Support", "Relationships"]
+
+    def _intake(self, answers, values_rank=None):
+        latest = {"answers": answers, "values_rank": values_rank or {},
+                  "answered": len(answers)}
+        run("companion.py", "cache", "--module", "career_intake", "--merge-json",
+            json.dumps({"latest": latest}), home=self.home)
+
+    def test_scores_the_form_intake(self):
+        self._intake(self.SHAPED, {v: i + 1 for i, v in enumerate(self.VALUES)})
+        code, out, err = run("career_match.py", "--score-intake", home=self.home)
+        self.assertEqual(code, 0, out + err)
+        r = json.loads(out)
+        self.assertTrue(r["numeric_interests"])
+        self.assertTrue(r["code_only"])
+        self.assertTrue([p for p in r["numeric_interests"] if "values" in p["components_used"]],
+                        "a complete values ranking must engage the values blend")
+
+    def test_person_facing_rows_carry_no_raw_scores(self):
+        self._intake(self.SHAPED)
+        r = json.loads(run("career_match.py", "--score-intake", home=self.home)[1])
+        for row in r["numeric_interests"] + r["code_only"]:
+            for k, v in row.items():
+                self.assertNotIsInstance(v, float, f"{k}={v} leaks a raw score")
+
+    def test_a_flat_answer_set_is_refused_loudly(self):
+        self._intake({str(i): 2 for i in range(1, 22)})
+        code, out, _ = run("career_match.py", "--score-intake", home=self.home)
+        self.assertEqual(code, 3, out)
+        r = json.loads(out)
+        self.assertTrue(r["refused"])
+        self.assertNotIn("numeric_interests", r)
+
+    def test_no_intake_says_how_to_get_one(self):
+        code, out, _ = run("career_match.py", "--score-intake", home=self.home)
+        self.assertEqual(code, 2, out)
+        self.assertIn("form_server.py --form career", out)
+
+    def test_chat_collected_answers_score_the_same_way(self):
+        code, out, err = run("career_match.py", "--answers", json.dumps(self.SHAPED),
+                             "--values", ",".join(self.VALUES), home=self.home)
+        self.assertEqual(code, 0, out + err)
+        self.assertTrue(json.loads(out)["numeric_interests"])
+
+    def test_out_of_range_answers_are_rejected(self):
+        bad = dict(self.SHAPED, **{"3": 9})
+        code, out, _ = run("career_match.py", "--answers", json.dumps(bad), home=self.home)
+        self.assertEqual(code, 2, out)
+        self.assertIn("0..4", out)
+
+    def test_one_occupation_can_be_asked_for_by_soc_code(self):
+        self._intake(self.SHAPED)
+        r = json.loads(run("career_match.py", "--score-intake", "--soc", "15-2041.00",
+                           home=self.home)[1])
+        self.assertEqual(r["occupation"]["onet_code"], "15-2041.00")
+        self.assertIn(r["occupation"]["group"], ("numeric_interests", "code_only"))
+
+    def test_the_doc_points_at_the_guarded_entry_point(self):
+        with open(os.path.join(SKILL, "references", "modules", "career.md"),
+                  encoding="utf-8") as f:
+            doc = f.read()
+        self.assertIn("--score-intake", doc)
+        self.assertNotIn("from career_match import score_person", doc)
+
+
 class TestDeps(unittest.TestCase):
     def test_doctor_reports_without_installing(self):
         rep = jrun("companion.py", "doctor")

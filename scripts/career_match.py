@@ -626,6 +626,101 @@ def _demo():
               f"{p['occupation']} ({p['onet_code']})")
 
 
+def _yaml_module():
+    import sys
+    here = os.path.dirname(os.path.abspath(__file__))
+    if here not in sys.path:
+        sys.path.insert(0, here)
+    from _deps import ensure
+    return ensure("PyYAML", "yaml")
+
+
+def _cli_score(args):
+    """Score one person from the command line. Returns an exit code.
+
+    This is the supported way to score, and the only one the docs point at: it always goes
+    through score_person_grouped, so an answer set with no shape is refused (exit 3) and
+    the two occupation groups arrive apart. There used to be no command at all — career.md
+    said to import the module and named `score_person`, which skips both guards, and a
+    model following that line reported 'Strong' matches for someone who had answered
+    'neutral' to all 21 items."""
+    def emit(payload, code):
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+        return code
+
+    if args.score_intake and args.answers is not None:
+        return emit({"ok": False, "error": "pass --score-intake or --answers, not both"}, 2)
+    values = [v.strip() for v in args.values.split(",") if v.strip()] if args.values else None
+    if args.score_intake:
+        home = os.path.abspath(args.home or os.environ.get("COMPANION_HOME")
+                               or os.path.expanduser("~/.companion"))
+        path = os.path.join(home, "state", "modules", "career_intake.yaml")
+        latest = None
+        if os.path.exists(path):
+            with open(path, encoding="utf-8") as f:
+                latest = (_yaml_module().safe_load(f) or {}).get("latest")
+        if not isinstance(latest, dict) or not latest.get("answers"):
+            return emit({"ok": False, "error": f"no career check on file in {home}",
+                         "_next": ("Run `form_server.py --form career` and wait for the "
+                                   "submit, or collect the 21 answers in chat and pass them "
+                                   "with --answers.")}, 2)
+        answers, source = latest["answers"], "career_intake"
+        if values is None and latest.get("values_rank"):
+            values = latest["values_rank"]
+    else:
+        try:
+            answers = json.loads(args.answers)
+        except ValueError as e:
+            return emit({"ok": False, "error": f"--answers is not valid JSON: {e}"}, 2)
+        source = "answers"
+
+    if not isinstance(answers, dict) or not answers:
+        return emit({"ok": False,
+                     "error": "answers must be a non-empty {item_id: 0..4} object"}, 2)
+    clean, bad = {}, []
+    for k, v in answers.items():
+        ok = (not isinstance(v, bool) and str(k).strip().isdigit()
+              and (isinstance(v, int) or (isinstance(v, str) and v.strip().isdigit())))
+        if ok:
+            item, val = int(str(k).strip()), int(v)
+            ok = 1 <= item <= FULL_INTEREST_ITEMS and 0 <= val <= INTEREST_ITEM_MAX
+        if not ok:
+            bad.append(f"{k}={v!r}")
+            continue
+        clean[item] = val
+    if bad:
+        return emit({"ok": False,
+                     "error": (f"answers must be item ids 1..{FULL_INTEREST_ITEMS} with values "
+                               f"0..{INTEREST_ITEM_MAX}; got " + ", ".join(bad[:6]))}, 2)
+
+    person_values = canonical_values_ranking(values) if values else None
+    occupations, _attribution = load_occupations()
+    result = score_person_grouped(clean, load_scoring_key(), occupations,
+                                  person_values=person_values)
+    if result.get("refused"):
+        return emit(dict(result, ok=False, source=source), 3)
+    payload = {"ok": True, "source": source, "answered": len(clean),
+               "values_used": person_values is not None,
+               "discrimination": result["discrimination"], "_note": result["_note"]}
+    if values and person_values is None:
+        payload["values_note"] = ("the values ranking does not name all six O*NET work values, "
+                                  "so it was NOT used: this is an interests-only read")
+    if args.soc:
+        for group in ("numeric_interests", "code_only"):
+            for row in result[group]:
+                if row.get("onet_code") == args.soc:
+                    payload["occupation"] = dict(row, group=group)
+        if "occupation" not in payload:
+            return emit({"ok": False,
+                         "error": (f"{args.soc} is not one of the {len(occupations)} shipped "
+                                   "occupations; get a code from --find")}, 2)
+    else:
+        top = max(1, args.top)
+        payload["numeric_interests"] = result["numeric_interests"][:top]
+        payload["code_only"] = result["code_only"][:top]
+    return emit(payload, 0)
+
+
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(description="Honest career interest/values/traits matcher")
     ap.add_argument("--selftest", action="store_true", help="run internal checks")
@@ -634,9 +729,22 @@ if __name__ == "__main__":
                     help="map what the person CALLS a job ('产品经理', 'MRI 技师') to the "
                          "shipped O*NET occupations, before scoring anything against it")
     ap.add_argument("--json", action="store_true", help="machine-readable output")
+    ap.add_argument("--score-intake", action="store_true",
+                    help="score the career check the person submitted (state/modules/"
+                         "career_intake.yaml, written by form_server.py --form career)")
+    ap.add_argument("--answers", default=None, metavar="JSON",
+                    help='score answers collected in chat: {"1": 0-4, ..., "21": 0-4}')
+    ap.add_argument("--values", default=None, metavar="LIST",
+                    help="work-values ranking, most important first, comma-separated")
+    ap.add_argument("--soc", default=None, metavar="CODE",
+                    help="with a score: report this one occupation (a code from --find)")
+    ap.add_argument("--top", type=int, default=10, help="rows per group (default 10)")
+    ap.add_argument("--home", default=None, help="override COMPANION_HOME")
     args = ap.parse_args()
     if args.selftest:
         raise SystemExit(0 if _selftest() else 1)
+    if args.score_intake or args.answers is not None:
+        raise SystemExit(_cli_score(args))
     if args.find:
         occs, _ = load_occupations()
         hits = find_occupations(args.find, occs)

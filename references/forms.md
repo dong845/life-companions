@@ -54,8 +54,9 @@ Two signals — poll whichever is easy:
 - `~/.companion/.form_result.json` appears/updates with `{"status": …}`.
 - For onboarding: `companion.py status` flips `onboarding_complete:true`.
 - For career: `companion.py cache --module career_intake` has a `latest` block with
-  `answers` (0–4 per item id), `values_rank`, and the jobs — feed that to
-  `career_match.py` to score (bands only, no fake %).
+  `answers` (0–4 per item id), `values_rank`, and the jobs. Score it with
+  `career_match.py --score-intake` (bands only, no fake %; exit 3 means the answers carry
+  no shape, so say "can't measure").
 
 When the user says they've submitted (or the marker appears), read the profile /
 intake, confirm warmly in one line, and continue with what they came for. The server

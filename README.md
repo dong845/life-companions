@@ -172,10 +172,12 @@ references/           onboarding · profile-schema · journaling · continuity �
   modules/            destiny · daily-fortune · career · relationships
 scripts/              companion.py · bazi.py · astro.py · ziwei.py · synastry.py
                       career_match.py · relationship_patterns.py · safety_scan.py
-                      trends.py · form_server.py · selfcheck.py · _deps.py
+                      trends.py · form_server.py · selfcheck.py · _deps.py · _zh.py
 data/content/         bazi-interpretation · bazi-life-arc · relationships
                       (the editable interpretation layer — real frameworks)
 data/career/          occupations.json (188 real O*NET, CC BY 4.0) · assessment_items.json
+data/zh/              OpenCC traditional→simplified table (Apache-2.0): the honesty gate and
+                      the crisis scan fold traditional characters before matching
 tests/                regression suite (plain unittest, fully offline)
 ```
 
@@ -185,7 +187,7 @@ missing; when that fails (no network, PEP 668 externally-managed Python) they pr
 exact install command and what degrades without it instead of a traceback.
 `python3 scripts/companion.py doctor` reports everything at once.
 
-**Tests** — `python3 tests/test_scripts.py` (140 cases, ~20s, no network).
+**Tests** — `python3 tests/test_scripts.py` (189 cases, ~35s, no network).
 Also `python3 scripts/career_match.py --selftest` and `python3 scripts/ziwei.py --selftest`.
 
 **Check a draft before sending it** —

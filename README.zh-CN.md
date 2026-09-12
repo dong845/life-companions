@@ -147,10 +147,11 @@ references/           onboarding · profile-schema · journaling · continuity �
   modules/            destiny · daily-fortune · career · relationships
 scripts/              companion.py · bazi.py · astro.py · ziwei.py · synastry.py
                       career_match.py · relationship_patterns.py · safety_scan.py
-                      trends.py · form_server.py · selfcheck.py · _deps.py
+                      trends.py · form_server.py · selfcheck.py · _deps.py · _zh.py
 data/content/         bazi-interpretation · bazi-life-arc · relationships
                       （真实框架的内容层，可直接编辑）
 data/career/          occupations.json（188 个真实 O*NET，CC BY 4.0）· assessment_items.json
+data/zh/              OpenCC 繁→简字表（Apache-2.0）：诚实闸门和危机扫描先把繁体转成简体再匹配
 tests/                回归测试（纯 unittest，全离线）
 ```
 
@@ -159,7 +160,7 @@ tests/                回归测试（纯 unittest，全离线）
 （没网络、PEP 668 externally-managed 的 Python）会打印明确的安装命令和「少了它会怎样」，
 而不是甩一段栈。`python3 scripts/companion.py doctor` 一次看全。
 
-**测试**：`python3 tests/test_scripts.py`（140 项，约 20 秒，全程不联网）。
+**测试**：`python3 tests/test_scripts.py`（189 项，约 35 秒，全程不联网）。
 另有 `python3 scripts/career_match.py --selftest` 和 `python3 scripts/ziwei.py --selftest`。
 
 **发出去之前过一道闸门**：

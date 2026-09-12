@@ -20,7 +20,7 @@ the install command instead. Nothing after that touches the network.
 ```bash
 D="$(dirname "$(realpath AGENTS.md)")"     # or wherever this repo is checked out
 python3 "$D/scripts/companion.py" doctor   # python + dependencies + what degrades
-python3 "$D/tests/test_scripts.py"         # regression suite (140 tests, ~20s, offline)
+python3 "$D/tests/test_scripts.py"         # regression suite (189 tests, ~35s, offline)
 ```
 
 `doctor` names every missing package with its install command and what stops working

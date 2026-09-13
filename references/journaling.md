@@ -38,9 +38,11 @@ your 12-day streak."* The goal is that logging feels like talking to someone who
 glad to hear from them.
 
 ## When the low lasts
-`brief` carries `_wellbeing_check` when, over the last two weeks, at least five moods were
-logged and more than half were 3/10 or lower (with mood consent only). It is not a crisis
-flag and not a diagnosis. When it is there, set the fortune voice aside unless they ask for
+`brief` carries `_wellbeing_check` when moods were logged on at least five of the last
+fourteen days, more than half of those days averaged 3/10 or lower, and one of the last
+three days logged was low (with mood consent only). Several entries on one day count as one
+day, and a crisis flag anywhere in those two weeks comes first instead (`_crisis_recent`,
+safety.md §2). It is not a crisis flag and not a diagnosis. When it is there, set the fortune voice aside unless they ask for
 it, and ask once, plainly, how they have been. If it fits, suggest talking it through with
 someone they trust, or with a professional such as a doctor or counsellor. Don't reach for
 crisis lines unless there are crisis signals; then safety.md §2 applies. Never read the

@@ -622,6 +622,16 @@ _FOLLOWUP_NOTE = ("Gently follow up on at most ONE of these (nudge, don't nag; n
                   "matching thread is updated in place, not duplicated.")
 
 
+def _parse_day(value):
+    """A day written as YYYY-MM-DD, YYYY/MM/DD, YYYY.MM.DD or YYYYMMDD (a time after it is
+    ignored), else None."""
+    m = re.fullmatch(r"(\d{4})[-/.]?(\d{1,2})[-/.]?(\d{1,2})", str(value or "").strip()[:10])
+    try:
+        return datetime.date(int(m.group(1)), int(m.group(2)), int(m.group(3))) if m else None
+    except ValueError:
+        return None
+
+
 def _due_followups(home, days=5):
     """Open action-threads DUE for a gentle nudge — turns continuity from passive
     memory into follow-through. A thread is due if it isn't closed and hasn't been
@@ -746,21 +756,27 @@ def cmd_brief(args):
     }
     if consent_notes:
         out["_consent_notes"] = consent_notes
-    crisis_recent = any(r.get("crisis_flag") for r in rows[-args.recent:]) if args.recent else False
+    # A crisis flag inside the two weeks the low-mood check reads is recent, however much has
+    # been logged since. Looking only at the last `--recent` rows missed one six days back,
+    # and then called that fortnight "not a crisis".
+    today = datetime.date.today()
+    crisis_recent = ((any(r.get("crisis_flag") for r in rows[-args.recent:]) if args.recent else False)
+                     or any(r.get("crisis_flag") and _parse_day(r.get("date"))
+                            and 0 <= (today - _parse_day(r.get("date"))).days < trends_mod.LOW_WINDOW_DAYS
+                            for r in rows))
     # Two weeks of mostly low moods is not a crisis, and it deserves more than a fortune card
     # every morning (safety.md §2b). Only with mood consent, never over a crisis, and at
     # most once a week.
     if ok["mood"] and not crisis_recent:
         low = trends_mod._sustained_low(rows)
-        try:
-            checked = datetime.date.fromisoformat(str(cont.get("wellbeing_checked") or "")[:10])
-            asked_recently = (datetime.date.today() - checked).days < 7
-        except ValueError:
-            asked_recently = False
+        checked = _parse_day(cont.get("wellbeing_checked"))
+        # a date in the future is a typo, and must not silence the check for a year
+        asked_recently = checked is not None and 0 <= (today - checked).days < 7
         if low["triggered"] and not asked_recently:
             out["_wellbeing_check"] = {
-                "why": (f"{low['entries']} moods logged in the last {low['window_days']} days, "
-                        f"more than half of them {low['low_max']}/10 or lower"),
+                "why": (f"moods logged on {low['days']} of the last {low['window_days']} days, "
+                        f"more than half of those days at {low['low_max']}/10 or lower on "
+                        "average, the latest ones included"),
                 "_next": ("Care before any reading. Set the fortune voice aside unless they ask "
                           "for it, ask plainly how they have been, and where it fits suggest "
                           "talking it through with someone they trust or a professional. This "

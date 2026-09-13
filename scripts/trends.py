@@ -55,18 +55,21 @@ def _streak(dates):
     return streak
 
 
-LOW_MOOD_MAX = 3          # on the 0–10 scale, 3 or lower counts as low
+LOW_MOOD_MAX = 3          # on the 0–10 scale, a day averaging 3 or lower counts as low
 LOW_WINDOW_DAYS = 14
-LOW_MIN_ENTRIES = 5
+LOW_MIN_DAYS = 5
+LOW_RECENT_DAYS = 3       # a low day among the last three logged, or the stretch has lifted
 
 
 def _sustained_low(rows, today=None):
-    """Two weeks of mostly low moods: at least LOW_MIN_ENTRIES moods logged in the last
-    LOW_WINDOW_DAYS days, more than half of them LOW_MOOD_MAX or lower. A reason to ask how
-    someone is doing — not a diagnosis, and not a crisis flag."""
+    """Two weeks of mostly low days: moods logged on at least LOW_MIN_DAYS days of the last
+    LOW_WINDOW_DAYS, more than half of those days averaging LOW_MOOD_MAX or lower, and a low
+    day among the last LOW_RECENT_DAYS logged. Counting entries let one bad afternoon typed
+    in five times read as two weeks, and a stretch that had already lifted still asked.
+    A reason to ask how someone is doing — not a diagnosis, and not a crisis flag."""
     today = today or datetime.date.today()
     start = today - datetime.timedelta(days=LOW_WINDOW_DAYS - 1)
-    moods = []
+    by_day, entries = {}, 0
     for r in rows:
         if not isinstance(r.get("mood"), (int, float)) or not r.get("date"):
             continue
@@ -75,11 +78,15 @@ def _sustained_low(rows, today=None):
         except ValueError:
             continue
         if start <= d <= today:
-            moods.append(r["mood"])
-    low = sum(1 for m in moods if m <= LOW_MOOD_MAX)
-    return {"window_days": LOW_WINDOW_DAYS, "entries": len(moods), "low": low,
-            "low_max": LOW_MOOD_MAX,
-            "triggered": len(moods) >= LOW_MIN_ENTRIES and low * 2 > len(moods)}
+            by_day.setdefault(d, []).append(r["mood"])
+            entries += 1
+    days = sorted(by_day)
+    low_days = {d for d in days if sum(by_day[d]) / len(by_day[d]) <= LOW_MOOD_MAX}
+    recent_low = any(d in low_days for d in days[-LOW_RECENT_DAYS:])
+    return {"window_days": LOW_WINDOW_DAYS, "days": len(days), "entries": entries,
+            "low": len(low_days), "low_max": LOW_MOOD_MAX,
+            "triggered": (len(days) >= LOW_MIN_DAYS and len(low_days) * 2 > len(days)
+                          and recent_low)}
 
 
 def aggregate(home=None, days=30):

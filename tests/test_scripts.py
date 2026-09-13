@@ -3287,6 +3287,61 @@ class TestSustainedLowMood(HomeCase):
             self.assertNotIn(word, note)
 
 
+class TestLowMoodReadsDaysAndDates(HomeCase):
+    """The low-mood check counted entries, not days, and looked for a crisis only in the
+    last five rows. So a crisis six days back sat inside its own window while brief called
+    the stretch "not a crisis"; five entries typed in one bad afternoon read as two weeks
+    of low moods; and a stretch that had already lifted still asked. A future or oddly
+    written `wellbeing_checked` silenced it or never did."""
+
+    def setUp(self):
+        super().setUp()
+        run("companion.py", "consent", "--set", "mood=yes", home=self.home)
+
+    def log(self, days_ago, mood, text="嗯"):
+        import datetime
+        day = (datetime.date.today() - datetime.timedelta(days=days_ago)).isoformat()
+        run("companion.py", "add-entry", "--date", day, "--text", text, "--mood", str(mood),
+            home=self.home)
+
+    def brief(self):
+        return jrun("companion.py", "brief", home=self.home)
+
+    def test_a_crisis_anywhere_in_the_two_weeks_comes_first(self):
+        self.log(6, 2, "我不想活了")
+        for n in range(5, 0, -1):
+            self.log(n, 2)
+        b = self.brief()
+        self.assertIn("_crisis_recent", b)
+        self.assertNotIn("_wellbeing_check", b)
+
+    def test_one_bad_day_logged_many_times_is_one_day(self):
+        for _ in range(5):
+            self.log(0, 2)
+        self.assertNotIn("_wellbeing_check", self.brief())
+        for n in (4, 3, 2, 1):
+            self.log(n, 7)
+        self.assertNotIn("_wellbeing_check", self.brief())
+
+    def test_a_stretch_that_has_already_lifted_does_not_ask(self):
+        for n in (13, 12, 11, 10, 9):
+            self.log(n, 2)
+        for n in (4, 3, 2, 1):
+            self.log(n, 8)
+        self.assertNotIn("_wellbeing_check", self.brief())
+
+    def test_a_future_or_oddly_written_check_date(self):
+        import datetime
+        today = datetime.date.today()
+        for n in range(6):
+            self.log(n, 2)
+        for value, asks in (((today + datetime.timedelta(days=365)).isoformat(), True),
+                            ((today - datetime.timedelta(days=3)).strftime("%Y/%m/%d"), False)):
+            run("companion.py", "continuity", "--merge-json",
+                json.dumps({"wellbeing_checked": value}), home=self.home)
+            self.assertEqual("_wellbeing_check" in self.brief(), asks, value)
+
+
 class TestDeps(unittest.TestCase):
     def test_doctor_reports_without_installing(self):
         rep = jrun("companion.py", "doctor")

@@ -3426,6 +3426,89 @@ class TestCrisisScanReadsHowPeopleSayIt(unittest.TestCase):
             self.assertFalse(self.flag(t), t)
 
 
+class TestTimezoneArgumentsAreReadOrRefused(unittest.TestCase):
+    """--tz took an IANA name or a bare number of hours, and each chart script had its own
+    copy of that parser. In bazi.py and ziwei.py anything else went straight to zoneinfo:
+    a typo'd zone, `+05:30`, `UTC+8` or a directory name like `America` ended in a
+    traceback. A number was never checked at all, so `--tz 30` charted a birth thirty
+    hours from Greenwich and `inf` crashed. The ways people write an offset are now read,
+    and everything else is refused with exit 2 in every script."""
+
+    GOOD = (("+05:30", 5.5), ("UTC+8", 8.0), ("gmt-03:30", -3.5), ("+0545", 5.75),
+            ("-5", -5.0), ("5.75", 5.75), ("14", 14.0), ("-12", -12.0))
+    BAD = ("Europe/Amsterdm", "America", "UTC+8:60", "UTC+15", "30", "-13", "inf", "nan", "")
+
+    def test_offsets_are_read_the_way_people_write_them(self):
+        import _tz
+        for text, hours in self.GOOD:
+            self.assertEqual(_tz.parse_tz(text), hours, text)
+        self.assertEqual(_tz.parse_tz("Asia/Kolkata"), "Asia/Kolkata")
+        self.assertEqual(_tz.parse_tz("UTC"), "UTC")
+
+    def test_anything_else_is_refused_naming_the_flag(self):
+        import _tz
+        for bad in self.BAD:
+            with self.assertRaises(ValueError, msg=bad) as caught:
+                _tz.parse_tz(bad)
+            self.assertIn("--tz", str(caught.exception), bad)
+
+    def test_the_engines_refuse_an_impossible_offset_passed_directly(self):
+        import bazi, ziwei
+        for engine in (bazi, ziwei):
+            with self.assertRaises(ValueError, msg=engine.__name__):
+                engine.compute("1993-04-12", "10:00", "m", tz=30)
+
+    def test_bazi_and_ziwei_answer_a_bad_tz_with_a_json_error(self):
+        for script, bad in (("bazi.py", "Europe/Amsterdm"), ("bazi.py", "America"),
+                            ("bazi.py", "inf"), ("ziwei.py", "UTC+15"), ("ziwei.py", "nan")):
+            code, out, err = run(script, "--date", "1993-04-12", "--time", "10:00",
+                                 "--gender", "m", "--tz", bad)
+            self.assertEqual(code, 2, (script, bad, out, err))
+            self.assertNotIn("Traceback", err, (script, bad))
+            payload = json.loads(out)
+            self.assertFalse(payload["ok"], (script, bad))
+            self.assertIn("--tz", payload["error"], (script, bad))
+
+    def test_astro_and_synastry_refuse_it_too(self):
+        for bad in ("inf", "30"):
+            code, out, err = run("astro.py", "--date", "1993-04-12", "--time", "10:00",
+                                 "--tz", bad)
+            self.assertEqual(code, 2, (bad, out, err))
+            self.assertNotIn("Traceback", err, bad)
+            self.assertIn("--tz", err, bad)
+        code, out, err = run("synastry.py", "--a", "1993-04-12", "--a-tz", "America",
+                             "--b", "1995-08-30")
+        self.assertEqual(code, 2, (out, err))
+        self.assertFalse(json.loads(out)["ok"])
+
+    def test_a_written_offset_charts_like_the_number(self):
+        import bazi
+        code, out, err = run("bazi.py", "--date", "1993-04-12", "--time", "10:00",
+                             "--gender", "m", "--tz", "+05:30")
+        self.assertEqual(code, 0, err)
+        cli = json.loads(out)["computed"]
+        direct = bazi.compute("1993-04-12", "10:00", "m", tz=5.5)["computed"]
+
+        def gz(c):
+            return {k: (v["ganzhi"] if v else None) for k, v in c["pillars"].items()}
+        self.assertEqual(gz(cli), gz(direct))
+        self.assertEqual(cli["input"]["conventions"]["tz"], 5.5)
+
+    def test_a_negative_offset_after_the_flag_is_not_taken_for_an_option(self):
+        # argparse reads `--tz -05:00` as a second option, because -05:00 looks like a flag
+        code, out, err = run("bazi.py", "--date", "1993-04-12", "--time", "10:00",
+                             "--gender", "m", "--tz", "-05:00")
+        self.assertEqual(code, 0, err)
+        self.assertEqual(json.loads(out)["computed"]["input"]["conventions"]["tz"], -5.0)
+        for script, flags in (("ziwei.py", ("--gender", "m", "--tz", "-03:30")),
+                              ("astro.py", ("--tz", "-03:30"))):
+            code, out, err = run(script, "--date", "1993-04-12", "--time", "10:00", *flags)
+            self.assertEqual(code, 0, (script, err))
+        code, out, err = run("synastry.py", "--a", "1993-04-12", "--a-tz", "-05:00",
+                             "--b", "1995-08-30", "--b-tz", "-0930")
+        self.assertEqual(code, 0, err)
+
+
 class TestDeps(unittest.TestCase):
     def test_doctor_reports_without_installing(self):
         rep = jrun("companion.py", "doctor")

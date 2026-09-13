@@ -233,14 +233,15 @@ def main():
     ap.add_argument("--early-zishi", action="store_true",
                     help="early-zishi rule for BOTH charts (default late, as in bazi.py)")
     ap.add_argument("--format", choices=["json", "text"], default="json")
-    args = ap.parse_args()
+    from _tz import argv_with_offsets
+    args = ap.parse_args(argv_with_offsets(("--a-tz", "--b-tz")))
     conventions = {"true_solar_time": args.true_solar_time, "late_zishi": not args.early_zishi}
     try:
         r = compare({"date": args.a, "time": args.a_time, "gender": args.a_gender,
-                     "tz": bazi.parse_tz(args.a_tz) if args.a_tz else None,
+                     "tz": bazi.parse_tz(args.a_tz) if args.a_tz is not None else None,
                      "lon": args.a_lon, **conventions},
                     {"date": args.b, "time": args.b_time, "gender": args.b_gender,
-                     "tz": bazi.parse_tz(args.b_tz) if args.b_tz else None,
+                     "tz": bazi.parse_tz(args.b_tz) if args.b_tz is not None else None,
                      "lon": args.b_lon, **conventions})
     except (ValueError, TypeError, KeyError) as e:
         print(json.dumps({"ok": False, "error": f"bad input: {e}"}, ensure_ascii=False))

@@ -42,6 +42,7 @@ from _deps import ensure as _ensure  # noqa: E402
 _ensure("lunar-python", "lunar_python")
 from lunar_python import Solar  # noqa: E402
 from _branches import relations_between  # noqa: E402
+from _tz import argv_with_offsets, parse_tz  # noqa: E402  (synastry.py reads bazi.parse_tz)
 
 
 # ---------------------------------------------------------------------------
@@ -186,18 +187,6 @@ def _equation_of_time_minutes(dt):
 
 
 CST = "Asia/Shanghai"
-
-
-def parse_tz(v):
-    """Accept an IANA zone name or a plain UTC-offset in hours."""
-    v = str(v).strip()
-    try:
-        return float(v)
-    except ValueError:
-        pass
-    from zoneinfo import ZoneInfo
-    ZoneInfo(v)          # validate here so the error names --tz
-    return v
 
 
 def _offset_hours(tz, dt):
@@ -657,6 +646,8 @@ def compute(date, time, gender, lon=None, true_solar_time=False,
     hour_known = time is not None
     hh, mm = (int(x) for x in time.split(":")) if hour_known else (12, 0)
     given_meridian = standard_meridian
+    if tz is not None:
+        tz = parse_tz(tz)       # the CLI parsed it already; any other caller has not
     if time_window is not None and not 1 <= int(time_window) <= MAX_TIME_WINDOW_MIN:
         raise ValueError(f"--time-window must be 1–{MAX_TIME_WINDOW_MIN} minutes")
 
@@ -952,9 +943,9 @@ def main():
     ap.add_argument("--lon", type=float, default=None, help="Longitude (for True Solar Time)")
     ap.add_argument("--true-solar-time", action="store_true",
                     help="Apply True Solar Time (真太阳时) correction — off by default")
-    ap.add_argument("--tz", type=parse_tz, default=None,
-                    help="BIRTHPLACE timezone — IANA name (Europe/Amsterdam) or UTC-offset "
-                         "hours. REQUIRED for a birth outside UTC+8: 節氣 are absolute "
+    ap.add_argument("--tz", default=None,
+                    help="BIRTHPLACE timezone — IANA name (Europe/Amsterdam) or UTC offset "
+                         "(1, -5, +05:30, UTC+8). REQUIRED for a birth outside UTC+8: 節氣 are absolute "
                          "instants and the engine's tables are Beijing-based, so without "
                          "this the year/month pillar can be wrong.")
     ap.add_argument("--standard-meridian", type=float, default=None,
@@ -968,8 +959,13 @@ def main():
                     help="the birth time is only known to ± this many minutes (e.g. 60 for "
                          "'around nine'): lists every pillar the chart could have in that window")
     ap.add_argument("--format", choices=["json", "text"], default="json")
-    args = ap.parse_args()
+    args = ap.parse_args(argv_with_offsets(("--tz",)))
 
+    try:
+        tz = parse_tz(args.tz) if args.tz is not None else None
+    except ValueError as e:
+        print(json.dumps({"ok": False, "error": f"bad input: {e}"}, ensure_ascii=False))
+        sys.exit(2)
     try:
         on_date = None
         if args.on_date:
@@ -978,7 +974,7 @@ def main():
         r = compute(
             date=args.date, time=args.time, gender=args.gender, lon=args.lon,
             true_solar_time=args.true_solar_time,
-            standard_meridian=args.standard_meridian, tz=args.tz,
+            standard_meridian=args.standard_meridian, tz=tz,
             late_zishi=not args.early_zishi, on_date=on_date,
             time_window=args.time_window,
         )

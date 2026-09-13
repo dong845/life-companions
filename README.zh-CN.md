@@ -148,7 +148,7 @@ references/           onboarding · profile-schema · journaling · continuity �
 scripts/              companion.py · bazi.py · astro.py · ziwei.py · synastry.py
                       career_match.py · relationship_patterns.py · safety_scan.py
                       trends.py · form_server.py · selfcheck.py
-                      _deps.py · _zh.py · _branches.py
+                      _deps.py · _zh.py · _branches.py · _tz.py
 data/content/         bazi-interpretation · bazi-life-arc · relationships
                       （真实框架的内容层，可直接编辑）
 data/career/          occupations.json（188 个真实 O*NET，CC BY 4.0）· assessment_items.json

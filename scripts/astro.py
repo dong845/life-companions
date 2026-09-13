@@ -159,19 +159,11 @@ def _parse_tz(s):
     summer time in July 1993?"), which is a guess dressed as a fact. A zone name lets
     zoneinfo answer it exactly, for the birth moment.
     """
-    s = str(s).strip()
+    from _tz import parse_tz    # the one parser every chart script shares
     try:
-        return float(s)
-    except ValueError:
-        pass
-    try:
-        from zoneinfo import ZoneInfo
-        ZoneInfo(s)          # validate now so the error is about --tz, not about JSON
-        return s
-    except Exception as e:
-        raise argparse.ArgumentTypeError(
-            f"--tz must be UTC-offset hours (8, 1, -5) or an IANA zone name "
-            f"(Asia/Shanghai, Europe/Amsterdam); got {s!r} ({e})")
+        return parse_tz(s)      # validate now so the error is about --tz, not about JSON
+    except ValueError as e:
+        raise argparse.ArgumentTypeError(str(e))
 
 
 def _resolve_tz(tz, date_str, time_str):
@@ -366,7 +358,8 @@ def main():
                          "Europe/Amsterdam; PREFERRED, historical DST resolved for you) or a "
                          "plain UTC offset in hours (8, 1, -5). Needed for the ascendant/houses.")
     ap.add_argument("--format", choices=["json", "text"], default="json")
-    args = ap.parse_args()
+    from _tz import argv_with_offsets
+    args = ap.parse_args(argv_with_offsets(("--tz",)))
     try:
         if args.natal:
             tz_hours, tz_note = _resolve_tz(args.tz, args.date, args.time)

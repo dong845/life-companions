@@ -45,6 +45,7 @@ from _deps import ensure as _ensure  # noqa: E402
 
 _ensure("lunar-python", "lunar_python")
 from lunar_python import Solar  # noqa: E402
+from _tz import argv_with_offsets, parse_tz  # noqa: E402
 
 GAN = ["甲", "乙", "丙", "丁", "戊", "己", "庚", "辛", "壬", "癸"]
 ZHI = ["子", "丑", "寅", "卯", "辰", "巳", "午", "未", "申", "酉", "戌", "亥"]
@@ -159,19 +160,9 @@ def _ziwei_position(ju_num, lunar_day):
     return pos
 
 
-def parse_tz(v):
-    """IANA zone name or plain UTC-offset hours."""
-    v = str(v).strip()
-    try:
-        return float(v)
-    except ValueError:
-        pass
-    from zoneinfo import ZoneInfo
-    ZoneInfo(v)
-    return v
-
-
 def compute(date, time=None, gender="m", on_year=None, tz=None):
+    if tz is not None:
+        tz = parse_tz(tz)       # the CLI parsed it already; any other caller has not
     y, m, d = (int(x) for x in date.split("-"))
     # An impossible date is not a birthday. lunar-python silently rolls Feb 30 into
     # March, so the engine used to hand back a complete, confident 命盘 for a date
@@ -534,19 +525,20 @@ def main():
     ap.add_argument("--time", default=None, help="birth time HH:MM (required for a chart)")
     ap.add_argument("--gender", default="m", choices=["m", "f", "male", "female"])
     ap.add_argument("--on-year", type=int, default=None, help="also compute 流年命宫")
-    ap.add_argument("--tz", type=parse_tz, default=None,
-                    help="BIRTHPLACE timezone (IANA name or offset hours). Without it the "
-                         "birth clock is assumed to be Beijing time and the lunar day — "
-                         "which places 紫微 — can be off by one.")
+    ap.add_argument("--tz", default=None,
+                    help="BIRTHPLACE timezone: IANA name (Europe/Amsterdam) or UTC offset "
+                         "(1, -5, +05:30, UTC+8). Without it the birth clock is assumed to be "
+                         "Beijing time and the lunar day — which places 紫微 — can be off by one.")
     ap.add_argument("--format", choices=["json", "text"], default="json")
     ap.add_argument("--selftest", action="store_true")
-    args = ap.parse_args()
+    args = ap.parse_args(argv_with_offsets(("--tz",)))
     if args.selftest:
         raise SystemExit(0 if _selftest() else 1)
     if not args.date:
         ap.error("--date is required (or use --selftest)")
     try:
-        r = compute(args.date, args.time, args.gender, args.on_year, tz=args.tz)
+        tz = parse_tz(args.tz) if args.tz is not None else None
+        r = compute(args.date, args.time, args.gender, args.on_year, tz=tz)
     except (ValueError, KeyError) as e:
         print(json.dumps({"ok": False, "error": f"bad input: {e}"}, ensure_ascii=False))
         raise SystemExit(2)

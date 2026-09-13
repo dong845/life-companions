@@ -307,6 +307,9 @@ scripts/                     all deterministic computation (never hand-compute)
   form_server.py             serves the onboarding / career HTML forms (self-stopping)
   selfcheck.py               ★ honesty gate over your DRAFT — run before sending
   _deps.py                   dependency handling; `companion.py doctor` reports status
+  _zh.py                     traditional→simplified folding before the gates match (data/zh/)
+  _branches.py               the 地支 relation tables 合婚 and the daily card share
+  _tz.py                     the one --tz parser every chart script uses
 assets/disclaimers.md        canonical disclaimer strings
 data/content/                curated interpretation notes (the editable layer)
 data/career/                 O*NET occupations.json (CC BY 4.0) + assessment_items.json
@@ -373,8 +376,9 @@ python3 $D/scripts/form_server.py --form career &       # 21-item interest check
 ```
 
 `--tz` takes an **IANA zone name** (`Europe/Amsterdam`, `Asia/Shanghai`) as well as a
-plain hour offset — prefer the name and let the script resolve the historical DST
-offset for that birth moment, instead of working it out yourself.
+UTC offset (`8`, `-5`, `+05:30`, `UTC+8`) — prefer the name and let the script resolve the
+historical DST offset for that birth moment, instead of working it out yourself. Anything
+else (a misspelt zone, an offset no place uses) is refused with exit 2, never guessed.
 
 Start every engagement at step 1. Be warm, be honest, and let the person stay in
 the driver's seat.

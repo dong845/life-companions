@@ -4237,6 +4237,16 @@ class TestTimezoneResolutionRanksTheCityOverItsCountry(HomeCase):
             self.assertIsNone(zone, city)
             self.assertTrue(any(city in t for t in summary["todo"]), (city, summary["todo"]))
 
+    def test_a_city_written_with_its_country_is_stored_and_a_tie_is_not(self):
+        # the city lifts the zone its country alias reached at 0.85 to 0.95; two cities at the
+        # top are a question for the person, not a pick
+        for city, want in (("Toronto, Canada", "America/Toronto"),
+                           ("Sydney, Australia", "Australia/Sydney")):
+            self.assertEqual(self._stored_zone(city)[0], want, city)
+        zone, summary = self._stored_zone("香港或深圳")
+        self.assertIsNone(zone)
+        self.assertTrue(any("香港或深圳" in t for t in summary["todo"]), summary["todo"])
+
 
 class TestAbuseRoutingHasOneSource(unittest.TestCase):
     """data/content/relationships.md, which relationships.md tells the model to read, still
@@ -4360,6 +4370,19 @@ class TestFindCallsStrongOnlyWhatTheQueryNames(unittest.TestCase):
             strong = [h for h in self.cm.find_occupations(q, self.occs) if h["match"] == "strong"]
             self.assertGreater(len(strong), 1, (q, strong))
             self.assertTrue(all(h.get("tied") for h in strong), (q, strong))
+
+    def test_words_match_only_one_grammatical_ending_apart(self):
+        same = self.cm._same_word
+        for a, b in (("statistician", "statisticians"), ("actuary", "actuaries"), ("nurse", "nurses")):
+            self.assertTrue(same(a, b), (a, b))
+        for a, b in (("special", "specialties"), ("tech", "technicians"), ("market", "marketing")):
+            self.assertFalse(same(a, b), (a, b))
+
+    def test_an_alias_explains_a_title_only_through_a_whole_phrase(self):
+        text, _words, aliases, _approximate = self.cm._query_parts("数据分析")
+        self.assertEqual(self.cm._unexplained(text, aliases, {"data", "scientists"}), [])
+        self.assertTrue(self.cm._unexplained(text, aliases,
+                                             {"computer", "information", "research", "scientists"}))
 
     def test_an_empty_query_answers_instead_of_printing_help(self):
         code, out, _ = run("career_match.py", "--find", "", "--json")

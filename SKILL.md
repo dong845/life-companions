@@ -294,6 +294,7 @@ references/
   voice.md                   sounding like a person + 通俗易懂 (zh & en); read when
                              selfcheck's `voice` section fires, or before anything long
   safety.md                  crisis + honesty + privacy — ALWAYS in force
+  factcheck.md               the block a high-stakes external fact must carry before it ships
   modules/
     destiny.md               ★ built: BaZi 命盘 + Western natal (星盘) + 紫微斗数 + 合婚
     daily-fortune.md         daily reading woven with the journal
@@ -314,6 +315,8 @@ scripts/                     all deterministic computation (never hand-compute)
 assets/disclaimers.md        canonical disclaimer strings
 data/content/                curated interpretation notes (the editable layer)
 data/career/                 O*NET occupations.json (CC BY 4.0) + assessment_items.json
+data/zh/                     OpenCC traditional→simplified table the gates fold with (Apache-2.0)
+tools/build_occupations.py   rebuilds data/career/occupations.json from O*NET (maintainers only)
 tests/test_scripts.py        regression suite — `python3 tests/test_scripts.py`
 AGENTS.md                    entry point for harnesses that read AGENTS.md
 ```

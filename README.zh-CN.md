@@ -84,7 +84,8 @@ git clone --depth 1 https://github.com/dong845/life-companions.git ~/.claude/ski
 
 **每日运势 + 日记**
 把今天的流年／流月／流日，和你日记里真实写下的东西织在一起，给一段**短**的当天基调，
-外加一个温和的宜／忌。不给幸运数字，不给幸运色，不打星级。顺手可以帮你把今天记下来。
+外加一个温和的宜／忌。不打星级，也不编幸运数字：颜色和数字只作为你八字喜用五行的传统对应出现，
+并且标明是这个。顺手可以帮你把今天记下来。
 
 **工作匹配**
 一个透明的 21 题兴趣小测，底子是真实的 Holland/RIASEC 模型，对 **188 个真实 O\*NET
@@ -164,7 +165,7 @@ tests/                回归测试（纯 unittest，全离线）
 （没网络、PEP 668 externally-managed 的 Python）会打印明确的安装命令和「少了它会怎样」，
 而不是甩一段栈。`python3 scripts/companion.py doctor` 一次看全。
 
-**测试**：`python3 tests/test_scripts.py`（189 项，约 35 秒，全程不联网）。
+**测试**：`python3 tests/test_scripts.py`（几百项，一两分钟，全程不联网）。
 另有 `python3 scripts/career_match.py --selftest` 和 `python3 scripts/ziwei.py --selftest`。
 
 **发出去之前过一道闸门**：

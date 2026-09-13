@@ -98,8 +98,9 @@ appears.
 
 **Daily fortune + journal**
 Today's 流年/流月/流日 woven together with what you actually wrote in your journal:
-a short read on the day's tone plus a gentle 宜/忌. No lucky numbers, no colours, no
-star ratings. It logs the day for you if you want.
+a short read on the day's tone plus a gentle 宜/忌. No star ratings and no invented lucky
+numbers: a colour or a number appears only as your chart's traditional 五行
+correspondence, labelled as such. It logs the day for you if you want.
 
 **Career fit**
 A transparent 21-item interest check grounded in Holland/RIASEC, scored against **188
@@ -191,7 +192,7 @@ missing; when that fails (no network, PEP 668 externally-managed Python) they pr
 exact install command and what degrades without it instead of a traceback.
 `python3 scripts/companion.py doctor` reports everything at once.
 
-**Tests** — `python3 tests/test_scripts.py` (189 cases, ~35s, no network).
+**Tests** — `python3 tests/test_scripts.py` (a few hundred cases, a minute or two, no network).
 Also `python3 scripts/career_match.py --selftest` and `python3 scripts/ziwei.py --selftest`.
 
 **Check a draft before sending it** —

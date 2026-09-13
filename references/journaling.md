@@ -51,8 +51,9 @@ numbers back as a verdict ("你两周平均 2.8 分"). Afterwards record
 for a week.
 
 ## Reviewing
-- `companion.py trend --days 30` → mood avg/direction, recurring tags/themes,
-  logging streak (all descriptive facts, not predictions).
+- `companion.py trend --days 30` → mood avg/direction, recurring tags/themes, logging
+  streak, and `sustained_low` (the days, low days and window behind `_wellbeing_check`);
+  all descriptive facts, not predictions.
 - `companion.py search --tag career --since 2026-06-01` → pull past entries when
   the user wants to look back or when a module needs real material.
 - `companion.py journal --since 2026-07-01 [--tag …]` → re-read the actual prose

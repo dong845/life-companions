@@ -8,9 +8,9 @@ re-asked). **Never** run onboarding during a crisis — help first (see safety.m
 
 **Preferred method: the HTML form.** Run `scripts/form_server.py --form onboarding`
 (see `references/forms.md`) — it collects Tier 0 + the consent-gated birth block in
-one clean page and writes it for you. The tiered chat flow below is the **fallback**
-when the user can't open a browser or would rather just talk. Either way the tiers
-and consent rules are the same.
+one clean page and writes it for you. The tiered chat flow below is a **fully supported
+equal**, not a fallback: use it when a browser is awkward or they would rather just talk.
+Either way the tiers and consent rules are the same.
 
 When you do use chat: give **selectable options** wherever there's a choice — this
 person strongly prefers picking over typing. Use `AskUserQuestion` if your harness has

@@ -108,7 +108,8 @@ points at neighbours because O\*NET has no such occupation (产品经理, 运营
 never matches on the group its "Except" clause leaves out, and a title whose matched words
 another strong title covers and more is weak too (for 「中学老师」, Elementary School
 Teachers). When more than one title is strong they are all marked `tied`: ask which one is
-their work. Present a weak candidate as a neighbour, never as their job, and when every
+their work, and `matched_on` shows which of the title's words matched. Present a weak
+candidate as a neighbour, never as their job, and when every
 candidate is weak say that none of them is the job they named. Traditional script,
 full-width letters and spaces are folded first, so 軟體工程師 and ＵＩ设计师 find the same
 titles as their plain forms.

@@ -4506,6 +4506,24 @@ class TestDocsAndCodeSayTheSameThing(HomeCase):
         self.assertFalse(selfcheck.check("幸运数字：3、8", "daily")["ok"])
 
 
+class TestTheSkillMapNamesWhatShips(unittest.TestCase):
+    """SKILL.md's file map is how the model finds a helper, and it fell behind twice: _zh.py,
+    _branches.py, data/zh/, tools/ and references/factcheck.md all shipped without a line."""
+
+    def test_every_script_reference_and_data_folder_has_a_line(self):
+        with open(os.path.join(SKILL, "SKILL.md"), encoding="utf-8") as f:
+            skill = f.read()
+        start = skill.find("SKILL.md                     ← you are here")
+        self.assertGreater(start, -1)
+        file_map = skill[start:skill.find("```", start)]
+        names = [n for n in os.listdir(SCRIPTS) if n.endswith(".py")]
+        names += [n for n in os.listdir(os.path.join(SKILL, "references")) if n.endswith(".md")]
+        names += [f"data/{d}/" for d in os.listdir(os.path.join(SKILL, "data"))
+                  if os.path.isdir(os.path.join(SKILL, "data", d))]
+        names += ["tools/"]
+        self.assertEqual([n for n in names if n not in file_map], [])
+
+
 class TestDeps(unittest.TestCase):
     def test_doctor_reports_without_installing(self):
         rep = jrun("companion.py", "doctor")

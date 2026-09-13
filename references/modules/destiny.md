@@ -74,7 +74,8 @@ real birth instant. TST used to shift that instant too, so switching it on could
 way. Everything the payload derives — 十神, the 五行 tally, 大运, 生肖, 命宫/胎元 — is read
 off the pillars it displays; if you ever see them disagree, that is a bug, not a school.
 
-It's deterministic and fast — recompute freely (v1 doesn't cache). The JSON splits
+It's deterministic and fast, so recompute freely; the cache described below is for
+continuity, not speed. The JSON splits
 `computed` (facts) from `heuristic` (the labeled 扶抑 strength guess) and lists
 `ambiguities`. **Surface the ambiguities honestly** — unknown time, a 23:00 子时
 boundary, or a TST shift all change the read and the user deserves to know.

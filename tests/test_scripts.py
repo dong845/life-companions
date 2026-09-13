@@ -2675,6 +2675,94 @@ class TestForgetLeavesNoTrace(HomeCase):
         self.assertFalse(jrun("companion.py", "status", home=self.home)["consent"]["mood"])
 
 
+class TestForgetPersonMeansThatPerson(HomeCase):
+    """`forget --person` matched names as substrings, so forgetting 小李 deleted 小李子's
+    entries and threads, and forgetting Ann deleted Anna's, for good. It also read an entry
+    only up to its first "## " line, missed names written with a Chinese comma or kept in
+    themes, and said "nothing matched" for `ann` while `Ann` sat in four files."""
+
+    def setUp(self):
+        super().setUp()
+        run("companion.py", "consent", "--set", "relationships=yes", home=self.home)
+
+    def entry(self, date, text, people=None, themes=None):
+        args = ["add-entry", "--date", date, "--text", text]
+        if people:
+            args += ["--people", people]
+        if themes:
+            args += ["--themes", themes]
+        run("companion.py", *args, home=self.home)
+
+    def test_a_name_inside_another_tracked_name_is_someone_else(self):
+        self.entry("2026-08-01", "晚上和小李子吃火锅 LIZI-ENTRY", people="小李子")
+        self.entry("2026-08-02", "和小李吵架 LI-ENTRY", people="小李")
+        run("companion.py", "cache", "--module", "relationships", "--merge-json", json.dumps(
+            {"people": {"小李": {"incidents": [{"date": "2026-08-02", "gist": "吵架", "lens": "criticism"}]},
+                        "小李子": {"incidents": [{"date": "2026-08-01", "gist": "吃火锅", "lens": "bid"}]}}}),
+            home=self.home)
+        run("companion.py", "continuity", "--merge-json", json.dumps({"open_threads": [
+            {"thread": "小李子火锅 LIZI-THREAD", "opened": "2026-08-01", "status": "open"},
+            {"thread": "跟小李道歉 LI-THREAD", "opened": "2026-08-02", "status": "open"}]}),
+            home=self.home)
+        r = jrun("companion.py", "forget", "--person", "小李", "--with-entries", home=self.home)
+        self.assertTrue(r["ok"], r)
+        text = _home_text(self.home)
+        for gone in ("LI-ENTRY", "LI-THREAD"):
+            self.assertNotIn(gone, text)
+        for kept in ("LIZI-ENTRY", "LIZI-THREAD", "吃火锅"):
+            self.assertIn(kept, text, "someone else's data went with them")
+
+    def test_a_latin_name_matches_whole_words_only(self):
+        self.entry("2026-08-01", "Anna called about the move ANNA-ENTRY", people="Anna")
+        self.entry("2026-08-02", "Ann and I argued ANN-ENTRY", people="Ann")
+        self.entry("2026-08-03", "planning the annual review PLAN-ENTRY")
+        self.entry("2026-08-04", "Bought a Samsung phone SAMSUNG-ENTRY")
+        r = jrun("companion.py", "forget", "--person", "Ann", "--with-entries", home=self.home)
+        self.assertTrue(r["ok"], r)
+        run("companion.py", "forget", "--person", "Sam", "--with-entries", home=self.home)
+        text = _home_text(self.home)
+        self.assertNotIn("ANN-ENTRY", text)
+        for kept in ("ANNA-ENTRY", "PLAN-ENTRY", "SAMSUNG-ENTRY"):
+            self.assertIn(kept, text)
+
+    def test_a_mention_below_a_heading_inside_the_entry_counts(self):
+        self.entry("2026-08-05", "上午读书\n## 下午\n见了小王 SUB-MENTION")
+        self.entry("2026-08-06", "今天散步 OTHER-DAY")
+        r = jrun("companion.py", "forget", "--person", "小王", "--with-entries", home=self.home)
+        self.assertTrue(r["ok"], r)
+        text = _home_text(self.home)
+        self.assertNotIn("SUB-MENTION", text)
+        self.assertIn("OTHER-DAY", text)
+
+    def test_names_split_on_chinese_commas_and_themes_are_searched(self):
+        self.entry("2026-08-01", "三个人吃饭", people="小王，小张、小刘")
+        self.entry("2026-08-02", "有点烦", themes="和小王的冲突,工作")
+        self.assertEqual(_index_rows(self.home)[0]["people"], ["小王", "小张", "小刘"])
+        r = jrun("companion.py", "forget", "--person", "小王", home=self.home)
+        self.assertTrue(r["ok"], r)
+        rows = _index_rows(self.home)
+        self.assertEqual(rows[0]["people"], ["小张", "小刘"])
+        self.assertEqual(rows[1]["themes"], ["工作"])
+        index = open(os.path.join(self.home, "journal", "index.jsonl"), encoding="utf-8").read()
+        self.assertNotIn("小王", index)
+
+    def test_kept_prose_is_listed_instead_of_nothing_matched(self):
+        self.entry("2026-08-01", "和小王聊天")
+        r = jrun("companion.py", "forget", "--person", "小王", home=self.home)
+        self.assertTrue(r["ok"], r)
+        # the prose was kept on purpose; the report has to say where, not "nothing matched"
+        self.assertEqual(r.get("entries_still_mentioning"), [{"date": "2026-08-01", "nth": 1}], r)
+        self.assertNotIn("nothing matched", r["done"])
+
+    def test_a_name_in_another_case_is_asked_about_not_guessed(self):
+        self.entry("2026-08-02", "Ann and I argued ANN-ENTRY", people="Ann")
+        code, out, _ = run("companion.py", "forget", "--person", "ann", "--with-entries",
+                           home=self.home)
+        self.assertEqual(code, 3, out)
+        self.assertIn("Ann", json.loads(out).get("did_you_mean", []))
+        self.assertIn("ANN-ENTRY", _home_text(self.home))
+
+
 class TestCareerScoringHasACommand(HomeCase):
     """Scoring a real person had no command. career.md told the model to import the module
     and pointed it at `score_person`, which ranks all 188 occupations even for an answer set

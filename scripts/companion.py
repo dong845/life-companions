@@ -796,9 +796,11 @@ def cmd_add_entry(args):
         print(json.dumps({"ok": False, "error": f"bad --date '{date}', expect YYYY-MM-DD"},
                          ensure_ascii=False))
         return
-    tags = [t.strip() for t in (args.tags or "").split(",") if t.strip()]
-    themes = [t.strip() for t in (args.themes or "").split(",") if t.strip()]
-    people = [t.strip() for t in (args.people or "").split(",") if t.strip()]
+    # People type the list separators of their own script: 「小王，小张、小刘」 used to be stored
+    # as one person, and that person could then never be forgotten by name.
+    tags = [t.strip() for t in re.split(r"[,，]", args.tags or "") if t.strip()]
+    themes = [t.strip() for t in re.split(r"[,，]", args.themes or "") if t.strip()]
+    people = [t.strip() for t in re.split(r"[,，、;；]", args.people or "") if t.strip()]
 
     # mood is a 0–10 scale (profile-schema.md). Reject out-of-range LOUDLY rather than
     # storing it: a stray value silently poisons every mood_avg / direction that
@@ -892,7 +894,8 @@ def cmd_journal(args):
     """Print the human-readable journal prose (most recent first), optionally since a
     date — so the user can actually re-read their entries, not just aggregates."""
     home = home_dir(args.home)
-    rows = trends_mod._load(_paths(home)["index"])
+    all_rows = trends_mod._load(_paths(home)["index"])
+    rows = all_rows
     if args.since:
         rows = [r for r in rows if r.get("date", "") >= args.since]
     if args.tag:
@@ -900,16 +903,9 @@ def cmd_journal(args):
     rows = rows[-args.limit:] if args.limit else rows
     blocks = []
     for r in rows:
-        fp = os.path.join(home, r.get("file", ""))
-        if not os.path.exists(fp):
-            continue
-        with open(fp, encoding="utf-8") as f:
-            content = f.read()
-        block = content[r.get("offset", 0):]
-        nxt = block.find("\n## ", 1)
-        if nxt != -1:
-            block = block[:nxt]
-        blocks.append(block.strip())
+        block = _entry_text(home, r, all_rows).strip()
+        if block:
+            blocks.append(block)
     print("\n\n".join(reversed(blocks)) if blocks else "(no matching journal entries)")
 
 
@@ -925,25 +921,11 @@ def cmd_search(args):
         if args.until and r.get("date", "") > args.until:
             continue
         out.append(r)
-    # optional free-text match against the prose — scoped to the ENTRY's own block
-    # (all entries in a month share one file, so match on the block from this entry's
-    # offset up to the next entry's "## " header, not the whole file).
+    # optional free-text match against the prose, scoped to the entry's own text (all
+    # entries in a month share one file)
     if args.text:
         needle = args.text.lower()
-        kept = []
-        for r in out:
-            fp = os.path.join(home, r.get("file", ""))
-            if not os.path.exists(fp):
-                continue
-            with open(fp, encoding="utf-8") as f:
-                content = f.read()
-            block = content[r.get("offset", 0):]
-            nxt = block.find("\n## ", 1)          # start of the next entry, if any
-            if nxt != -1:
-                block = block[:nxt]
-            if needle in block.lower():
-                kept.append(r)
-        out = kept
+        out = [r for r in out if needle in _entry_text(home, r, rows).lower()]
     print(json.dumps({"matches": len(out), "entries": out}, ensure_ascii=False, indent=2))
 
 
@@ -955,17 +937,27 @@ def _write_index(home, rows):
                   "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows))
 
 
-def _entry_text(home, row):
-    """The prose of one journal entry, found through its index row."""
+def _entry_text(home, row, rows=None):
+    """The text of one journal entry, found through its index row. It runs for the
+    entry's recorded `length` when the index has one, else up to the next indexed entry in
+    the same file, else to the end of the file. It used to stop at the first line starting
+    "## ", so an entry with its own "## 下午" heading lost everything below it: previews went
+    blank, and a name written there was never found."""
     if not row.get("file"):
         return ""
     fp = os.path.join(home, row["file"])
     if not os.path.exists(fp):
         return ""
     with open(fp, encoding="utf-8") as f:
-        block = f.read()[row.get("offset") or 0:]
-    nxt = block.find("\n## ", 1)
-    return block[:nxt] if nxt != -1 else block
+        content = f.read()
+    start = row.get("offset") or 0
+    if isinstance(row.get("length"), int):
+        return content[start:start + row["length"]]
+    if rows is None:
+        rows = trends_mod._load(_paths(home)["index"])
+    later = [r["offset"] for r in rows if r.get("file") == row["file"]
+             and isinstance(r.get("offset"), int) and r["offset"] > start]
+    return content[start:min(later) if later else len(content)]
 
 
 def _nth_of_day(rows, row):
@@ -973,8 +965,8 @@ def _nth_of_day(rows, row):
     return next((i for i, r in enumerate(same, 1) if r is row), None)
 
 
-def _preview(home, row, width=30):
-    lines = _entry_text(home, row).splitlines()[1:]
+def _preview(home, row, width=30, rows=None):
+    lines = _entry_text(home, row, rows).lstrip("\n").splitlines()[1:]
     body = " ".join(l.strip() for l in lines
                     if l.strip() and not l.startswith(("tags:", "> companion:")))
     return body[:width]
@@ -1033,18 +1025,20 @@ def _rewrite_journal(home, transform, files=None):
     return out, None
 
 
-def _residue(home, needle):
-    """Files under home that still contain `needle`, so a delete can check its own work."""
+def _residue(home, needle, matches=None):
+    """Files under home that still contain `needle` (or whose text `matches`), so a delete
+    can check its own work."""
     hits = []
     for dp, _dn, fn in os.walk(home):
         for name in fn:
             fp = os.path.join(dp, name)
             try:
                 with open(fp, encoding="utf-8", errors="ignore") as fh:
-                    if needle in fh.read():
-                        hits.append(os.path.relpath(fp, home))
+                    text = fh.read()
             except OSError:
                 continue
+            if (matches(text) if matches else needle in text):
+                hits.append(os.path.relpath(fp, home))
     return sorted(hits)
 
 
@@ -1178,7 +1172,7 @@ def _forget_entry(home, date, nth):
     if len(day) > 1 and nth is None:
         return None, {"ok": False,
                       "error": f"{len(day)} entries on {date}; say which one with --nth",
-                      "candidates": [{"nth": i, "preview": _preview(home, r)}
+                      "candidates": [{"nth": i, "preview": _preview(home, r, rows=rows)}
                                      for i, r in enumerate(day, 1)]}
     n = nth or 1
     if not 1 <= n <= len(day):
@@ -1196,56 +1190,108 @@ def _forget_entry(home, date, nth):
             + (" (it carried a crisis flag)" if target.get("crisis_flag") else "")], None
 
 
+_LATIN_NAME = re.compile(r"[A-Za-z][A-Za-z .'\-]*")
+
+
+def _mentions(text, name, known=()):
+    """Does `text` name this person, and not somebody whose longer name contains theirs?
+    Forgetting 小李 matched 「小李子」 and forgetting Ann matched "Anna", and both other
+    people's entries were deleted for good. Known longer names containing this one are
+    masked first, and a Latin name must stand as a whole word, so "Samsung" is not Sam."""
+    text = str(text)
+    for other in sorted((k for k in known if k != name and name in k), key=len, reverse=True):
+        text = text.replace(other, "\0" * len(other))
+    if _LATIN_NAME.fullmatch(name):
+        return re.search(r"(?<![A-Za-z])" + re.escape(name) + r"(?![A-Za-z])", text) is not None
+    return name in text
+
+
+def _known_names(home, rows):
+    names = {n for r in rows for n in (r.get("people") or []) if isinstance(n, str)}
+    rel = _relationships_path(home)
+    if os.path.exists(rel):
+        people = _load_yaml(rel).get("people")
+        if isinstance(people, dict):
+            names |= {n for n in people if isinstance(n, str)}
+    return names
+
+
 def _forget_person(home, name, with_entries):
     p = _paths(home)
     done, report = [], {}
-    rel = _relationships_path(home)
-    if os.path.exists(rel):
-        data = _load_yaml(rel)
-        people = data.get("people") or {}
-        if name in people:
-            del people[name]
-            _save_yaml(rel, data)
-            done.append(f"relationship record for {name} removed")
+    rows = trends_mod._load(p["index"])
+    known = _known_names(home, rows)
+    # The same letters in another case are, as far as this can tell, someone else, and a
+    # guess deletes the wrong person's data. Ask.
+    similar = sorted(k for k in known if k != name and k.lower() == name.lower())
+    if name not in known and similar:
+        return None, {"ok": False, "error": f"no one is stored as {name!r}; nothing was changed",
+                      "did_you_mean": similar,
+                      "_next": "Confirm the exact name with the person, then run forget again."}
 
-    # Prose, threads and the summary are matched by substring, which is only safe for a
+    # Prose, threads and the summary are searched for the name, which is only safe for a
     # name of two characters or more; a one-letter name would match half the journal.
     searchable = len(name) >= 2
     if not searchable:
         report["_note"] = (f"「{name}」 is a single character, so journal prose, threads and "
                            "the summary were not searched; check those by hand.")
-    rows = trends_mod._load(p["index"])
-    mentioning = [r for r in rows if name in (r.get("people") or [])
-                  or (searchable and name in _entry_text(home, r))]
-    if with_entries and mentioning:
-        keys = {(r.get("file"), r.get("offset")) for r in mentioning}
-        _, err = _rewrite_journal(
-            home, lambda r, b: None if (r.get("file"), r.get("offset")) in keys else b,
-            files={r.get("file") for r in mentioning})
-        if err:
-            return None, {"ok": False, "error": err}
-        done.append(f"{len(mentioning)} journal entr{'y' if len(mentioning) == 1 else 'ies'} "
-                    f"mentioning {name} deleted")
-    elif mentioning:
+
+    def names_them(text):
+        return searchable and _mentions(text, name, known)
+
+    def tagged(r):
+        return (name in (r.get("people") or [])
+                or any(names_them(t) for t in (r.get("themes") or []) + (r.get("tags") or [])))
+
+    in_prose = {id(r) for r in rows if names_them(_entry_text(home, r, rows))}
+    if with_entries:
+        doomed = [r for r in rows if id(r) in in_prose or tagged(r)]
+        if doomed:
+            # The journal goes first: it is the step that can refuse, and a refusal has to
+            # leave everything else as it was.
+            keys = {(r.get("file"), r.get("offset")) for r in doomed}
+            _, err = _rewrite_journal(
+                home, lambda r, b: None if (r.get("file"), r.get("offset")) in keys else b,
+                files={r.get("file") for r in doomed})
+            if err:
+                return None, {"ok": False, "error": err}
+            done.append(f"{len(doomed)} journal entr{'y' if len(doomed) == 1 else 'ies'} "
+                        f"about {name} deleted")
+    elif in_prose:
         report["entries_still_mentioning"] = [
-            {"date": r.get("date"), "nth": _nth_of_day(rows, r)} for r in mentioning]
+            {"date": r.get("date"), "nth": _nth_of_day(rows, r)} for r in rows if id(r) in in_prose]
         report["_next"] = (f"Their prose was kept. `forget --person {name} --with-entries` "
                            "deletes those entries too, or `forget --entry DATE --nth N` one "
                            "at a time.")
 
+    rel = _relationships_path(home)
+    if os.path.exists(rel):
+        data = _load_yaml(rel)
+        people = data.get("people") if isinstance(data.get("people"), dict) else {}
+        if name in people:
+            del people[name]
+            _save_yaml(rel, data)
+            done.append(f"relationship record for {name} removed")
+
     rows = trends_mod._load(p["index"])
-    if any(name in (r.get("people") or []) for r in rows):
-        for r in rows:
-            if r.get("people"):
-                r["people"] = [x for x in r["people"] if x != name]
+    touched = 0
+    for r in rows:
+        before = json.dumps(r, ensure_ascii=False, sort_keys=True)
+        if r.get("people"):
+            r["people"] = [x for x in r["people"] if x != name]
+        for key in ("themes", "tags"):
+            if r.get(key):
+                r[key] = [t for t in r[key] if not names_them(t)]
+        touched += json.dumps(r, ensure_ascii=False, sort_keys=True) != before
+    if touched:
         _write_index(home, rows)
-        done.append(f"{name} removed from the journal index")
+        done.append(f"{name} removed from {touched} journal index row(s)")
 
     cont = _load_yaml(p["continuity"], {})
     if cont and searchable:
         threads = cont.get("open_threads") or []
-        keep = [t for t in threads if name not in str(t)]
-        cleared = name in str(cont.get("rolling_summary") or "")
+        keep = [t for t in threads if not names_them(t)]
+        cleared = names_them(cont.get("rolling_summary") or "")
         if cleared:
             cont["rolling_summary"] = ""
             done.append("continuity rolling_summary cleared (it mentioned them; it rebuilds)")
@@ -1257,8 +1303,10 @@ def _forget_person(home, name, with_entries):
             _save_yaml(p["continuity"], cont)
 
     if searchable:
-        left = [f for f in _residue(home, name)
-                if with_entries or not f.startswith("journal" + os.sep)]
+        # kept prose is already listed entry by entry; everything else that still names
+        # them, the index included, is listed by file
+        left = [f for f in _residue(home, name, lambda t: _mentions(t, name, known))
+                if with_entries or not (f.startswith("journal" + os.sep) and f.endswith(".md"))]
         if left:
             report["still_mentioned_in"] = left
     report["done"] = done
@@ -1389,8 +1437,10 @@ def cmd_forget(args):
         if err:
             refuse(err)
         done += d
-    print(json.dumps({"ok": True, "done": done or ["nothing matched"], **extra},
-                     ensure_ascii=False, indent=2))
+    if not done:
+        kept = [k for k in ("entries_still_mentioning", "still_mentioned_in") if k in extra]
+        done = ["nothing was deleted; see " + " and ".join(kept)] if kept else ["nothing matched"]
+    print(json.dumps({"ok": True, "done": done, **extra}, ensure_ascii=False, indent=2))
 
 
 def main():

@@ -4097,6 +4097,42 @@ class TestOnboardingFormKeepsWhatWasAlreadyGiven(HomeCase):
         self.assertNotRegex(page, r"name='birth_consent'[^>]*\schecked(?=[\s>])")
 
 
+class TestGateReadsTaiwanAndCantoneseWording(unittest.TestCase):
+    """Folding traditional characters to simplified changes characters, not words. 「你得了
+    憂鬱症」 folds to 忧郁症, which no pattern listed, while 抑郁症 blocked; 機率 folds to 机率,
+    not 概率; and Cantonese carries the same verdict in its own words: 「佢係典型嘅自戀狂，你應該
+    即刻分手」 passed while its Mandarin twin blocked. Even Mandarin 「你应该马上分手」 passed,
+    because the directive pattern knew 你该 but not 你应该."""
+
+    @staticmethod
+    def blockers(text, module):
+        import selfcheck
+        return sorted({x["code"] for x in selfcheck.check(text, module)["findings"]
+                       if x["severity"] == "blocker"})
+
+    def test_the_same_verdicts_in_regional_wording_are_blocked(self):
+        for text, module, code in (
+                ("你得了憂鬱症", "relationships", "diagnosis"),
+                ("你患咗抑鬱症", "relationships", "diagnosis"),
+                ("你們大機率會分手", "synastry", "fatalism"),
+                ("好大機會分手", "relationships", "fatalism"),
+                ("佢哋實會分手", "relationships", "fatalism"),
+                ("分手機率很大", "relationships", "fatalism"),
+                ("梗會分手㗎啦", "relationships", "fatalism"),
+                ("佢係典型嘅自戀狂，你應該即刻分手", "relationships", "one-sided-verdict"),
+                ("佢係自戀狂", "relationships", "one-sided-verdict"),
+                ("你应该马上分手", "relationships", "one-sided-verdict"),
+                ("你應當即刻離開佢", "relationships", "one-sided-verdict")):
+            self.assertIn(code, self.blockers(text, module), text)
+
+    def test_ordinary_sentences_that_share_the_characters_pass(self):
+        for text, module in (("机率论这门课好难", "none"), ("这个系统很稳定", "none"),
+                             ("佢系我朋友", "relationships"), ("你应该跟他好好谈谈", "relationships"),
+                             ("事实会告诉你答案", "none"), ("事实会让你看清要不要分手", "relationships"),
+                             ("这个梗会火", "daily"), ("好大机会升职啊", "daily")):
+            self.assertEqual(self.blockers(text, module), [], text)
+
+
 class TestDeps(unittest.TestCase):
     def test_doctor_reports_without_installing(self):
         rep = jrun("companion.py", "doctor")

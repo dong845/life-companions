@@ -281,11 +281,14 @@ FATALISM = [
     (r"你(会|将)(在|于)?\s*\d{4}\s*年[^。\n]{0,12}(结婚|离婚|发财|破产|生病|升职)", "指定年份的事件预言"),
     # --- hedged prediction: the REAL failure shape. A probability attached to a life
     # event is still a prophecy; hedging it doesn't make it a reflection. ---
-    (r"(大概率|很可能|极可能|十有八九|八九不离十|多半(会|要|是)|难免(会|要)|免不了|"
+    # Taiwan writes 機率, which folds to 机率 rather than 概率; Cantonese says 好大機會, 實會 and
+    # 梗會. The lookbehinds keep 事实会, 其实会 and 这个梗会 out.
+    (r"(大概率|大机率|机率很大|好大机会|(?<![事真确落诚现老结充扎厚其])实会|(?<![这那个的])梗会|"
+     r"很可能|极可能|十有八九|八九不离十|多半(会|要|是)|难免(会|要)|免不了|"
      r"恐怕(会|要)|怕是(要|会)|保不齐|说不好会|基本(上)?(会|要|没)|铁定|跑不了|"
      r"逃不过|躲不掉)[^。！？\n]{0,16}(" + _BAD_EVENT + ")",
      "带概率的坏事预言（对冲过的宿命，仍是预言）"),
-    (r"(" + _BAD_EVENT + r")[^。！？\n]{0,8}(是大概率|概率很大|几乎是必然|在所难免)",
+    (r"(" + _BAD_EVENT + r")[^。！？\n]{0,8}(是大概率|是大机率|概率很大|机率很大|几乎是必然|在所难免)",
      "带概率的坏事预言"),
     # metaphors for the same forecast, which dodge the literal-event list
     (r"(走到(尽头|头了)|到头了|守不住|保不住|撑不到|熬不过|没(有)?好结果|"
@@ -366,24 +369,25 @@ WORD_PRECISION = [
 ]
 
 # The relationship module holds ≥2 perspectives and never labels the absent partner.
+# Cantonese says the same verdicts with 佢 for 他/她, 係 (folded to 系) for 是 and 嘅 for 的.
 RELATIONSHIP_VERDICT = [
-    (r"(他|她|对方|你男朋友|你女朋友|你老公|你老婆)(就)?是(个)?(典型的)?"
+    (r"(他|她|佢|对方|你男朋友|你女朋友|你老公|你老婆)(就)?(是|系)(个|一个)?(典型(的|嘅)?)?"
      r"(PUA|煤气灯|自恋(型|狂)|反社会|渣男|渣女|控制狂|巨婴|妈宝)",
      "给不在场的一方贴临床/人格标签"),
-    (r"(你(就)?该|建议你(马上|赶紧)?|趁早|果断)(离开|分手|离婚|甩)",
+    (r"(你(就)?(应该|应当|该)(要)?|建议你|趁早|果断)\s*(马上|赶紧|即刻|立刻|立即|尽快)?\s*(离开|分手|离婚|甩)",
      "替对方下决定（且在虐待情境里「直接走」可能升高危险）"),
     (r"\b(he|she|they)('s| is| are) (a )?(narcissist|sociopath|gaslighter|abuser)\b",
      "clinical label on the absent partner"),
 ]
 
 DIAGNOSIS = [
-    (r"你(有|患有|得了)[^。\n]{0,6}(抑郁症|焦虑症|双相|躁郁|人格障碍|PTSD|ADHD)", "疾病诊断"),
+    (r"你(有|患有|得了|患咗|得咗)[^。\n]{0,6}(抑郁症|忧郁症|焦虑症|双相|躁郁|人格障碍|PTSD|ADHD)", "疾病诊断"),
     (r"\byou\s+(have|are suffering from)\s+(depression|bipolar|anxiety disorder|PTSD|ADHD)\b", "diagnosis"),
-    (r"(她|他|对方)是(焦虑型|回避型|自恋型|边缘型)(人格)?(?!倾向)", "把倾向说成固定人格标签"),
+    (r"(她|他|佢|对方)(是|系)(焦虑型|回避型|自恋型|边缘型)(人格)?(?!倾向)", "把倾向说成固定人格标签"),
     # dodges the copula: 「典型的回避型人格」「妥妥的自恋」「标准 PUA」
-    (r"(典型的?|妥妥的?|标准的?|百分百|活脱脱)\s*(焦虑型|回避型|自恋型?|边缘型|反社会|"
+    (r"(典型(的|嘅)?|妥妥的?|标准(的|嘅)?|百分百|活脱脱)\s*(焦虑型|回避型|自恋型?|边缘型|反社会|"
      r"PUA|煤气灯|双相|躁郁|人格障碍)", "绕开系动词的人格/临床标签"),
-    (r"(她|他|对方)[^。！？\n]{0,8}(有|存在)[^。！？\n]{0,6}(人格障碍|心理问题|精神问题)",
+    (r"(她|他|佢|对方)[^。！？\n]{0,8}(有|存在)[^。！？\n]{0,6}(人格障碍|心理问题|精神问题)",
      "对第三方下临床判断"),
 ]
 

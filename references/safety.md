@@ -173,7 +173,8 @@ real detector; it will miss things and over-flag things. Trust context.
      keyword scan missed it. But **do not conceal it.** Don't make a production of it
      either: one plain line is enough, at the end, and tell them it is theirs to
      delete. 「我把这段记下了，你随时可以让我删掉。」 If they ask, `forget --entry DATE
-     [--nth N]` deletes exactly that entry and leaves the rest of the month alone.
+     [--nth N]` shows exactly that entry, and with `--yes` deletes it and leaves the rest of the
+     month alone.
    - Afterwards you may follow up warmly, but never nag, and never lead with the
      fortune framing again until they clearly re-engage it.
 
@@ -225,13 +226,14 @@ failure. Safety outranks balance.
   the rolling summary.
 - **Data minimization.** Birth *time* is optional; relationship data only from
   what's volunteered; load only the slice a turn needs.
-- **Right to forget is first-class, and it reaches every copy.** Confirm once, run it,
-  and say what it removed (the payload's `done` lists it):
+- **Right to forget is first-class, and it reaches every copy.** Every `forget` first shows what
+  it would remove and deletes nothing (`would`). Tell them, confirm once, run the same command with
+  `--yes`, and say what it removed (the payload's `done` lists it):
   「删掉我的生辰」 `forget --birth` · 「忘掉六月」 `forget --month 2026-06` ·
   「把刚才那条删了」 `forget --entry DATE [--nth N]` ·
   「关于他的都删了」 `forget --person NAME --with-entries` ·
   「不要再记感情的事」 `forget --relationships` · 「情绪分数都删了」 `forget --mood` ·
-  「全部清空」 `forget --all --yes`. Each cleans the journal, the index, the relationship
+  「全部清空」 `forget --all`. Each cleans the journal, the index, the relationship
   log, the working memory and the caches. A forgotten month or person used to survive
   in the rolling summary and the incident log.
 

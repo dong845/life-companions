@@ -29,7 +29,8 @@ Subcommands:
   journal [--since --tag]   re-read the actual prose entries
   search [--tag --text --since --until]
   forget --birth | --month YYYY-MM | --entry DATE [--nth N] | --person NAME
-         [--with-entries] | --relationships | --mood | --all --yes
+         [--with-entries] | --relationships | --mood | --all   [--yes]
+                            without --yes it only shows what it would delete
 """
 import argparse
 import datetime
@@ -1663,13 +1664,35 @@ def _forget_mood(home):
     return done, None
 
 
+def _forget_command(args):
+    """The same forget, confirmed: the command a preview tells the agent to run next."""
+    import shlex
+
+    def arg(value):
+        return value if re.fullmatch(r"[^\s'\"$`\\;&|<>()*?!#~{}\[\]]+", value) else shlex.quote(value)
+
+    parts = ["companion.py"] + (["--home", arg(args.home)] if args.home else []) + ["forget"]
+    for flag, on in (("--birth", args.birth), ("--relationships", args.relationships),
+                     ("--mood", args.mood), ("--all", args.all)):
+        if on:
+            parts.append(flag)
+    if args.month:
+        parts += ["--month", args.month]
+    if args.entry:
+        parts += ["--entry", args.entry]
+    if args.nth is not None:
+        parts += ["--nth", str(args.nth)]
+    if args.person:
+        parts += ["--person", arg(args.person.strip())]
+    if args.with_entries:
+        parts.append("--with-entries")
+    return " ".join(parts + ["--yes"])
+
+
 def cmd_forget(args):
     home = home_dir(args.home)
     p = _paths(home)
     if args.all:
-        if not args.yes:
-            print(json.dumps({"ok": False, "error": "refusing to wipe without --yes"}))
-            return
         # `--yes` alone was the ONLY guard, so this would rmtree whatever COMPANION_HOME
         # (or --home) happened to point at — a typo, a stale export, or a shell variable
         # meant for something else took an unrelated directory with it. Two of three marker
@@ -1698,6 +1721,16 @@ def cmd_forget(args):
                           "this tool will not remove a directory it did not create."),
             }, ensure_ascii=False, indent=2))
             raise SystemExit(3)
+        if not args.yes:
+            count = sum(len(files) for _dir, _sub, files in os.walk(real))
+            print(json.dumps({
+                "ok": True, "preview": True, "deleted": False,
+                "would": [f"the whole companion home at {home}: {count} file(s), the journal, profile, "
+                          "consent ledger and caches included"],
+                "_next": ("Nothing has been deleted. Tell them this removes everything, and ask once. "
+                          f"When they say yes, run `{_forget_command(args)}`.")},
+                ensure_ascii=False, indent=2))
+            return
         import shutil
         shutil.rmtree(real)
         if os.path.islink(home):
@@ -1736,9 +1769,12 @@ def cmd_forget(args):
 
     done, extra = [], {}
 
+    previewing = [False]
+
     def refuse_after(err):
-        # a refusal that follows steps already taken must not say nothing changed
-        if done:
+        # a refusal that follows steps already taken must not say nothing changed; a preview
+        # changed nothing at all
+        if done and not previewing[0]:
             err = dict(err, done_before_this_refusal=list(done))
             err["error"] = str(err.get("error", "")).replace("Nothing was changed.",
                                                              "Nothing more was changed.")
@@ -1753,36 +1789,56 @@ def cmd_forget(args):
                         "before it, and a delete would take it along"),
                 "_next": ("Fix or remove those lines by hand (one JSON object per line), then "
                           "run forget again.")})
-    # The journal steps run first. They are the ones that can refuse, so a refusal leaves
-    # the profile, the consent ledger and the caches as they were.
-    if args.entry:
-        d, err = _forget_entry(home, args.entry, args.nth)
-        if err:
-            refuse_after(err)
-        done += d
-    if args.person:
-        rep, err = _forget_person(home, args.person.strip(), args.with_entries)
-        if err:
-            refuse_after(err)
-        done += rep.pop("done")
-        extra.update(rep)
-    if args.mood:
-        d, err = _forget_mood(home)
-        if err:
-            refuse_after(err)
-        done += d
-    if args.month:
-        done += _forget_month(home, args.month)
-    if args.relationships:
-        d, note = _forget_relationships(home)
-        done += d
-        if note:
-            extra["_note"] = note
-    if args.birth:
-        done += _forget_birth(home)
-    if not done:
-        kept = [k for k in ("entries_still_mentioning", "still_mentioned_in") if k in extra]
-        done = ["nothing was deleted; see " + " and ".join(kept)] if kept else ["nothing matched"]
+    def steps(target):
+        # The journal steps run first. They are the ones that can refuse, so a refusal leaves
+        # the profile, the consent ledger and the caches as they were.
+        if args.entry:
+            d, err = _forget_entry(target, args.entry, args.nth)
+            if err:
+                refuse_after(err)
+            done.extend(d)
+        if args.person:
+            rep, err = _forget_person(target, args.person.strip(), args.with_entries)
+            if err:
+                refuse_after(err)
+            done.extend(rep.pop("done"))
+            extra.update(rep)
+        if args.mood:
+            d, err = _forget_mood(target)
+            if err:
+                refuse_after(err)
+            done.extend(d)
+        if args.month:
+            done.extend(_forget_month(target, args.month))
+        if args.relationships:
+            d, note = _forget_relationships(target)
+            done.extend(d)
+            if note:
+                extra["_note"] = note
+        if args.birth:
+            done.extend(_forget_birth(target))
+        if not done:
+            kept = [k for k in ("entries_still_mentioning", "still_mentioned_in") if k in extra]
+            done.extend(["nothing was deleted; see " + " and ".join(kept)] if kept else ["nothing matched"])
+
+    if not args.yes:
+        # Nothing is deleted without --yes. The preview is the real deletion run on a copy of the
+        # home, so what it lists is what the confirmed run does. A codex run deleted 「小李」's
+        # records on the first request, although safety.md says to confirm once.
+        import shutil
+        with tempfile.TemporaryDirectory(prefix="forget-preview-") as tmp:
+            copy = os.path.join(tmp, "home")
+            shutil.copytree(os.path.realpath(home), copy)
+            previewing[0] = True
+            steps(copy)
+        nxt = ("Nothing has been deleted. Tell them in plain words what this would remove (`would`) "
+               f"and ask once. When they say yes, run `{_forget_command(args)}`.")
+        if extra.get("_next"):
+            nxt += " " + extra.pop("_next")
+        print(json.dumps({"ok": True, "preview": True, "deleted": False, "would": done, **extra,
+                          "_next": nxt}, ensure_ascii=False, indent=2))
+        return
+    steps(home)
     print(json.dumps({"ok": True, "done": done, **extra}, ensure_ascii=False, indent=2))
 
 
@@ -1887,7 +1943,8 @@ def main():
     fg.add_argument("--mood", action="store_true",
                     help="delete every stored mood value and revoke mood consent")
     fg.add_argument("--all", action="store_true")
-    fg.add_argument("--yes", action="store_true")
+    fg.add_argument("--yes", action="store_true",
+                    help="delete for real; without it forget only shows what it would delete")
     fg.set_defaults(func=cmd_forget)
 
     args = ap.parse_args()

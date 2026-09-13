@@ -124,7 +124,9 @@ git clone --depth 1 https://github.com/dong845/life-companions.git ~/.claude/ski
 | 「关于他的都删了」 | `companion.py forget --person 小李 --with-entries` |
 | 「不要再记感情的事」 | `companion.py forget --relationships` |
 | 「情绪分数都删了」 | `companion.py forget --mood` |
-| 「全部清空」 | `companion.py forget --all --yes` |
+| 「全部清空」 | `companion.py forget --all` |
+
+这样执行只会列出会删掉什么，不动任何文件；你确认之后，它再加上 `--yes` 真正删除。
 
 **撤回同意和删除是两件事。** 说「别再用我的生辰」，所有脚本马上停止读取这一类数据，但文件先留着，
 并且告诉你还留着什么、用哪条命令删。误撤回不会丢东西。

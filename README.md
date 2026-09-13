@@ -150,7 +150,10 @@ caches, not only the one obvious file (the tests search the whole folder afterwa
 | "delete everything about him" | `companion.py forget --person Sam --with-entries` |
 | "stop keeping relationship notes" | `companion.py forget --relationships` |
 | "delete my mood scores" | `companion.py forget --mood` |
-| "wipe everything" | `companion.py forget --all --yes` |
+| "wipe everything" | `companion.py forget --all` |
+
+Run like that, each one only lists what it would remove. Nothing goes until you confirm and it runs
+again with `--yes`.
 
 Every computation is **offline**. BaZi, charts and career matching make no network
 calls, so your data never leaves the machine and nothing costs API credit.

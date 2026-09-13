@@ -221,7 +221,7 @@ class TestConsentAndForget(HomeCase):
         run("companion.py", "set-profile", "--merge-json",
             json.dumps({"birth": {"date": "1993-04-12", "place": "Beijing, CN"}}),
             home=self.home)
-        run("companion.py", "forget", "--birth", home=self.home)
+        run("companion.py", "forget", "--yes", "--birth", home=self.home)
         prof = jrun("companion.py", "read-profile", "--json", home=self.home)
         self.assertIsNone(prof["birth"]["date"])
         with open(os.path.join(self.home, "profile.yaml"), encoding="utf-8") as f:
@@ -1552,12 +1552,14 @@ class TestForgetAllCannotWipeAnUnrelatedDirectory(unittest.TestCase):
             self.assertTrue(r["ok"])
             self.assertFalse(os.path.exists(home))
 
-    def test_still_refuses_without_yes(self):
+    def test_without_yes_it_only_shows_what_would_go(self):
         with tempfile.TemporaryDirectory() as t:
             home = os.path.join(t, "real")
             run("companion.py", "init", home=home)
-            r = jrun("companion.py", "forget", "--all", home=home)
-            self.assertFalse(r["ok"])
+            r = jrun("companion.py", *["forget", "--all"], home=home)
+            self.assertTrue(r["ok"] and r["preview"], r)
+            self.assertFalse(r["deleted"])
+            self.assertIn("--all --yes", r["_next"])
             self.assertTrue(os.path.exists(home))
 
 
@@ -2674,7 +2676,7 @@ class TestForgetLeavesNoTrace(HomeCase):
                  {"thread": "AUG-SECRET 好好谈一次", "opened": "2026-08-10", "status": "open"},
                  {"thread": "七月的计划", "opened": "2026-07-02", "status": "open"}],
              "recent_moods": [3]}), home=self.home)
-        r = jrun("companion.py", "forget", "--month", "2026-08", home=self.home)
+        r = jrun("companion.py", "forget", "--yes", "--month", "2026-08", home=self.home)
         self.assertTrue(r["ok"], r)
         self.assertNotIn("AUG-SECRET", _home_text(self.home))
         _, out, _ = run("companion.py", "journal", home=self.home)
@@ -2695,7 +2697,7 @@ class TestForgetLeavesNoTrace(HomeCase):
             "birth_consent": ["on"], "birth_date": ["1993-04-12"], "birth_time": ["07:35"],
             "birth_place": ["Beijing, CN"], "gender": ["m"]})
         self.assertIn("1993-04-12", _home_text(self.home), "setup must really store it")
-        run("companion.py", "forget", "--birth", home=self.home)
+        run("companion.py", "forget", "--yes", "--birth", home=self.home)
         self.assertNotIn("1993-04-12", _home_text(self.home))
 
     def _four_entries(self):
@@ -2705,7 +2707,7 @@ class TestForgetLeavesNoTrace(HomeCase):
 
     def test_forget_one_entry_keeps_the_rest_readable(self):
         self._four_entries()
-        r = jrun("companion.py", "forget", "--entry", "2026-08-02", "--nth", "2",
+        r = jrun("companion.py", "forget", "--yes", "--entry", "2026-08-02", "--nth", "2",
                  home=self.home)
         self.assertTrue(r["ok"], r)
         self.assertNotIn("MIDDLE-B", _home_text(self.home))
@@ -2721,7 +2723,7 @@ class TestForgetLeavesNoTrace(HomeCase):
 
     def test_forget_entry_refuses_an_ambiguous_date(self):
         self._four_entries()
-        r = jrun("companion.py", "forget", "--entry", "2026-08-02", home=self.home)
+        r = jrun("companion.py", "forget", "--yes", "--entry", "2026-08-02", home=self.home)
         self.assertFalse(r["ok"])
         self.assertEqual(len(r.get("candidates", [])), 2, r)
         self.assertIn("MIDDLE-B", _home_text(self.home), "an ambiguous call deletes nothing")
@@ -2733,7 +2735,7 @@ class TestForgetLeavesNoTrace(HomeCase):
             body = f.read()
         with open(path, "w", encoding="utf-8") as f:
             f.write("hand-edited preface\n" + body)
-        code, out, _ = run("companion.py", "forget", "--entry", "2026-08-03", home=self.home)
+        code, out, _ = run("companion.py", "forget", "--yes", "--entry", "2026-08-03", home=self.home)
         self.assertEqual(code, 3, out)       # a refusal, not an unknown-flag usage error
         self.assertIn("no longer matches", out)
         self.assertIn("第四条", _home_text(self.home))
@@ -2758,7 +2760,7 @@ class TestForgetLeavesNoTrace(HomeCase):
 
     def test_forget_person_with_entries_removes_them_everywhere(self):
         self._people_setup()
-        r = jrun("companion.py", "forget", "--person", "小李", "--with-entries", home=self.home)
+        r = jrun("companion.py", "forget", "--yes", "--person", "小李", "--with-entries", home=self.home)
         self.assertTrue(r["ok"], r)
         text = _home_text(self.home)
         self.assertNotIn("小李", text)
@@ -2770,14 +2772,14 @@ class TestForgetLeavesNoTrace(HomeCase):
         self._people_setup()
         run("companion.py", "cache", "--module", "career_intake", "--merge-json",
             json.dumps({"note": "小李推荐的岗位"}), home=self.home)
-        r = jrun("companion.py", "forget", "--person", "小李", home=self.home)
+        r = jrun("companion.py", "forget", "--yes", "--person", "小李", home=self.home)
         blob = json.dumps(r, ensure_ascii=False)
         self.assertIn("still_mentioned_in", blob, r)
         self.assertIn("career_intake.yaml", blob, r)
 
     def test_forget_person_alone_lists_the_entries_that_still_mention_them(self):
         self._people_setup()
-        r = jrun("companion.py", "forget", "--person", "小李", home=self.home)
+        r = jrun("companion.py", "forget", "--yes", "--person", "小李", home=self.home)
         self.assertTrue(r["ok"], r)
         self.assertEqual([e["date"] for e in r["entries_still_mentioning"]], ["2026-08-10"])
         _, out, _ = run("companion.py", "journal", home=self.home)
@@ -2785,7 +2787,7 @@ class TestForgetLeavesNoTrace(HomeCase):
 
     def test_forget_relationships_removes_the_category(self):
         self._people_setup()
-        r = jrun("companion.py", "forget", "--relationships", home=self.home)
+        r = jrun("companion.py", "forget", "--yes", "--relationships", home=self.home)
         self.assertTrue(r["ok"], r)
         self.assertFalse(os.path.exists(
             os.path.join(self.home, "state", "modules", "relationships.yaml")))
@@ -2800,7 +2802,7 @@ class TestForgetLeavesNoTrace(HomeCase):
             run("companion.py", "add-entry", "--text", "x", "--mood", m, home=self.home)
         run("companion.py", "continuity", "--merge-json",
             json.dumps({"recent_moods": [3, 7]}), home=self.home)
-        r = jrun("companion.py", "forget", "--mood", home=self.home)
+        r = jrun("companion.py", "forget", "--yes", "--mood", home=self.home)
         self.assertTrue(r["ok"], r)
         self.assertTrue(all(row["mood"] is None for row in _index_rows(self.home)))
         self.assertIsNone(re.search(r"mood \d+/10", _home_text(self.home)))
@@ -2838,7 +2840,7 @@ class TestForgetPersonMeansThatPerson(HomeCase):
             {"thread": "小李子火锅 LIZI-THREAD", "opened": "2026-08-01", "status": "open"},
             {"thread": "跟小李道歉 LI-THREAD", "opened": "2026-08-02", "status": "open"}]}),
             home=self.home)
-        r = jrun("companion.py", "forget", "--person", "小李", "--with-entries", home=self.home)
+        r = jrun("companion.py", "forget", "--yes", "--person", "小李", "--with-entries", home=self.home)
         self.assertTrue(r["ok"], r)
         text = _home_text(self.home)
         for gone in ("LI-ENTRY", "LI-THREAD"):
@@ -2851,9 +2853,9 @@ class TestForgetPersonMeansThatPerson(HomeCase):
         self.entry("2026-08-02", "Ann and I argued ANN-ENTRY", people="Ann")
         self.entry("2026-08-03", "planning the annual review PLAN-ENTRY")
         self.entry("2026-08-04", "Bought a Samsung phone SAMSUNG-ENTRY")
-        r = jrun("companion.py", "forget", "--person", "Ann", "--with-entries", home=self.home)
+        r = jrun("companion.py", "forget", "--yes", "--person", "Ann", "--with-entries", home=self.home)
         self.assertTrue(r["ok"], r)
-        run("companion.py", "forget", "--person", "Sam", "--with-entries", home=self.home)
+        run("companion.py", "forget", "--yes", "--person", "Sam", "--with-entries", home=self.home)
         text = _home_text(self.home)
         self.assertNotIn("ANN-ENTRY", text)
         for kept in ("ANNA-ENTRY", "PLAN-ENTRY", "SAMSUNG-ENTRY"):
@@ -2862,7 +2864,7 @@ class TestForgetPersonMeansThatPerson(HomeCase):
     def test_a_mention_below_a_heading_inside_the_entry_counts(self):
         self.entry("2026-08-05", "上午读书\n## 下午\n见了小王 SUB-MENTION")
         self.entry("2026-08-06", "今天散步 OTHER-DAY")
-        r = jrun("companion.py", "forget", "--person", "小王", "--with-entries", home=self.home)
+        r = jrun("companion.py", "forget", "--yes", "--person", "小王", "--with-entries", home=self.home)
         self.assertTrue(r["ok"], r)
         text = _home_text(self.home)
         self.assertNotIn("SUB-MENTION", text)
@@ -2872,7 +2874,7 @@ class TestForgetPersonMeansThatPerson(HomeCase):
         self.entry("2026-08-01", "三个人吃饭", people="小王，小张、小刘")
         self.entry("2026-08-02", "有点烦", themes="和小王的冲突,工作")
         self.assertEqual(_index_rows(self.home)[0]["people"], ["小王", "小张", "小刘"])
-        r = jrun("companion.py", "forget", "--person", "小王", home=self.home)
+        r = jrun("companion.py", "forget", "--yes", "--person", "小王", home=self.home)
         self.assertTrue(r["ok"], r)
         rows = _index_rows(self.home)
         self.assertEqual(rows[0]["people"], ["小张", "小刘"])
@@ -2882,7 +2884,7 @@ class TestForgetPersonMeansThatPerson(HomeCase):
 
     def test_kept_prose_is_listed_instead_of_nothing_matched(self):
         self.entry("2026-08-01", "和小王聊天")
-        r = jrun("companion.py", "forget", "--person", "小王", home=self.home)
+        r = jrun("companion.py", "forget", "--yes", "--person", "小王", home=self.home)
         self.assertTrue(r["ok"], r)
         # the prose was kept on purpose; the report has to say where, not "nothing matched"
         self.assertEqual(r.get("entries_still_mentioning"), [{"date": "2026-08-01", "nth": 1}], r)
@@ -2890,7 +2892,7 @@ class TestForgetPersonMeansThatPerson(HomeCase):
 
     def test_a_name_in_another_case_is_asked_about_not_guessed(self):
         self.entry("2026-08-02", "Ann and I argued ANN-ENTRY", people="Ann")
-        code, out, _ = run("companion.py", "forget", "--person", "ann", "--with-entries",
+        code, out, _ = run("companion.py", "forget", "--yes", "--person", "ann", "--with-entries",
                            home=self.home)
         self.assertEqual(code, 3, out)
         self.assertIn("Ann", json.loads(out).get("did_you_mean", []))
@@ -2916,7 +2918,7 @@ class TestJournalRewritesAreExact(HomeCase):
         run("companion.py", "add-entry", "--date", "2026-06-20", "--text", "六月二十 GONE",
             home=self.home)
         self.append("journal/2026-06.md", "\nHANDMARK plain note\n\n## 2026-06-28 手写\n\nHANDMARK-2\n")
-        r = jrun("companion.py", "forget", "--entry", "2026-06-20", home=self.home)
+        r = jrun("companion.py", "forget", "--yes", "--entry", "2026-06-20", home=self.home)
         self.assertTrue(r["ok"], r)
         text = _home_text(self.home)
         self.assertNotIn("GONE", text)
@@ -2932,18 +2934,18 @@ class TestJournalRewritesAreExact(HomeCase):
             f.write("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows))
         self.append("journal/2026-06.md", "\n## 2026-06-28 手写\n\nHANDMARK\n")
         before = self.text_of("journal/2026-06.md")
-        code, out, _ = run("companion.py", "forget", "--entry", "2026-06-20", home=self.home)
+        code, out, _ = run("companion.py", "forget", "--yes", "--entry", "2026-06-20", home=self.home)
         self.assertEqual(code, 3, out)
         self.assertEqual(self.text_of("journal/2026-06.md"), before)
 
     def test_a_month_that_does_not_exist_is_a_usage_error(self):
-        code, out, _ = run("companion.py", "forget", "--month", "2026-13", home=self.home)
+        code, out, _ = run("companion.py", "forget", "--yes", "--month", "2026-13", home=self.home)
         self.assertEqual(code, 2, out)
 
     def test_nth_counts_from_one(self):
         run("companion.py", "add-entry", "--date", "2026-08-01", "--text", "only one KEEP",
             home=self.home)
-        code, out, _ = run("companion.py", "forget", "--entry", "2026-08-01", "--nth", "0",
+        code, out, _ = run("companion.py", "forget", "--yes", "--entry", "2026-08-01", "--nth", "0",
                            home=self.home)
         self.assertEqual(code, 2, out)
         self.assertIn("KEEP", _home_text(self.home))
@@ -2957,7 +2959,7 @@ class TestJournalRewritesAreExact(HomeCase):
         body = self.text_of("journal/2026-08.md")
         with open(path, "w", encoding="utf-8") as f:
             f.write("hand-edited preface\n" + body)
-        code, out, _ = run("companion.py", "forget", "--birth", "--entry", "2026-08-10",
+        code, out, _ = run("companion.py", "forget", "--yes", "--birth", "--entry", "2026-08-10",
                            home=self.home)
         self.assertEqual(code, 3, out)
         self.assertIn("1993-04-12", _home_text(self.home), "--birth ran before the refusal")
@@ -2969,7 +2971,7 @@ class TestJournalRewritesAreExact(HomeCase):
         run("companion.py", "add-entry", "--date", "2026-07-05", "--text", "七月", "--mood", "6",
             home=self.home)
         os.remove(os.path.join(self.home, "journal", "2026-06.md"))
-        r = jrun("companion.py", "forget", "--mood", home=self.home)
+        r = jrun("companion.py", "forget", "--yes", "--mood", home=self.home)
         self.assertTrue(r["ok"], r)
         self.assertTrue(all(row["mood"] is None for row in _index_rows(self.home)))
         self.assertIn("2026-06.md", json.dumps(r, ensure_ascii=False))
@@ -2983,7 +2985,7 @@ class TestJournalRewritesAreExact(HomeCase):
         with open(path, "w", encoding="utf-8") as f:
             f.write("\n".join(lines) + "\n")
         for args in (["--entry", "2026-06-05"], ["--mood"]):
-            code, out, _ = run("companion.py", "forget", *args, home=self.home)
+            code, out, _ = run("companion.py", "forget", "--yes", *args, home=self.home)
             self.assertEqual(code, 3, (args, out))
         self.assertIn("SECOND", _home_text(self.home))
         self.assertIn("FIRST", _home_text(self.home))
@@ -2993,8 +2995,8 @@ class TestJournalRewritesAreExact(HomeCase):
         for day, text in (("2026-08-01", "一"), ("2026-08-02", "二\n## 下午\n还是二"), ("2026-08-03", "三")):
             run("companion.py", "add-entry", "--date", day, "--text", text, "--mood", "4",
                 home=self.home)
-        self.assertTrue(jrun("companion.py", "forget", "--mood", home=self.home)["ok"])
-        self.assertTrue(jrun("companion.py", "forget", "--entry", "2026-08-01", home=self.home)["ok"])
+        self.assertTrue(jrun("companion.py", "forget", "--yes", "--mood", home=self.home)["ok"])
+        self.assertTrue(jrun("companion.py", "forget", "--yes", "--entry", "2026-08-01", home=self.home)["ok"])
         content = self.text_of("journal/2026-08.md")
         rows = _index_rows(self.home)
         self.assertEqual([r["date"] for r in rows], ["2026-08-02", "2026-08-03"])
@@ -3012,7 +3014,7 @@ class TestJournalRewritesAreExact(HomeCase):
         with open(os.path.join(self.home, "journal", "index.jsonl"), "w", encoding="utf-8") as f:
             f.write("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows))
         before = self.text_of("journal/2026-06.md")
-        code, out, _ = run("companion.py", "forget", "--entry", "2026-06-05", home=self.home)
+        code, out, _ = run("companion.py", "forget", "--yes", "--entry", "2026-06-05", home=self.home)
         self.assertEqual(code, 3, out)
         self.assertIn("runs past", json.loads(out)["error"])
         self.assertEqual(self.text_of("journal/2026-06.md"), before)
@@ -3026,7 +3028,7 @@ class TestJournalRewritesAreExact(HomeCase):
         with open(os.path.join(self.home, "journal", "2026-06.md"), "w", encoding="utf-8") as f:
             f.write("hand-edited preface\n" + body)
         # --entry rewrites August and succeeds; --mood then meets the hand edit in June
-        code, out, _ = run("companion.py", "forget", "--entry", "2026-08-10", "--mood",
+        code, out, _ = run("companion.py", "forget", "--yes", "--entry", "2026-08-10", "--mood",
                            home=self.home)
         self.assertEqual(code, 3, out)
         payload = json.loads(out)
@@ -3054,7 +3056,7 @@ class TestForgetEntryReachesEveryCopy(HomeCase):
             "open_threads": [{"thread": "8/3 之后问候 CRISISMARK", "opened": "2026-08-03", "status": "open"},
                              {"thread": "周末散步 KEEP-THREAD", "opened": "2026-08-04", "status": "open"}]}),
             home=self.home)
-        r = jrun("companion.py", "forget", "--entry", "2026-08-03", home=self.home)
+        r = jrun("companion.py", "forget", "--yes", "--entry", "2026-08-03", home=self.home)
         self.assertTrue(r["ok"], r)
         text = _home_text(self.home)
         self.assertNotIn("CRISISMARK", text)
@@ -3070,7 +3072,7 @@ class TestForgetEntryReachesEveryCopy(HomeCase):
             {"people": {"小李": {"incidents": [
                 {"date": "2026-07-15", "gist": "加班 INCMARK", "lens": "criticism"},
                 {"date": "2026-07-20", "gist": "吃饭 KEEP-INC", "lens": "bid"}]}}}), home=self.home)
-        r = jrun("companion.py", "forget", "--entry", "2026-07-15", home=self.home)
+        r = jrun("companion.py", "forget", "--yes", "--entry", "2026-07-15", home=self.home)
         self.assertTrue(r["ok"], r)
         text = _home_text(self.home)
         self.assertNotIn("INCMARK", text)
@@ -3083,7 +3085,7 @@ class TestForgetEntryReachesEveryCopy(HomeCase):
         run("companion.py", "cache", "--module", "relationships", "--merge-json", json.dumps(
             {"people": {"小李": {"incidents": [{"date": "2026-07-15", "gist": "吵架 SAMEDAY", "lens": "criticism"}]}}}),
             home=self.home)
-        r = jrun("companion.py", "forget", "--entry", "2026-07-15", "--nth", "1", home=self.home)
+        r = jrun("companion.py", "forget", "--yes", "--entry", "2026-07-15", "--nth", "1", home=self.home)
         self.assertTrue(r["ok"], r)
         self.assertIn("SAMEDAY", _home_text(self.home))
         self.assertIn("kept", json.dumps(r, ensure_ascii=False))
@@ -3094,7 +3096,7 @@ class TestForgetEntryReachesEveryCopy(HomeCase):
             home=self.home)
         run("companion.py", "continuity", "--merge-json",
             json.dumps({"rolling_summary": "1993-04-12 生，日主癸水"}), home=self.home)
-        self.assertTrue(jrun("companion.py", "forget", "--birth", home=self.home)["ok"])
+        self.assertTrue(jrun("companion.py", "forget", "--yes", "--birth", home=self.home)["ok"])
         self.assertNotIn("1993-04-12", _home_text(self.home))
 
 
@@ -4031,7 +4033,7 @@ class TestConsentAndCacheSurviveHandEdits(HomeCase):
         run("companion.py", "consent", "--set", "mood=yes", home=self.home)
         run("companion.py", "continuity", "--merge-json", '{"wellbeing_checked": "2026-09-01"}',
             home=self.home)
-        self.assertTrue(jrun("companion.py", "forget", "--mood", home=self.home)["ok"])
+        self.assertTrue(jrun("companion.py", "forget", "--yes", "--mood", home=self.home)["ok"])
         with open(companion._paths(self.home)["continuity"], encoding="utf-8") as f:
             self.assertNotIn("wellbeing_checked", yaml.safe_load(f) or {})
 
@@ -4050,7 +4052,7 @@ class TestForgetOnlyTouchesACompanionHome(unittest.TestCase):
             with open(os.path.join(folder, "notes.txt"), "w") as f:
                 f.write("mine")
             for flags in (("--birth",), ("--mood",), ("--relationships",), ("--month", "2026-08")):
-                code, out, _ = run("companion.py", "forget", *flags, home=folder)
+                code, out, _ = run("companion.py", "forget", "--yes", *flags, home=folder)
                 self.assertEqual(code, 3, (flags, out))
             self.assertEqual(sorted(os.listdir(folder)), ["notes.txt"])
             code, out, _ = run("companion.py", "forget", "--all", "--yes", home=folder)
@@ -4060,7 +4062,7 @@ class TestForgetOnlyTouchesACompanionHome(unittest.TestCase):
     def test_forget_does_not_create_a_missing_home(self):
         with tempfile.TemporaryDirectory() as t:
             missing = os.path.join(t, "nowhere")
-            code, out, _ = run("companion.py", "forget", "--mood", home=missing)
+            code, out, _ = run("companion.py", "forget", "--yes", "--mood", home=missing)
             self.assertEqual(code, 3, out)
             self.assertFalse(os.path.exists(missing))
 
@@ -5027,6 +5029,68 @@ class TestAgentEvalsCanRun(unittest.TestCase):
         self.assertEqual(r.returncode, 2, r.stderr)
         self.assertIn("outside the skill folder", r.stderr)
         self.assertFalse(os.path.exists(inside))
+
+class TestForgetShowsWhatGoesBeforeDeleting(unittest.TestCase):
+    """「删掉小李的记录」 was deleted on the spot in a codex run, although safety.md says to confirm
+    once: that rule lived only in a reference file. Every forget now shows what it would remove and
+    deletes nothing until it runs again with --yes, so no agent can skip the confirmation. The
+    preview is the real deletion run on a copy of the home, so it lists what the confirmed run does."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.home = os.path.join(self.tmp.name, "home")
+        run("companion.py", "init", home=self.home)
+        run("companion.py", "consent", "--set", "birth=yes", "relationships=yes", "mood=yes", home=self.home)
+        run("companion.py", "set-profile", "--merge-json",
+            json.dumps({"birth": {"date": "1993-04-12", "time": "07:35", "gender": "male"}}), home=self.home)
+        for date, text, person, mood in (("2026-08-02", "和小李吃了顿饭。", "小李", "7"),
+                                          ("2026-08-02", "小李子来修电脑。", "小李子", "6"),
+                                          ("2026-07-15", "加班到很晚。", None, "4")):
+            args = ["add-entry", "--date", date, "--text", text, "--mood", mood]
+            if person:
+                args += ["--people", person]
+            run("companion.py", *args, home=self.home)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def files(self):
+        out = {}
+        for dirpath, _dirs, names in os.walk(self.home):
+            for name in names:
+                path = os.path.join(dirpath, name)
+                with open(path, "rb") as f:
+                    out[os.path.relpath(path, self.home)] = f.read()
+        return out
+
+    def test_without_yes_nothing_is_deleted_for_any_target(self):
+        for flags in (["--birth"], ["--month", "2026-07"], ["--entry", "2026-07-15"],
+                      ["--person", "小李", "--with-entries"], ["--relationships"], ["--mood"]):
+            before = self.files()
+            r = jrun("companion.py", *(["forget"] + flags), home=self.home)
+            self.assertTrue(r["ok"] and r["preview"], (flags, r))
+            self.assertFalse(r["deleted"], flags)
+            self.assertTrue(r["would"], flags)
+            self.assertIn("--yes", r["_next"], flags)
+            self.assertEqual(self.files(), before, f"forget {' '.join(flags)} changed files without --yes")
+
+    def test_the_preview_lists_what_the_confirmed_run_does(self):
+        preview = jrun("companion.py", *["forget", "--person", "小李", "--with-entries"], home=self.home)
+        done = jrun("companion.py", *["forget", "--person", "小李", "--with-entries", "--yes"], home=self.home)
+        self.assertEqual(preview["would"], done["done"])
+        self.assertIn("forget --person 小李 --with-entries --yes", preview["_next"])
+        journal = "".join(v.decode("utf-8") for k, v in self.files().items()
+                          if k.startswith("journal") and k.endswith(".md"))
+        self.assertNotIn("和小李吃了顿饭", journal)
+        self.assertIn("小李子来修电脑", journal)
+
+    def test_a_delete_that_would_be_refused_is_refused_in_the_preview_too(self):
+        # two entries on 2026-08-02 and no --nth: say which one, whether or not it is confirmed
+        before = self.files()
+        code, out, _ = run("companion.py", *["forget", "--entry", "2026-08-02"], home=self.home, expect_ok=False)
+        self.assertEqual(code, 3, out)
+        self.assertIn("candidates", out)
+        self.assertEqual(self.files(), before)
 
 class TestDeps(unittest.TestCase):
     def test_doctor_reports_without_installing(self):

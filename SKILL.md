@@ -279,7 +279,7 @@ storage, and that rule matters most, not least, for the most sensitive words som
 will type here, and `add-entry` refuses without a companion home. For someone who already
 keeps a journal here, log it with `add-entry --crisis`, say so in one plain line, and tell
 them they can delete it
-(`forget --entry DATE [--nth N]` removes exactly that entry). Never log covertly.
+(`forget --entry DATE [--nth N]` shows exactly that entry, and deletes it when run again with `--yes`). Never log covertly.
 Then **read `references/safety.md` §2 in full** — this table is the part that must never
 be missing, not the whole procedure.
 
@@ -354,10 +354,12 @@ python3 "$D/scripts/companion.py" followups       # threads due for a gentle nud
 python3 "$D/scripts/companion.py" cache --module destiny   # what reading you already gave them
 python3 "$D/scripts/companion.py" trend --days 30
 python3 "$D/scripts/companion.py" journal --since 2026-07-01   # re-read prose entries
-python3 "$D/scripts/companion.py" forget --birth        # real deletion
+python3 "$D/scripts/companion.py" forget --birth        # shows what it would delete; --yes deletes
 python3 "$D/scripts/companion.py" forget --entry 2026-08-10 --nth 2      # ONE entry (lists them if you omit --nth)
 python3 "$D/scripts/companion.py" forget --person 小李 --with-entries    # everything about one person
-#   also --month YYYY-MM · --relationships · --mood · --all --yes. Each removes what it names
+#   also --month YYYY-MM · --relationships · --mood · --all. Without --yes a forget deletes nothing
+#   and returns `would` and the command to confirm with; tell them, ask once, then run it with --yes.
+#   Confirmed, each removes what it names
 #   from EVERY store (journal, index, relationship log, continuity, caches, form marker).
 #   `consent --set X=no` only STOPS use: scripts refuse to read X and report what is kept.
 python3 "$D/scripts/bazi.py" --date 1993-04-12 --time 07:35 --gender m --tz Asia/Shanghai --on-date today --format json  # 生肖/五行tips

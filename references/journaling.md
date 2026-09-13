@@ -61,8 +61,9 @@ for a week.
 
 ## Deleting one entry
 「刚才那条记错了，删掉」 → `companion.py forget --entry YYYY-MM-DD`, plus `--nth N` when that
-day has more than one (without it the command lists them and deletes nothing). It removes
-that entry and keeps the rest of the month readable. This is also how a crisis entry gets
+day has more than one (without it the command lists them and deletes nothing). Run like that it
+only shows the entry: read it back to them, and once they confirm, run it again with `--yes`. It
+removes that entry and keeps the rest of the month readable. This is also how a crisis entry gets
 deleted when someone asks: safety.md promises they can, and it no longer costs them the
 month around it.
 

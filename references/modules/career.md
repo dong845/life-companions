@@ -137,7 +137,10 @@ the origin: over all 720 orderings its minimum is **0.615**, not 0. Fed straight
 bands built for a [0,1] metric, an **exactly reversed** value ranking still read
 "Moderate" — the component could not report a mismatch at all. It is now stretched onto
 [0,1] against that verified floor, so opposite rankings read Low. An exhaustive test
-pins the floor, so changing the vector definition can't silently skew every score. Output is
+pins the floor, so changing the vector definition can't silently skew every score. Values an
+occupation rates equally share the average rank (two tied for second are both 2.5): 141 of
+the 173 rated occupations have a tie, and breaking it by value name, as the file once did,
+let the alphabet move occupations between bands. Output is
 a **band** (thresholds 0.55 / 0.75, disclosed as tunable) plus a **confidence
 note** that shrinks on short/partial assessments and on code-only occupations.
 Raw floats stay internal; the person-facing layer emits **bands + language only**.

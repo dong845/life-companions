@@ -2333,7 +2333,9 @@ class TestOccupationDataIsOnet31(unittest.TestCase):
         self.assertEqual(len(rated), 173)
         for o in rated:
             ext = o["work_values_extent_1_7"]
-            expect = {n: i + 1 for i, n in enumerate(sorted(ext, key=lambda n: (-ext[n], n)))}
+            order = sorted(ext, key=lambda n: -ext[n])
+            expect = {n: (sum(i + 1 for i, m in enumerate(order) if ext[m] == ext[n])
+                          / sum(1 for m in order if ext[m] == ext[n])) for n in order}
             self.assertEqual(o["work_values"], expect, o["soc_code"])
             self.assertEqual(o["work_values_db"], "30.2", o["soc_code"])
         for o in self.occ:
@@ -2444,11 +2446,13 @@ class TestOccupationBuilder(unittest.TestCase):
         self.assertEqual(doc["count"], 2)
         self.assertIn("O*NET 31.0 Database", doc["attribution"])
 
-    def test_tied_work_values_rank_alphabetically(self):
+    def test_tied_work_values_share_the_average_rank(self):
+        # breaking the tie by value name used to move occupations between values bands
         self.assertEqual(self.build(), 0)
-        self.assertEqual(json.loads(self.text())["occupations"][0]["work_values"],
-                         {"Independence": 1, "Achievement": 2, "Working Conditions": 3,
-                          "Support": 4, "Recognition": 5, "Relationships": 6})
+        ranks = json.loads(self.text())["occupations"][0]["work_values"]
+        self.assertEqual(ranks, {"Independence": 1, "Achievement": 2.5, "Working Conditions": 2.5,
+                                 "Support": 4, "Recognition": 5, "Relationships": 6})
+        self.assertIsInstance(ranks["Support"], int)   # a whole rank stays whole in the file
 
     def test_a_changed_shipped_value_is_refused_until_allowed(self):
         self.prev["occupations"][1]["riasec"] = [6.0, 2.0, 1.0, 1.0, 1.0, 4.0]
@@ -4545,6 +4549,38 @@ class TestTheSkillMapNamesWhatShips(unittest.TestCase):
                   if os.path.isdir(os.path.join(SKILL, "data", d))]
         names += ["tools/"]
         self.assertEqual([n for n in names if n not in file_map], [])
+
+
+class TestTiedWorkValuesShareARank(unittest.TestCase):
+    """Work Values ties were broken alphabetically: 141 of the 173 rated occupations have tied
+    Extent scores, and reversing only that tie order moved the values band in 23.7% of those
+    occupations' pairings with the 720 possible person rankings. Tied values now share the
+    average rank, and scoring keeps it."""
+
+    def test_a_shared_rank_is_kept_not_truncated(self):
+        import career_match as cm
+        ranking = {"Achievement": 1.5, "Working Conditions": 1.5, "Independence": 3.5,
+                   "Recognition": 3.5, "Support": 5, "Relationships": 6}
+        self.assertEqual(cm.canonical_values_ranking(ranking), ranking)
+
+    def test_a_rank_that_is_not_a_number_is_refused(self):
+        # read as floats, NaN and inf would score as a silent Low values fit instead of leaving
+        # the occupation to an interests-only read
+        import career_match as cm
+        base = {"Achievement": 1, "Working Conditions": 2, "Independence": 3,
+                "Recognition": 4, "Support": 5, "Relationships": 6}
+        for bad in (float("nan"), float("inf"), "nan", "-inf", "2.5x", None):
+            self.assertIsNone(cm.canonical_values_ranking({**base, "Support": bad}), repr(bad))
+            self.assertIsNone(cm.values_fit(list(cm.WORK_VALUES), {**base, "Support": bad}),
+                              repr(bad))
+
+    def test_a_person_still_ranks_each_value_once(self):
+        import career_match as cm
+        ranking, why = cm.person_values_ranking({"Achievement": 1.5, "Working Conditions": 1.5,
+                                                  "Independence": 3, "Recognition": 4,
+                                                  "Support": 5, "Relationships": 6})
+        self.assertIsNone(ranking)
+        self.assertIn("once", why)
 
 
 class TestDeps(unittest.TestCase):

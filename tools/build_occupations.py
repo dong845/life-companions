@@ -129,9 +129,16 @@ def read_tables(interest_db, work_values_db):
 
 
 def rank_work_values(extent):
-    """Highest Extent first, ties broken alphabetically by value name: the order of
-    career_match.WORK_VALUES. This reproduces every ranking the file shipped before."""
-    return {n: i + 1 for i, n in enumerate(sorted(extent, key=lambda n: (-extent[n], n)))}
+    """Highest Extent first. Values with the same Extent share the average of the places they
+    span, so two tied for second both rank 2.5. Ties used to be broken by value name, which let
+    the alphabet move occupations between values bands."""
+    order = sorted(extent, key=lambda n: (-extent[n], n))
+    ranks = {}
+    for n in order:
+        places = [i + 1 for i, m in enumerate(order) if extent[m] == extent[n]]
+        rank = sum(places) / len(places)
+        ranks[n] = int(rank) if rank.is_integer() else rank
+    return ranks
 
 
 def _joined(items):
@@ -209,8 +216,9 @@ def build(previous, tables, compiled):
                            "Browse-by-Interests list or the occupation's summary page); the numbers "
                            "come from the database files in fetched_from"),
             "work_values": ("{value_name: rank 1-6} ipsative ranking (1=most important) over the six "
-                            f"O*NET Work Values, or null when O*NET {WORK_VALUES_DB} does not rate "
-                            "the occupation"),
+                            "O*NET Work Values, where values with equal Extent share the average "
+                            f"rank (2.5), or null when O*NET {WORK_VALUES_DB} does not rate the "
+                            "occupation"),
             "work_values_extent_1_7": ("the six 1-7 Extent scores the ranking was derived from "
                                        f"(O*NET {WORK_VALUES_DB} Work Values, scale EX), or null"),
             "work_values_db": ("O*NET Database release the Work Values came from "
@@ -225,8 +233,9 @@ def build(previous, tables, compiled):
                 "is estimated."),
             "interest_source": interest_source,
             "work_values_ranks": (
-                "work_values ranks the six Extent scores from highest to lowest and breaks ties "
-                "alphabetically by value name, the order of career_match.WORK_VALUES."),
+                "work_values ranks the six Extent scores from highest to lowest. Values with equal "
+                "Extent share the average of the places they span, so two tied for second both "
+                "rank 2.5: no tie is broken by value name."),
             **({"mapped_terms": previous["notes"]["mapped_terms"]}
                if previous.get("notes", {}).get("mapped_terms") else {}),
             "not_rated_for_work_values": (

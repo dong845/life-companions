@@ -204,8 +204,10 @@ def _norm_value_name(k):
 
 
 def canonical_values_ranking(ranking):
-    """Normalize a values ranking to {canonical_name: int rank} covering ALL six,
-    or return None if it can't (missing a value, unknown name, non-int rank).
+    """Normalize a values ranking to {canonical_name: rank} covering ALL six,
+    or return None if it can't (missing a value, unknown name, a rank that is not a finite
+    number). A rank can be fractional: values an occupation rates equally share the average
+    rank (2.5), and reading that as a whole number turned the tie back into an order.
 
     Returning None (rather than raising) is deliberate: an incomplete ranking — a
     form where the person left a value unranked — must DEGRADE the read to
@@ -221,9 +223,12 @@ def canonical_values_ranking(ranking):
         if name is None:
             continue
         try:
-            norm[name] = int(v)
+            rank = float(v)
         except (TypeError, ValueError):
             return None
+        if not math.isfinite(rank):
+            return None
+        norm[name] = int(rank) if rank.is_integer() else rank
     return norm if set(norm) == set(WORK_VALUES) else None
 
 
@@ -286,7 +291,9 @@ def values_fit(person_ranking, occ_ranking):
     # VALUES_COS_FLOOR. Feeding that straight into bands built for a [0,1] metric
     # meant the exactly-opposite ranking still read "Moderate" — the component could
     # not report a mismatch at all. Stretch the real range onto [0,1] so "opposite"
-    # lands where it belongs. VALUES_COS_FLOOR is pinned by an exhaustive test.
+    # lands where it belongs. VALUES_COS_FLOOR is pinned by an exhaustive test. Tied
+    # occupation ranks (2.5) keep that floor: an average-rank vector is the mean of the
+    # orderings its ties allow, so its cosine with a ranking is at least the lowest of theirs.
     return max(0.0, (raw - VALUES_COS_FLOOR) / (1.0 - VALUES_COS_FLOOR))
 
 

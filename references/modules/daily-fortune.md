@@ -18,12 +18,20 @@ woven with your journal + continuity. Pairs with `references/journaling.md`.
    ```bash
    python3 $D/scripts/bazi.py  --date <birth.date> [--time <birth.time>] --gender <m|f> \
      --tz <birth.tz_at_birth> \
+     [--lon <birth.lon> --true-solar-time] [--early-zishi] \
+     [--time-window <birth.time_window_min>] \
      --on-date today --format json     # → computed.daily: 流年/流月/流日 十神+favor,
                                         #   zodiac_day (生肖 vs 日支), wuxing_tips
    python3 $D/scripts/astro.py --date <birth.date> [--time <birth.time>] \
      --tz <birth.tz_at_birth> \
      --on-date today --format json     # → 星座/双鱼…, 今日月亮星座, 逆行, 本命相位
    ```
+   Pass the chart conventions exactly as destiny.md §2 does: `--lon … --true-solar-time`
+   only if `conventions.true_solar_time`, `--early-zishi` only if `conventions.zishi_rule` is
+   early, `--time-window` when `birth.time_accuracy` is `approx`. The day is then read
+   against the chart the person was shown, not a second one. With a window, a
+   `natal_relations` row or `zodiac_day` marked `uncertain` rests on a pillar the rough
+   time can't settle: say so, or leave it out.
    Read `data/content/bazi-life-arc.md §1` for the 十神→dimension mappings that turn
    the 流日/流月 十神 into per-life-area reads. No birth data → skip charts, keep it
    journal + a general seasonal note; never fake a chart. `favor` is `平` for a
@@ -63,8 +71,9 @@ Open with a one-line disclaimer note once, then, in the person's `locale`/`tone`
   十神 onto that dimension via `bazi-life-arc.md §1`, and show the lean as **喜 ↑ /
   平 → / 忌 ↓** — clearly the *disclosed 扶抑 heuristic*, **NOT a cosmic score or a
   star rating**. (Gender-note 财/官/食伤 where relevant.)
-- **🐯 生肖今日** — from `zodiac_day`: 属X · 今日与日支的关系(六合/冲/三合/害/刑)→
-  its one-line tone. A real traditional relation, not vibes.
+- **🐯 生肖今日** — from `zodiac_day`: 属X · 今日与日支的关系 (`relations`: 六合/半合/三会/冲/
+  害/破/刑/自刑, each with a one-line `reading`) → its `tone`. A real traditional relation,
+  not vibes, from the same table as `natal_relations`, so it always matches that year row.
 - **🪢 今天和你的四柱** — from `natal_relations`: the day's branch against each of the
   person's own pillars (年/月/日/时), by the same 六合/三合/三会/冲/害/破/刑 tables 合婚 uses,
   plus `same_pillar` when the day repeats one of their pillars exactly (伏吟). **Report only

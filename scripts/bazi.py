@@ -125,36 +125,35 @@ def _favor_tag(element, favor_sets):
 # 生肖 (year-branch animal) + traditional branch relations, for a 生肖 daily read.
 ZHI_ANIMAL = {"子": "鼠", "丑": "牛", "寅": "虎", "卯": "兔", "辰": "龙", "巳": "蛇",
               "午": "马", "未": "羊", "申": "猴", "酉": "鸡", "戌": "狗", "亥": "猪"}
-_LIUHE = [{"子", "丑"}, {"寅", "亥"}, {"卯", "戌"}, {"辰", "酉"}, {"巳", "申"}, {"午", "未"}]
-_LIUCHONG = [{"子", "午"}, {"丑", "未"}, {"寅", "申"}, {"卯", "酉"}, {"辰", "戌"}, {"巳", "亥"}]
-_LIUHAI = [{"子", "未"}, {"丑", "午"}, {"寅", "巳"}, {"卯", "辰"}, {"申", "亥"}, {"酉", "戌"}]
-_SANHE = [{"申", "子", "辰"}, {"亥", "卯", "未"}, {"寅", "午", "戌"}, {"巳", "酉", "丑"}]
-_XING = [{"寅", "巳", "申"}, {"丑", "戌", "未"}, {"子", "卯"}]
+# What each relation reads as for the day, on the person's 生肖. The relations themselves
+# come from _branches.py, the table 合婚 and natal_relations read.
+_ZODIAC_READING = {
+    "六合": "顺、易得助力/合作",
+    "半合": "气场相合、做事顺手",
+    "三会": "同一季的地支相会，气场同类、做事顺手",
+    "六冲": "变动、冲动、易有摩擦——悠着点、别拍板大事",
+    "六害": "小别扭、易被小事绊——留意人际口舌",
+    "六破": "节奏易被打断、计划易变卦——留点余地",
+    "相刑": "内耗/急躁/是非——稳住节奏",
+    "自刑": "与你生肖同支，自我感强——别跟自己较劲",
+}
+_ZODIAC_GOOD = {"六合", "半合", "三会"}                      # the 合 group
+_ZODIAC_BAD = {"六冲", "六害", "六破", "相刑", "自刑"}          # 刑冲破害
 
 
 def _zodiac_day(year_zhi, day_zhi):
-    """今日生肖运: the person's 生肖 (year branch) vs today's 流日 branch, by the
-    traditional 六合/六冲/三合/六害/相刑 relations. Deterministic; a real system."""
-    rels = []
-    pair = {year_zhi, day_zhi}
-    if any(pair == p for p in _LIUHE):
-        rels.append(("六合", "顺、易得助力/合作"))
-    if any(pair == p for p in _LIUCHONG):
-        rels.append(("六冲", "变动、冲动、易有摩擦——悠着点、别拍板大事"))
-    if any(pair <= g for g in _SANHE) and year_zhi != day_zhi:
-        rels.append(("三合", "气场相合、做事顺手"))
-    if any(pair == p for p in _LIUHAI):
-        rels.append(("六害", "小别扭、易被小事绊——留意人际口舌"))
-    if any(pair <= g for g in _XING) and year_zhi != day_zhi:
-        rels.append(("相刑", "内耗/急躁/是非——稳住节奏"))
-    if year_zhi == day_zhi:
-        rels.append(("同气/自刑", "与你生肖同气,自我感强——别跟自己较劲"))
-    good = {r[0] for r in rels} & {"六合", "三合"}
-    bad = {r[0] for r in rels} & {"六冲", "六害", "相刑", "自刑"}
+    """今日生肖运: the person's 生肖 (year branch) against today's 流日 branch, by the shared
+    relation table in _branches.py. It used to read a private copy that knew no 三会 or
+    六破 and called every repeated branch 自刑, so the card and its own natal_relations
+    year row could disagree on the same day."""
+    rels = [dict(r, reading=_ZODIAC_READING[r["relation"]])
+            for r in relations_between(day_zhi, year_zhi)]
+    names = {r["relation"] for r in rels}
+    good, bad = names & _ZODIAC_GOOD, names & _ZODIAC_BAD
     tone = ("顺" if good and not bad else "偏磕碰,悠着点" if bad and not good
             else "有助力也有磕碰,混着来" if good and bad else "平平,按自己节奏")
     return {"animal": ZHI_ANIMAL[year_zhi], "day_branch": day_zhi,
-            "relations": rels, "tone": tone}
+            "relations": rels, "tone": tone, "uncertain": False}
 
 
 _WX_COLOR = {"木": "青/绿", "火": "红/橙紫", "土": "黄/棕", "金": "白/金银", "水": "蓝/黑"}
@@ -430,7 +429,8 @@ def _daily_pillars(day_gan, favor_sets, on_date, year_zhi, natal=None):
         rows = [
             {"pillar": key, "natal": natal[key]["ganzhi"],
              "relations": relations_between(day_gz[1], natal[key]["zhi"]),
-             "same_pillar": day_gz == natal[key]["ganzhi"]}
+             "same_pillar": day_gz == natal[key]["ganzhi"],
+             "uncertain": False}      # compute() sets it when --time-window moves this pillar
             for key in ("year", "month", "day", "hour") if natal.get(key)]
         # Some relation lands somewhere in the four pillars on 29.5 days of 30 (measured
         # over 186 near-balanced charts), so a card that reports them all says nothing.
@@ -984,6 +984,12 @@ def compute(date, time, gender, lon=None, true_solar_time=False,
             changes = [k for k in seen if len(seen[k]) > 1]
             result["computed"]["time_window"] = {"minutes": w, "pillars": seen,
                                                  "changes": changes}
+            # A relation on a pillar the window can't settle is not a fact about this person.
+            daily = result["computed"]["daily"]
+            if daily:
+                for row in daily.get("natal_relations", []):
+                    row["uncertain"] = row["pillar"] in changes
+                daily["zodiac_day"]["uncertain"] = "year" in changes
             label = {"year": "年柱", "month": "月柱", "day": "日柱", "hour": "时柱"}
             ambiguities.append(
                 f"出生时间按 ±{w} 分钟估：" + ("；".join(

@@ -3761,6 +3761,72 @@ class TestSynastryKeepsOneConventionForBoth(unittest.TestCase):
                      true_solar_time=True))
 
 
+class TestDailyCardReadsOneRelationTable(unittest.TestCase):
+    """The daily card carried two relation tables. `zodiac_day` still read bazi.py's own
+    copy, which knew no 三会 or 六破, called every half-triad 三合 and every repeated branch
+    同气/自刑, while `natal_relations` read _branches.py. The same 生肖 row could say 自刑 in
+    one field and nothing in the other, on the same day, for the same person."""
+
+    def test_every_branch_pair_reads_the_shared_table(self):
+        import bazi
+        from _branches import ZHI, relations_between
+        for year_zhi in ZHI:
+            for day_zhi in ZHI:
+                got = bazi._zodiac_day(year_zhi, day_zhi)["relations"]
+                want = relations_between(day_zhi, year_zhi)
+                self.assertEqual([(r["relation"], r["detail"]) for r in got],
+                                 [(r["relation"], r["detail"]) for r in want],
+                                 (year_zhi, day_zhi))
+                self.assertTrue(all(r["reading"] for r in got), (year_zhi, day_zhi))
+
+    def test_the_card_and_its_year_row_agree_on_every_day_branch(self):
+        import bazi, datetime
+        for n in range(12):
+            day = datetime.date(2026, 9, 1) + datetime.timedelta(days=n)
+            daily = bazi.compute("1993-04-12", "07:35", "m", tz="Asia/Shanghai",
+                                 on_date=day)["computed"]["daily"]
+            year_row = next(r for r in daily["natal_relations"] if r["pillar"] == "year")
+            self.assertEqual([(r["relation"], r["detail"]) for r in daily["zodiac_day"]["relations"]],
+                             [(r["relation"], r["detail"]) for r in year_row["relations"]], day)
+
+
+class TestDailyCardFollowsTheChartConventions(unittest.TestCase):
+    """The daily card ran bazi.py with --tz only, so a person whose 命盘 is charted on True
+    Solar Time, 早子时 or a rough birth time got a daily card built on another chart. And
+    with a rough time, a relation on a pillar the time can't settle read as certain."""
+
+    def test_the_card_command_passes_every_chart_convention(self):
+        s = open(os.path.join(SKILL, "references", "modules", "daily-fortune.md"),
+                 encoding="utf-8").read()
+        start = s.find("python3 $D/scripts/bazi.py")
+        block = s[start:s.find("python3 $D/scripts/astro.py", start)]
+        for flag in ("--tz", "--lon", "--true-solar-time", "--early-zishi", "--time-window"):
+            self.assertIn(flag, block, flag)
+
+    def test_a_relation_on_a_pillar_the_rough_time_moves_is_marked_uncertain(self):
+        import bazi, datetime
+        on = datetime.date(2026, 9, 12)
+        c = bazi.compute("1993-04-12", "09:00", "m", tz="Asia/Shanghai", time_window=30,
+                         on_date=on)["computed"]
+        self.assertEqual(c["time_window"]["changes"], ["hour"])
+        rows = {r["pillar"]: r for r in c["daily"]["natal_relations"]}
+        self.assertEqual({k: r["uncertain"] for k, r in rows.items()},
+                         {"year": False, "month": False, "day": False, "hour": True})
+        self.assertFalse(c["daily"]["zodiac_day"]["uncertain"])
+        # 立春 03:37: ±30 minutes can't settle the 年柱, so the 生肖 row can't be settled either
+        c = bazi.compute("1993-02-04", "03:40", "m", tz="Asia/Shanghai", time_window=30,
+                         on_date=on)["computed"]
+        self.assertIn("year", c["time_window"]["changes"])
+        self.assertTrue(c["daily"]["zodiac_day"]["uncertain"])
+
+    def test_without_a_window_nothing_is_marked_uncertain(self):
+        import bazi, datetime
+        daily = bazi.compute("1993-04-12", "09:00", "m", tz="Asia/Shanghai",
+                             on_date=datetime.date(2026, 9, 12))["computed"]["daily"]
+        self.assertFalse(any(r["uncertain"] for r in daily["natal_relations"]))
+        self.assertFalse(daily["zodiac_day"]["uncertain"])
+
+
 class TestDeps(unittest.TestCase):
     def test_doctor_reports_without_installing(self):
         rep = jrun("companion.py", "doctor")

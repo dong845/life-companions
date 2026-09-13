@@ -2487,6 +2487,65 @@ class TestOccupationBuilder(unittest.TestCase):
         with open(os.path.join(SKILL, "data", "career", "occupations.json"), encoding="utf-8") as f:
             self.assertIn("tools/build_occupations.py", json.load(f)["notes"]["build"])
 
+    def _set_value(self, folder, name, code, element_id, value):
+        path = os.path.join(folder, name)
+        with open(path, encoding="utf-8") as f:
+            lines = f.read().splitlines()
+        with open(path, "w", encoding="utf-8") as f:
+            f.write("\n".join("\t".join(cols[:4] + [value] + cols[5:])
+                              if cols[0] == code and cols[1] == element_id else line
+                              for line, cols in ((l, l.split("\t")) for l in lines)) + "\n")
+
+    def test_a_rating_outside_its_scale_stops_the_build_without_writing(self):
+        # NaN and 70 were written where the old value was null, an IH of 7 crashed, and -1 or
+        # 2.5 were read as real high points
+        before = self.text()
+        cases = ([(self.idb, "Career Interest Types.txt", "1.B.1.a", v)
+                  for v in ("NaN", "inf", "70.00", "0.50")]
+                 + [(self.idb, "Career Interest Types.txt", "1.B.1.g", v)
+                    for v in ("7.00", "-1.00", "2.50")]
+                 + [(self.wdb, "Work Values.txt", "1.B.2.a", v) for v in ("8.00", "nan")])
+        for folder, name, element, value in cases:
+            path = os.path.join(folder, name)
+            with open(path, encoding="utf-8") as f:
+                original = f.read()
+            self._set_value(folder, name, "11-1111.00", element, value)
+            self.assertEqual(self.build("--allow-changes"), 2, (name, element, value))
+            self.assertEqual(self.text(), before, (name, element, value))
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(original)
+
+    def test_a_job_zone_outside_one_to_five_stops_the_build(self):
+        path = os.path.join(self.idb, "Job Zones.txt")
+        with open(path, encoding="utf-8") as f:
+            text = f.read()
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(text.replace("11-1111.00\t4\t", "11-1111.00\t9\t"))
+        self.assertEqual(self.build("--allow-changes"), 2)
+
+    def test_rows_that_disagree_stop_the_build(self):
+        # the last row used to win: a second Job Zone row for Alpha passed --check
+        with open(os.path.join(self.idb, "Job Zones.txt"), "a", encoding="utf-8") as f:
+            f.write("11-1111.00\t1\tx\tAnalyst\n")
+        self.assertEqual(self.build("--allow-changes"), 2)
+
+    def test_an_exact_duplicate_row_counts_once(self):
+        path = os.path.join(self.idb, "Career Interest Types.txt")
+        with open(path, encoding="utf-8") as f:
+            alpha_oi = [l for l in f.read().splitlines() if l.startswith("11-1111.00") and "\tOI\t" in l]
+        with open(path, "a", encoding="utf-8") as f:
+            f.write("\n".join(alpha_oi) + "\n")
+        self.assertEqual(self.build(), 0)
+        self.assertIn("of the 12 ratings", json.loads(self.text())["notes"]["interest_source"])
+
+    def test_malformed_input_is_exit_2_not_a_traceback(self):
+        with open(os.path.join(self.idb, "Career Interest Types.txt"), "a", encoding="utf-8") as f:
+            f.write("11-1111.00\t1.B.1.a\tRealistic\tOI\n")
+        self.assertEqual(self.build(), 2)
+        with open(self.data, "w", encoding="utf-8") as f:
+            f.write("[]\n")
+        self.assertEqual(self.build(), 2)
+
 
 def _home_text(home):
     """Every byte of every file under a companion home, for residue searches."""

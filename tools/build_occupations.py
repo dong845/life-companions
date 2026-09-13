@@ -18,14 +18,15 @@ for Work Values, which O*NET no longer publishes), then:
 --check rebuilds in memory and exits 1 if the file differs from what the databases say.
 A plain run writes the file, unless a number the file already carries would change (a
 new O*NET release does that): then it prints each change and exits 3 without writing,
-until you pass --allow-changes. A missing table, column or occupation exits 2 without
-writing. For a new release, update INTEREST_DB, and the file names below if O*NET
-renamed them.
+until you pass --allow-changes. A missing table, column or occupation, a rating outside its
+scale, or two rows that disagree about one rating exits 2 without writing. For a new release,
+update INTEREST_DB, and the file names below if O*NET renamed them.
 """
 import argparse
 import csv
 import datetime
 import json
+import math
 import os
 import sys
 from collections import Counter, defaultdict
@@ -57,6 +58,33 @@ class BuildError(Exception):
     """A table, a column or an occupation the build needs is missing or malformed."""
 
 
+def _number(row, column, low, high, where, whole=False):
+    """A table value that has to be a number on its scale, [low, high], and a whole number
+    when `whole`. NaN and 70 used to be written as interest ratings, an IH of 7 crashed, -1 was
+    read as the high point E, and a truncated row ended in a traceback."""
+    raw = row.get(column)
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        raise BuildError(f"{where}: {column} {raw!r} is not a number")
+    if not math.isfinite(value) or not low <= value <= high or (whole and not value.is_integer()):
+        raise BuildError(f"{where}: {column} {raw!r} is not "
+                         + ("a whole number " if whole else "a number ") + f"from {low} to {high}")
+    return int(value) if whole else value
+
+
+def _put(table, code, key, value, where):
+    """Record one rating once; True when it is new. A second row that disagreed used to
+    replace the first without a word, and an identical one counted its rating twice."""
+    if key in table[code]:
+        if table[code][key] != value:
+            raise BuildError(f"{where}: two rows disagree about {code} {key}: "
+                             f"{table[code][key]} and {value}")
+        return False
+    table[code][key] = value
+    return True
+
+
 def _rows(folder, name):
     path = os.path.join(folder, name)
     if not os.path.exists(path):
@@ -77,19 +105,26 @@ def read_tables(interest_db, work_values_db):
                          "it and update WORK_VALUES_DB")
     t = {"titles": {}, "oi": defaultdict(dict), "ih": defaultdict(dict),
          "source": defaultdict(Counter), "zones": {}, "ex": defaultdict(dict)}
+    titles, zones = defaultdict(dict), defaultdict(dict)
     for r in _rows(interest_db, "Occupation Data.txt"):
-        t["titles"][r[CODE]] = r["Title"]
+        _put(titles, r[CODE], "Title", r["Title"], "Occupation Data.txt")
     for r in _rows(interest_db, "Career Interest Types.txt"):
-        if r["Scale ID"] == "OI":
-            t["oi"][r[CODE]][_element(r, OI)] = float(r["Data Value"])
-            t["source"][r[CODE]][r["Domain Source"]] += 1
-        elif r["Scale ID"] == "IH":
-            t["ih"][r[CODE]][_element(r, IH)] = int(float(r["Data Value"]))
+        where = f"Career Interest Types.txt, {r[CODE]}"
+        if r["Scale ID"] == "OI":        # Occupational Interests, 1-7
+            if _put(t["oi"], r[CODE], _element(r, OI), _number(r, "Data Value", 1, 7, where), where):
+                t["source"][r[CODE]][r["Domain Source"]] += 1
+        elif r["Scale ID"] == "IH":      # Interest High-Points, 0 (none) or 1-6 for R..C
+            _put(t["ih"], r[CODE], _element(r, IH),
+                 _number(r, "Data Value", 0, 6, where, whole=True), where)
     for r in _rows(interest_db, "Job Zones.txt"):
-        t["zones"][r[CODE]] = int(r["Job Zone"])
+        where = f"Job Zones.txt, {r[CODE]}"
+        _put(zones, r[CODE], "Job Zone", _number(r, "Job Zone", 1, 5, where, whole=True), where)
     for r in _rows(work_values_db, "Work Values.txt"):
-        if r["Scale ID"] == "EX":
-            t["ex"][r[CODE]][_element(r, WV)] = float(r["Data Value"])
+        if r["Scale ID"] == "EX":        # Work Values Extent, 1-7
+            where = f"Work Values.txt, {r[CODE]}"
+            _put(t["ex"], r[CODE], _element(r, WV), _number(r, "Data Value", 1, 7, where), where)
+    t["titles"] = {c: v["Title"] for c, v in titles.items()}
+    t["zones"] = {c: v["Job Zone"] for c, v in zones.items()}
     return t
 
 
@@ -262,6 +297,10 @@ def main(argv=None):
         with open(a.data, encoding="utf-8") as f:
             text = f.read()
         previous = json.loads(text)
+        if (not isinstance(previous, dict) or not isinstance(previous.get("occupations"), list)
+                or not all(isinstance(o, dict) and o.get("soc_code") for o in previous["occupations"])):
+            raise BuildError(f"{a.data} is not an occupations file: it needs an object whose "
+                             "\"occupations\" list gives every entry a soc_code")
         compiled = (previous.get("compiled") if a.check
                     else a.compiled or datetime.date.today().isoformat())
         doc = build(previous, read_tables(a.interest_db, a.work_values_db), compiled)
@@ -286,6 +325,8 @@ def main(argv=None):
               file=sys.stderr)
         for c, field, old, new in changed[:40]:
             print(f"  {c} {field}: {old!r} -> {new!r}", file=sys.stderr)
+        if len(changed) > 40:
+            print(f"  ... and {len(changed) - 40} more", file=sys.stderr)
         print("look at them, then pass --allow-changes", file=sys.stderr)
         return 3
     with open(a.data, "w", encoding="utf-8") as f:

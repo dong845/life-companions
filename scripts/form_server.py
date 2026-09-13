@@ -37,6 +37,7 @@ COMPANION = os.path.join(_HERE, "companion.py")
 if _HERE not in sys.path:
     sys.path.insert(0, _HERE)
 from companion import resolve_timezone as _resolve_tz, lunar_to_solar as _lunar_to_solar  # noqa: E402
+from companion import _consent_granted, _load_yaml, _paths  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -163,9 +164,28 @@ def opt(name, value, title, desc, checked=False):
 
 
 # ---------------------------------------------------------------------------
-def render_onboarding(profile):
+def render_onboarding(profile, consent=None):
     ident = profile.get("identity", {}) or {}
     prefs = profile.get("preferences", {}) or {}
+    # What was already allowed and entered opens pre-filled, so a re-submit to change one
+    # thing doesn't read as withdrawing the rest. read-profile withholds birth data whose
+    # consent isn't granted, and nothing withheld is shown.
+    consent = consent or {}
+    birth_allowed, mood_allowed = consent.get("birth") is True, consent.get("mood") is True
+    birth = profile.get("birth") if isinstance(profile.get("birth"), dict) else {}
+    if not birth_allowed or birth.get("_withheld"):
+        birth = {}
+
+    def filled(v):
+        return "" if v in (None, "") else f" value='{html.escape(str(v))}'"
+    b_acc = birth.get("time_accuracy") or "exact"
+    b_gender = birth.get("gender")
+    b_win = birth.get("time_window_min") or 60
+    windows = [(30, "±30 分钟"), (60, "±1 小时"), (120, "±2 小时")]
+    if b_win not in dict(windows):
+        windows.append((b_win, f"±{b_win} 分钟"))
+    window_opts = "".join(f"<option value='{w}'{' selected' if w == b_win else ''}>{t}</option>"
+                          for w, t in windows)
     name = html.escape(ident.get("name") or "")
     locale = ident.get("locale")
     tone = prefs.get("tone")
@@ -213,15 +233,15 @@ def render_onboarding(profile):
       <section class='card'>
         {eyebrow('生辰 · 命理与运势要用', 'fire')}
         <label class='lock'>
-          <input type='checkbox' name='birth_consent' id='bc' onchange="document.getElementById('vault').classList.toggle('open',this.checked)">
+          <input type='checkbox' name='birth_consent' id='bc'{' checked' if birth_allowed else ''} onchange="document.getElementById('vault').classList.toggle('open',this.checked)">
           <span><span class='t'>我同意把生辰存在本机</span>
           <span class='d'>用来起八字命盘、算每日运势。不填也能用日记和职业模块。随时可删。</span></span>
         </label>
-        <div class='vault' id='vault'>
+        <div class='vault{' open' if birth_allowed else ''}' id='vault'>
           <div class='grid2'>
             <div class='q'><span class='lab'>出生日期</span>
               <div class='opts row'>{opt('birth_calendar','solar','公历','',True)}{opt('birth_calendar','lunar','农历','')}</div>
-              <input id='bd' name='birth_date' type='date' aria-label='公历出生日期'>
+              <input id='bd' name='birth_date' type='date' aria-label='公历出生日期'{filled(birth.get('date'))}>
               <p class='hint'>只记得农历就选「农历」，填这三格，我来换算：</p>
               <div style='display:flex;gap:8px;flex-wrap:wrap'>
                 <input name='birth_lunar_year' type='number' min='1901' max='2099' placeholder='农历年，如 1993' style='max-width:10em'>
@@ -231,23 +251,23 @@ def render_onboarding(profile):
               <label class='checkline'><input type='checkbox' name='birth_lunar_leap'>
                 <span>是闰月<span class='d'>比如「闰四月」。拿不准就别勾，我会核对那一年有没有闰月。</span></span></label></div>
             <div class='q'><label class='lab' for='bt'>出生时间</label>
-              <input id='bt' name='birth_time' type='time'>
-              <div class='opts row'>{opt('birth_time_accuracy','exact','准确','出生证明上写的，或记得很清楚',True)}{opt('birth_time_accuracy','approx','大概','比如「九点左右」')}{opt('birth_time_accuracy','unknown','不知道','八字照样能起，只是少了时柱')}</div>
+              <input id='bt' name='birth_time' type='time'{filled(birth.get('time'))}>
+              <div class='opts row'>{opt('birth_time_accuracy','exact','准确','出生证明上写的，或记得很清楚',b_acc=='exact')}{opt('birth_time_accuracy','approx','大概','比如「九点左右」',b_acc=='approx')}{opt('birth_time_accuracy','unknown','不知道','八字照样能起，只是少了时柱',b_acc=='unknown')}</div>
               <label class='lab' for='btw' style='margin-top:8px'>选了「大概」的话，前后可能差多少？</label>
-              <select id='btw' name='birth_time_window'><option value='30'>±30 分钟</option><option value='60' selected>±1 小时</option><option value='120'>±2 小时</option></select></div>
+              <select id='btw' name='birth_time_window'>{window_opts}</select></div>
           </div>
           <div class='grid2'>
             <div class='q'><label class='lab' for='bp'>出生地</label>
-              <input id='bp' name='birth_place' type='text' placeholder='如 北京 / Beijing'></div>
+              <input id='bp' name='birth_place' type='text' placeholder='如 北京 / Beijing'{filled(birth.get('place'))}></div>
             <div class='q'><span class='lab'>性别<span class='d' style='font-weight:400'>（定大运方向）</span></span>
-              <div class='opts row'>{opt('gender','male','男','')}{opt('gender','female','女','')}</div></div>
+              <div class='opts row'>{opt('gender','male','男','',b_gender=='male')}{opt('gender','female','女','',b_gender=='female')}</div></div>
           </div>
         </div>
       </section>
 
       <section class='card'>
         {eyebrow('一个可选的许可', 'metal')}
-        <label class='checkline'><input type='checkbox' name='mood_consent'>
+        <label class='checkline'><input type='checkbox' name='mood_consent'{' checked' if mood_allowed else ''}>
           <span><span style='font-weight:600'>允许记录心情分（0–10）</span>
           <span class='d'>只用来看日记里的情绪趋势。不勾就只存文字。</span></span></label>
       </section>
@@ -280,6 +300,17 @@ def success_page(msg):
 def _run_companion(home, *args):
     subprocess.run([sys.executable, COMPANION, "--home", home, *args],
                    check=True, capture_output=True)
+
+
+def _current_state(home):
+    """(profile, consent) the onboarding form opens with. The profile comes through
+    read-profile, which withholds birth data whose consent isn't granted; consent is
+    {category: granted}."""
+    prof = json.loads(subprocess.run(
+        [sys.executable, COMPANION, "--home", home, "read-profile", "--json"],
+        capture_output=True, text=True).stdout or "{}")
+    stored = _load_yaml(_paths(home)["consent"])
+    return prof, {c: _consent_granted(stored, c) for c in ("birth", "relationships", "mood")}
 
 
 def write_onboarding(home, form):
@@ -320,11 +351,21 @@ def write_onboarding(home, form):
              "onboarding_complete": True}
 
     birth_ok = bool(g("birth_consent"))
+    mood_ok = bool(g("mood_consent"))
+    consent_before = _load_yaml(_paths(home)["consent"])
+    stored = _load_yaml(_paths(home)["profile"])
+    stored_birth = (stored.get("birth") if isinstance(stored, dict)
+                    and isinstance(stored.get("birth"), dict) else {})
+    merged_birth = dict(stored_birth)
     lunar_note = None
     if birth_ok:
         # 准确 / 大概 / 不知道. "大概九点" used to be stored as an exact 09:00, so every pillar
         # computed from it looked certain. The old checkbox still counts as 不知道.
         accuracy = g("birth_time_accuracy") or ("unknown" if g("birth_time_unknown") else "exact")
+        # An empty field means "not given this time", never "erase": a re-submit used to blank
+        # the stored date, time and place. 不知道 still clears the time on purpose, and a first
+        # submit without a time still records it as unknown.
+        keep_time = not g("birth_time") and accuracy != "unknown" and bool(stored_birth.get("time"))
         time_unknown = accuracy == "unknown" or not g("birth_time")
         birth_date, date_input = g("birth_date") or None, None
         if g("birth_calendar") == "lunar":
@@ -352,25 +393,31 @@ def write_onboarding(home, form):
                 window = max(1, min(240, int(g("birth_time_window") or 60)))
             except ValueError:
                 window = 60
-        patch["birth"] = {
-            "date": birth_date,
-            "time": None if time_unknown else g("birth_time"),
-            "time_known": not time_unknown,
-            "time_accuracy": "unknown" if time_unknown else accuracy,
-            "time_window_min": window,
-            "gender": g("gender") or None,
-            "place": g("birth_place").strip() or None,
-        }
-        if date_input:
+        given = {"date": birth_date, "gender": g("gender") or None,
+                 "place": g("birth_place").strip() or None}
+        patch["birth"] = {k: v for k, v in given.items() if v is not None or not stored_birth.get(k)}
+        if not keep_time:
+            patch["birth"].update({
+                "time": None if time_unknown else g("birth_time"),
+                "time_known": not time_unknown,
+                "time_accuracy": "unknown" if time_unknown else accuracy,
+                "time_window_min": window,
+            })
+        if date_input and birth_date is not None:
             patch["birth"]["date_input"] = date_input
+        merged_birth.update(patch["birth"])
     # Record consent BEFORE writing anything it gates. The form collects the birth
     # checkbox and the birth fields in one submission, and this used to write the
     # profile first — which is backwards semantically (consent precedes collection) and
     # now fails outright, since companion.py enforces the gate instead of trusting the
     # caller. Order matters; keep consent first.
-    _run_companion(home, "consent", "--set",
-                   f"birth={'yes' if birth_ok else 'no'}",
-                   f"mood={'yes' if g('mood_consent') else 'no'}")
+    # It grants what is ticked and never revokes. Every submit used to write birth=no and
+    # mood=no for an unticked box, so re-submitting to change the tone withdrew consent while
+    # the data stayed on disk, withheld, and nobody was told. Withdrawing goes through
+    # `consent --set X=no`, which says what is still stored.
+    grants = [f"{c}=yes" for c, ticked in (("birth", birth_ok), ("mood", mood_ok)) if ticked]
+    if grants:
+        _run_companion(home, "consent", "--set", *grants)
     _run_companion(home, "set-profile", "--merge-json", json.dumps(patch, ensure_ascii=False))
 
     # Anything the form could NOT fill goes in `todo`, so the model finishes the job
@@ -381,22 +428,30 @@ def write_onboarding(home, form):
         todo.append(tz_note)
     if lunar_note:
         todo.append(lunar_note)
-    if birth_ok and patch["birth"].get("time_window_min"):
-        w = patch["birth"]["time_window_min"]
+    kept = [label for c, label, ticked in (("birth", "生辰", birth_ok), ("mood", "心情分", mood_ok))
+            if not ticked and _consent_granted(consent_before, c)]
+    if kept:
+        todo.append(f"这次表单没勾「{'」「'.join(kept)}」，但之前已经同意过：表单不会撤回同意，存着的"
+                    "数据也没动。如果本人是想撤回，确认后用 companion.py consent --set birth=no（或 "
+                    "mood=no），它会说明还存着什么、怎么删。")
+    if birth_ok and merged_birth.get("time_window_min"):
+        w = merged_birth["time_window_min"]
         todo.append(f"出生时间是大概的（±{w} 分钟）：起八字时加 --time-window {w}，把这段时间里"
                     "可能的柱都列出来，变动的柱按不确定来读。")
-    if birth_ok and patch["birth"].get("place") and not patch["birth"].get("lat"):
+    if birth_ok and merged_birth.get("place") and not merged_birth.get("lat"):
         todo.append("生辰地点有了，但 birth.lat/lon/tz_at_birth 还是空的 —— 由城市推出来并"
                     "用 set-profile 存上（onboarding.md Tier 1），否则星盘永远算不出上升和宫位。")
-    if birth_ok and not patch["birth"].get("gender"):
+    if birth_ok and not merged_birth.get("gender"):
         todo.append("没填性别 —— 八字大运的顺逆行需要它，问一下再起盘。")
 
     summary = {"status": "onboarded", "form": "onboarding",
                "name": identity.get("name"), "locale": identity.get("locale"),
                "tone": patch["preferences"]["tone"], "timezone": tz,
                "location": identity.get("location"),
-               "birth_consent": birth_ok, "birth_date": patch["birth"]["date"] if birth_ok else None,
-               "mood_consent": bool(g("mood_consent")),
+               "birth_consent": birth_ok,
+               "birth_date": (str(merged_birth["date"]) if birth_ok and merged_birth.get("date")
+                              else None),
+               "mood_consent": mood_ok,
                "todo": todo,
                "ts": datetime.datetime.now().isoformat(timespec="seconds")}
     # The marker only has to say that a submit happened. It used to carry the birth date,
@@ -405,7 +460,9 @@ def write_onboarding(home, form):
     with open(os.path.join(home, ".form_result.json"), "w", encoding="utf-8") as f:
         json.dump(marker, f, ensure_ascii=False)
     return summary, "档案已建好——语言、语气、所在地都记下了。" + (
-        "生辰也存好了，随时可以起命盘。" if birth_ok else "想看命盘的话，之后补上生辰就行。")
+        "生辰也存好了，随时可以起命盘。" if birth_ok else
+        "生辰之前存过，这次没动。" if _consent_granted(consent_before, "birth") else
+        "想看命盘的话，之后补上生辰就行。")
 
 
 ITEMS_PATH = os.path.join(_HERE, "..", "data", "career", "assessment_items.json")
@@ -520,10 +577,9 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         if urlparse(self.path).path not in ("/", ""):
             self._send(404, page("404", "<p>Not found</p>")); return
-        prof = json.loads(subprocess.run(
-            [sys.executable, COMPANION, "--home", self.home, "read-profile", "--json"],
-            capture_output=True, text=True).stdout or "{}")
-        html_out = render_career(prof) if self.form_type == "career" else render_onboarding(prof)
+        prof, consent = _current_state(self.home)
+        html_out = (render_career(prof) if self.form_type == "career"
+                    else render_onboarding(prof, consent))
         self._send(200, html_out)
 
     def do_POST(self):

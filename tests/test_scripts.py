@@ -3961,6 +3961,79 @@ class TestForgetOnlyTouchesACompanionHome(unittest.TestCase):
             self.assertFalse(os.path.lexists(link))
 
 
+class TestOnboardingFormKeepsWhatWasAlreadyGiven(HomeCase):
+    """Re-submitting the onboarding form to change one thing revoked birth and mood consent:
+    the boxes always rendered unticked, and every submit wrote birth=no and mood=no. The
+    birth date stayed in profile.yaml, now withheld, and nobody was told. A ticked box with
+    an empty field also blanked what was stored. The form now opens showing what was already
+    allowed and entered, grants only what is ticked, never revokes, and leaves a stored value
+    alone when its field comes back empty."""
+
+    FIRST = {"name": "X", "locale": "zh", "region": "cn", "tone": "concise",
+             "birth_consent": "on", "birth_date": "1993-04-12", "birth_time": "07:35",
+             "birth_place": "Beijing, CN", "gender": "male", "mood_consent": "on"}
+
+    def _submit(self, fields):
+        import form_server
+        summary, _ = form_server.write_onboarding(self.home, {k: [v] for k, v in fields.items()})
+        return summary
+
+    def _state(self):
+        import yaml
+        with open(os.path.join(self.home, "profile.yaml"), encoding="utf-8") as f:
+            prof = yaml.safe_load(f)
+        with open(os.path.join(self.home, "consent.yaml"), encoding="utf-8") as f:
+            consent = yaml.safe_load(f)
+        return prof, {k: v["granted"] for k, v in consent.items()}
+
+    def test_changing_only_the_tone_keeps_consent_and_the_birth_data(self):
+        self._submit(self.FIRST)
+        summary = self._submit({"name": "X", "locale": "zh", "region": "cn",
+                                "tone": "light-playful"})
+        prof, consent = self._state()
+        self.assertEqual((consent["birth"], consent["mood"]), (True, True))
+        self.assertEqual(prof["preferences"]["tone"], "light-playful")
+        self.assertEqual((str(prof["birth"]["date"]), prof["birth"]["time"]),
+                         ("1993-04-12", "07:35"))
+        self.assertTrue(any("撤回" in t for t in summary["todo"]), summary["todo"])
+
+    def test_a_ticked_box_with_empty_fields_blanks_nothing(self):
+        self._submit(self.FIRST)
+        self._submit({"name": "X", "locale": "zh", "region": "cn", "tone": "concise",
+                      "birth_consent": "on", "birth_date": "", "birth_time": "",
+                      "birth_place": ""})
+        birth = self._state()[0]["birth"]
+        self.assertEqual((str(birth["date"]), birth["time"], birth["place"], birth["gender"]),
+                         ("1993-04-12", "07:35", "Beijing, CN", "male"))
+
+    def test_choosing_unknown_still_clears_a_stored_time(self):
+        self._submit(self.FIRST)
+        self._submit({"name": "X", "locale": "zh", "region": "cn", "tone": "concise",
+                      "birth_consent": "on", "birth_time_accuracy": "unknown"})
+        birth = self._state()[0]["birth"]
+        self.assertIsNone(birth["time"])
+        self.assertFalse(birth["time_known"])
+        self.assertEqual(str(birth["date"]), "1993-04-12")
+
+    def test_the_form_opens_showing_what_was_already_allowed_and_entered(self):
+        import form_server
+        self._submit(self.FIRST)
+        page = form_server.render_onboarding(*form_server._current_state(self.home))
+        self.assertRegex(page, r"name='birth_consent'[^>]*\schecked(?=[\s>])")
+        self.assertRegex(page, r"name='mood_consent'[^>]*\schecked(?=[\s>])")
+        self.assertIn("value='1993-04-12'", page)
+        self.assertIn("value='07:35'", page)
+        self.assertIn("name='gender' value='male' checked", page)
+
+    def test_withheld_birth_data_is_not_shown(self):
+        import form_server
+        self._submit(self.FIRST)
+        run("companion.py", "consent", "--set", "birth=no", home=self.home)
+        page = form_server.render_onboarding(*form_server._current_state(self.home))
+        self.assertNotIn("1993-04-12", page)
+        self.assertNotRegex(page, r"name='birth_consent'[^>]*\schecked(?=[\s>])")
+
+
 class TestDeps(unittest.TestCase):
     def test_doctor_reports_without_installing(self):
         rep = jrun("companion.py", "doctor")

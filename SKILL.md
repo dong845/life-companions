@@ -324,7 +324,7 @@ AGENTS.md                    entry point for harnesses that read AGENTS.md
 ```bash
 python3 $D/scripts/companion.py doctor          # python + deps + what degrades if missing
 python3 $D/scripts/companion.py resolve-tz 柏林   # their words -> IANA zone (offline; asks if unsure)
-python3 $D/scripts/companion.py lunar-to-solar 1993 3 21 [--leap]   # 农历生日 -> 公历; refuses dates that don't exist. Never convert by hand
+python3 $D/scripts/companion.py lunar-to-solar 1993 3 21 [--leap]   # 农历生日 -> 公历 (years 1901–2099); refuses dates that don't exist. Never convert by hand
 python3 $D/scripts/companion.py brief           # ★ the every-turn snapshot, one call
 python3 $D/scripts/companion.py init
 python3 $D/scripts/companion.py status          # slim version of brief
@@ -367,6 +367,7 @@ python3 $D/scripts/relationship_patterns.py --format text   # base-rate over log
 python3 $D/scripts/synastry.py --a 1993-04-12 --a-time 07:35 --a-tz Asia/Shanghai --b 1995-08-30 --b-tz Europe/Amsterdam --format text   # 合婚: NO verdict
 #   each side takes the same --a-tz/--b-tz (and --a-lon/--b-lon) as bazi.py; --true-solar-time
 #   and --early-zishi apply to both, so each chart is the one that person's own 命盘 shows.
+#   --true-solar-time is refused unless every side with a birth time has its longitude.
 python3 $D/scripts/ziwei.py --date 1993-04-12 --time 07:35 --gender m --tz Asia/Shanghai --format text  # 紫微命盘 (needs the hour)
 python3 $D/scripts/selfcheck.py --module destiny --file draft.md   # ★ honesty + voice gate
 #   --module must match the lens: synastry has its OWN no-verdict blockers that fire

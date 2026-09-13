@@ -83,6 +83,17 @@ def _ten_god(from_gan, to_gan):
 
 
 def compare(a_args, b_args):
+    # One convention for the whole comparison. True Solar Time with a longitude for only one
+    # side charted that side on the solar clock and the other on the wall clock, and said so
+    # in one line of the other's notes. A side with no birth time has no clock time for True
+    # Solar Time to correct, so it needs no longitude.
+    missing = [f"--{side}-lon" for side, args in (("a", a_args), ("b", b_args))
+               if args.get("true_solar_time") and args.get("time") and args.get("lon") is None]
+    if missing:
+        raise ValueError(
+            f"--true-solar-time needs {' and '.join(missing)}: without it that chart stays on "
+            "the clock while the other moves to True Solar Time, and the comparison mixes two "
+            "kinds of chart. Add the longitude, or drop --true-solar-time.")
     a = bazi.compute(**a_args)
     b = bazi.compute(**b_args)
     ap, bp = a["computed"]["pillars"], b["computed"]["pillars"]

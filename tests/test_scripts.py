@@ -3692,6 +3692,75 @@ class TestBoundaryNotesUseTheBirthplaceDayAndClock(unittest.TestCase):
             self.assertNotIn("当地时间", notes[0])
 
 
+class TestLunarYearsTheCalendarCovers(HomeCase):
+    """lunar-to-solar took any year: 19933 came back as 19933-03-25, 0 as 0000-02-24 and -5
+    as -005-02-19, and the onboarding form stored that as birth.date with a todo saying it
+    had been converted. The form itself only offers 1901–2099, so the converter now refuses
+    the same range and says why."""
+
+    def test_years_outside_the_range_are_refused(self):
+        import companion
+        for year in (19933, 0, -5, 1900, 2100):
+            solar, why = companion.lunar_to_solar(year, 1, 1)
+            self.assertIsNone(solar, year)
+            self.assertIn("1901–2099", why, year)
+        code, out, _ = run("companion.py", "lunar-to-solar", "19933", "3", "5", home=self.home)
+        self.assertEqual(code, 2, out)
+        self.assertFalse(json.loads(out)["ok"])
+
+    def test_the_ends_of_the_range_still_convert(self):
+        import companion
+        for year in (1901, 2099):
+            solar, why = companion.lunar_to_solar(year, 1, 1)
+            self.assertIsNone(why, year)
+            self.assertTrue(solar.startswith(str(year)), solar)
+
+    def test_the_form_does_not_store_an_impossible_year(self):
+        import form_server
+        import yaml
+        form = {"name": ["X"], "locale": ["zh"], "region": ["cn"], "tone": ["concise"],
+                "birth_consent": ["on"], "birth_time": ["07:35"],
+                "birth_place": ["Beijing, CN"], "gender": ["male"],
+                "birth_calendar": ["lunar"], "birth_lunar_year": ["19933"],
+                "birth_lunar_month": ["3"], "birth_lunar_day": ["5"]}
+        summary, _ = form_server.write_onboarding(self.home, form)
+        with open(os.path.join(self.home, "profile.yaml"), encoding="utf-8") as f:
+            birth = yaml.safe_load(f)["birth"]
+        self.assertIsNone(birth["date"])
+        self.assertTrue(any("1901–2099" in t for t in summary["todo"]), summary["todo"])
+
+
+class TestSynastryKeepsOneConventionForBoth(unittest.TestCase):
+    """合婚 with --true-solar-time and a longitude for only one side put one chart on True
+    Solar Time and the other on the clock, and said so in a single line of B's notes: the
+    two different kinds of chart its own help says it never compares."""
+
+    A = ("--a", "1993-04-12", "--a-time", "00:20", "--a-tz", "Asia/Shanghai", "--a-lon", "104.07")
+
+    def test_true_solar_time_needs_a_longitude_for_each_side_with_a_time(self):
+        code, out, err = run("synastry.py", *self.A, "--b", "1995-08-30", "--b-time", "10:00",
+                             "--b-tz", "Asia/Shanghai", "--true-solar-time")
+        self.assertEqual(code, 2, (out, err))
+        payload = json.loads(out)
+        self.assertFalse(payload["ok"])
+        self.assertIn("--b-lon", payload["error"])
+
+    def test_a_side_with_no_birth_time_needs_no_longitude(self):
+        # True Solar Time moves only the 日柱 and 时柱, and a chart with no time has no hour
+        code, out, err = run("synastry.py", *self.A, "--b", "1995-08-30",
+                             "--b-tz", "Asia/Shanghai", "--true-solar-time")
+        self.assertEqual(code, 0, (out, err))
+
+    def test_compare_refuses_the_mix_for_any_caller(self):
+        import synastry
+        with self.assertRaises(ValueError):
+            synastry.compare(
+                dict(date="1993-04-12", time="00:20", gender="m", tz="Asia/Shanghai",
+                     lon=104.07, true_solar_time=True),
+                dict(date="1995-08-30", time="10:00", gender="f", tz="Asia/Shanghai",
+                     true_solar_time=True))
+
+
 class TestDeps(unittest.TestCase):
     def test_doctor_reports_without_installing(self):
         rep = jrun("companion.py", "doctor")

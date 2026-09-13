@@ -470,6 +470,10 @@ def lunar_to_solar(year, month, day, leap=False):
     """A lunar-calendar date -> (solar ISO date, None), or (None, reason) when that lunar
     date does not exist. Every engine takes a solar date, and converting by hand is what
     this skill forbids: leap months and 29-day months are exactly where it goes wrong."""
+    # The range the onboarding form offers. lunar-python converts any integer year (19933
+    # came back as 19933-03-25, 0 as 0000-02-24), so nothing else stops a typo being stored.
+    if not 1901 <= year <= 2099:
+        return None, f"农历年份只支持 1901–2099（收到 {year}）"
     if not 1 <= month <= 12:
         return None, f"农历月份只有 1–12（收到 {month}）"
     if not 1 <= day <= 30:

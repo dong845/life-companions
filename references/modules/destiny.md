@@ -47,10 +47,13 @@ the chart could have inside that window, and `changes` names the ones that actua
 read those as uncertain and say so; read the rest normally. The ambiguities also flag a
 birth within 15 minutes of a 时辰 boundary (naming both 时柱) or of the 日柱's turn (midnight
 under 晚子时, 23:00 under 早子时 — naming both 日柱, since the 日柱 carries the 日主), a birth
-within a day of any 節 (the 月柱; 立春 has its own note for the 年柱), a daylight-saving
+within a day of any 節 (the 月柱; 立春 has its own note for the 年柱) — or, with no birth
+time, a 節 that falls on the birth day as the birthplace counts it — a daylight-saving
 birth whose standard-time 日柱 or 时柱 differs, and — when a longitude is known but TST is
 off — the 日柱 and 时柱 True Solar Time would give. Pass these on in plain words. They are
-the places a chart is least sure of itself, and the usual reason two apps disagree.
+the places a chart is least sure of itself, and the usual reason two apps disagree. A
+節氣 moment in a note is printed on the birthplace's clock as 当地时间, with 北京时间
+beside it; quote the local one to the person.
 
 **`--tz` is not optional for a birth outside China.** 節氣 are absolute astronomical
 instants and the engine resolves them on a Beijing clock, so without the birthplace

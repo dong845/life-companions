@@ -3601,6 +3601,97 @@ class TestNotesSayWhenTheDayPillarMoves(unittest.TestCase):
         self.assertTrue(any("夏令时" in a for a in r["ambiguities"]), r["ambiguities"])
 
 
+class TestBoundaryNotesUseTheBirthplaceDayAndClock(unittest.TestCase):
+    """With no birth time, a 節 decides the 月柱 only when it falls inside the birth day, and
+    abroad that is the birthplace's day, not the Beijing calendar day the note checked.
+    惊蛰 2022 fell at 09:43 on 5 March in New York: a New York birth that day, time
+    unknown, could have either 月柱 and got no note, while one on 4 March, entirely before
+    it, was told its 月柱 was in doubt. 立春 had the same fault for the 年柱. The notes also
+    printed every 節氣 moment on a Beijing clock without saying so, so an Amsterdam birth
+    read 立春 03:37 for a moment that was 20:37 the evening before on its own clock."""
+
+    @staticmethod
+    def _moment(zone, year, name):
+        """A 節氣 moment on the Beijing clock and on `zone`'s clock."""
+        import datetime
+        from zoneinfo import ZoneInfo
+        from lunar_python import Solar
+        s = Solar.fromYmd(year, 6, 15).getLunar().getJieQiTable()[name]
+        bj = datetime.datetime(s.getYear(), s.getMonth(), s.getDay(), s.getHour(), s.getMinute())
+        local = (bj - datetime.timedelta(hours=8)).replace(tzinfo=datetime.timezone.utc) \
+            .astimezone(ZoneInfo(zone)).replace(tzinfo=None)
+        return bj, local
+
+    @staticmethod
+    def _day_notes(r, name):
+        return [a for a in r["ambiguities"] if a.startswith(f"这一天{name}交节")]
+
+    def test_a_timeless_birth_is_flagged_on_the_birthplace_day_the_jie_falls(self):
+        import bazi, datetime
+        _, local = self._moment("America/New_York", 2022, "惊蛰")
+        r = bazi.compute(local.date().isoformat(), None, "m", tz="America/New_York")
+        notes = self._day_notes(r, "惊蛰")
+        self.assertTrue(notes, r["ambiguities"])
+        self.assertIn("月柱", notes[0])
+        earlier = (local.date() - datetime.timedelta(days=1)).isoformat()
+        r = bazi.compute(earlier, None, "m", tz="America/New_York")
+        self.assertEqual(self._day_notes(r, "惊蛰"), [], r["ambiguities"])
+
+    def test_a_timeless_lichun_note_follows_the_birthplace_day_too(self):
+        import bazi, datetime
+        _, local = self._moment("America/New_York", 2022, "立春")
+        r = bazi.compute(local.date().isoformat(), None, "f", tz="America/New_York")
+        notes = self._day_notes(r, "立春")
+        self.assertTrue(notes, r["ambiguities"])
+        self.assertIn("年柱", notes[0])
+        later = (local.date() + datetime.timedelta(days=1)).isoformat()
+        r = bazi.compute(later, None, "f", tz="America/New_York")
+        self.assertFalse([a for a in r["ambiguities"] if "立春" in a and "年柱" in a],
+                         r["ambiguities"])
+
+    def test_the_timeless_note_fires_exactly_when_the_pillar_depends_on_the_hour(self):
+        import bazi, datetime
+        from zoneinfo import ZoneInfo
+        from lunar_python import Solar
+
+        def month_at(day, hh, mm, zone):
+            clock = datetime.datetime(day.year, day.month, day.day, hh, mm, tzinfo=ZoneInfo(zone))
+            b = clock.astimezone(datetime.timezone(datetime.timedelta(hours=8)))
+            return Solar.fromYmdHms(b.year, b.month, b.day, b.hour, b.minute, 0) \
+                .getLunar().getEightChar().getMonth()
+        for zone in ("America/Los_Angeles", "Pacific/Auckland"):
+            for name in bazi._JIE:
+                _, local = self._moment(zone, 2022, name)
+                for shift in (-1, 0, 1):
+                    day = local.date() + datetime.timedelta(days=shift)
+                    r = bazi.compute(day.isoformat(), None, "m", tz=zone)
+                    uncertain = month_at(day, 0, 0, zone) != month_at(day, 23, 59, zone)
+                    self.assertEqual(bool(self._day_notes(r, name)), uncertain,
+                                     (zone, name, day, r["ambiguities"]))
+
+    def test_a_jieqi_moment_is_printed_on_the_birthplace_clock_and_labelled(self):
+        import bazi
+        r = bazi.compute("1993-02-03", "21:00", "m", tz="Europe/Amsterdam")
+        notes = [a for a in r["ambiguities"] if a.startswith("出生在立春")]
+        self.assertTrue(notes, r["ambiguities"])
+        self.assertIn("当地时间 1993-02-03 20:37", notes[0])
+        self.assertIn("北京时间 1993-02-04 03:37", notes[0])
+        _, local = self._moment("America/New_York", 2022, "惊蛰")
+        r = bazi.compute(local.date().isoformat(), "09:00", "m", tz="America/New_York")
+        notes = [a for a in r["ambiguities"] if a.startswith("出生在惊蛰")]
+        self.assertTrue(notes, r["ambiguities"])
+        self.assertIn(f"当地时间 {local:%Y-%m-%d %H:%M}", notes[0])
+
+    def test_a_beijing_clock_birth_says_beijing_time(self):
+        import bazi
+        for tz in ("Asia/Shanghai", None):
+            r = bazi.compute("1993-02-04", "05:00", "m", tz=tz)
+            notes = [a for a in r["ambiguities"] if a.startswith("出生在立春")]
+            self.assertTrue(notes, (tz, r["ambiguities"]))
+            self.assertIn("北京时间 1993-02-04 03:37", notes[0])
+            self.assertNotIn("当地时间", notes[0])
+
+
 class TestDeps(unittest.TestCase):
     def test_doctor_reports_without_installing(self):
         rep = jrun("companion.py", "doctor")

@@ -215,6 +215,28 @@ def _to_china_clock(dt, tz):
     return dt + datetime.timedelta(hours=shift), shift
 
 
+def _on_birth_clock(moment, tz):
+    """A Beijing-clock moment — the way the 節氣 table keeps them — on the birthplace's own
+    wall clock."""
+    if tz is None:
+        return moment
+    utc = moment - datetime.timedelta(hours=8)
+    if isinstance(tz, (int, float)):
+        return utc + datetime.timedelta(hours=float(tz))
+    from zoneinfo import ZoneInfo
+    return utc.replace(tzinfo=datetime.timezone.utc).astimezone(ZoneInfo(tz)).replace(tzinfo=None)
+
+
+def _when(moment, tz):
+    """A 節氣 moment as a note prints it: on the birthplace's clock, saying whose clock. An
+    Amsterdam birth used to read 立春 03:37 for a moment that was 20:37 the evening before
+    on its own clock."""
+    local = _on_birth_clock(moment, tz)
+    if local == moment:
+        return f"北京时间 {moment:%Y-%m-%d %H:%M}"
+    return f"当地时间 {local:%Y-%m-%d %H:%M}，北京时间 {moment:%Y-%m-%d %H:%M}"
+
+
 def _apply_true_solar_time(dt, lon, standard_meridian):
     """Shift civil clock time to local True Solar Time (traditional convention)."""
     lon_correction_min = (lon - standard_meridian) * 4.0  # 4 min per degree
@@ -798,27 +820,41 @@ def compute(date, time, gender, lon=None, true_solar_time=False,
             f"{instant.strftime('%Y-%m-%d %H:%M')}），年柱月柱据此定；日柱与时柱仍按"
             f"当地钟点。海外出生的日/时柱取法各家不同，此为本引擎的公开约定。")
 
+    # With no birth time, a 節 decides a pillar only when it falls inside the birth DAY, and
+    # that is the birthplace's day: [local 00:00, next local 00:00) on the Beijing clock the
+    # table keeps. Each end takes its own offset, so a daylight-saving change that day is
+    # counted. The notes used to compare Beijing calendar dates, which abroad both missed
+    # real doubt and invented it.
+    local_midnight = civil.replace(hour=0, minute=0)
+    day_start = _to_china_clock(local_midnight, tz)[0]
+    day_end = _to_china_clock(local_midnight + datetime.timedelta(days=1), tz)[0]
+
+    def falls_on_birth_day(moment):
+        return moment is not None and day_start <= moment < day_end
+
     # 立春 is a MOMENT: a birth within a few hours of it flips the whole year pillar.
     # Surface that as an ambiguity — it is exactly the kind of thing the person must be
     # told, and it is invisible unless the script says it.
     lichun_gap, lichun_moment = _lichun_gap_hours(instant)
     on_lichun_day = bool(lichun_moment and lichun_moment.date() == instant.date())
-    if lichun_gap is not None and abs(lichun_gap) <= 24:
+    if not hour_known:
+        if falls_on_birth_day(lichun_moment):
+            ambiguities.append(
+                f"这一天立春交节（{_when(lichun_moment, tz)}）——出生时刻未知，年柱和月柱都"
+                "取决于出生在交节之前还是之后，需要确认出生时间。")
+    elif lichun_gap is not None and abs(lichun_gap) <= 24:
         side = "之后" if lichun_gap >= 0 else "之前"
         ambiguities.append(
-            f"出生在立春（{lichun_moment.strftime('%Y-%m-%d %H:%M')}）{side}约"
-            f"{abs(lichun_gap):.1f}小时——年柱以立春交节的『时刻』为界，"
-            + ("出生时刻未知时年柱本身就不确定，需要确认出生时间。"
-               if not hour_known else
-               "差几十分钟年柱就会换一柱，请确认出生时刻（含出生地时区）准确。")
-        )
+            f"出生在立春（{_when(lichun_moment, tz)}）{side}约{abs(lichun_gap):.1f}小时——"
+            "年柱以立春交节的『时刻』为界，差几十分钟年柱就会换一柱，请确认出生时刻（含出生地"
+            "时区）准确。")
 
     # The other eleven 節 move the 月柱 exactly as 立春 moves the 年柱, and nothing said so.
     jie, jie_gap, jie_moment = _nearest_jie(instant)
     if jie is not None:
-        when = jie_moment.strftime("%Y-%m-%d %H:%M")
+        when = _when(jie_moment, tz)
         if not hour_known:
-            if jie_moment.date() == instant.date():
+            if falls_on_birth_day(jie_moment):
                 ambiguities.append(
                     f"这一天{jie}交节（{when}）——出生时刻未知，月柱取决于出生在交节之前还是"
                     "之后，需要确认出生时间。")

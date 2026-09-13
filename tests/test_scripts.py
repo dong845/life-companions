@@ -1830,6 +1830,20 @@ class TestHelplineGateAcrossFormats(unittest.TestCase):
         self.found("热线 " + "1. " * 400 + "12356")
         self.assertLess(time.time() - t0, 0.5)
 
+    def test_a_crisis_reply_reads_a_decimal_or_a_range_as_a_number_to_dial(self):
+        # outside a crisis reply these are a decimal and a range; inside one they are numbers
+        # someone may call
+        for t in ["心理援助热线 12356，另一条是 110.5。", "撑不住的时候，打心理援助热线 1234-5678。"]:
+            self.assertIn("unknown-helpline", self.found(t), t)
+
+    def test_a_list_marker_is_not_read_into_the_number_after_it(self):
+        # with its spaces taken out, 「1. 12357」 read as the decimal 1.12357 and walked through
+        self.assertIn("unknown-helpline", self.found("1. 12357 心理热线", "none"))
+
+    def test_qima_after_a_real_line_is_not_a_year(self):
+        for t in ["生命线 1995 起码有人接", "撥打生命線 1995起碼有人會接"]:
+            self.assertNotIn("crisis-no-resource", self.found(t), t)
+
 
 class TestGateHolesFoundByAudit(unittest.TestCase):
     def check(self, t, m):
@@ -2925,6 +2939,36 @@ class TestJournalRewritesAreExact(HomeCase):
             self.assertNotIn("mood", entry)
         self.assertIn("还是二", content[rows[0]["offset"]:rows[0]["offset"] + rows[0]["length"]])
 
+    def test_an_index_length_that_runs_into_the_next_entry_refuses(self):
+        for day, text in (("2026-06-05", "FIRST"), ("2026-06-06", "SECOND")):
+            run("companion.py", "add-entry", "--date", day, "--text", text, home=self.home)
+        rows = _index_rows(self.home)
+        rows[0]["length"] += 50
+        with open(os.path.join(self.home, "journal", "index.jsonl"), "w", encoding="utf-8") as f:
+            f.write("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows))
+        before = self.text_of("journal/2026-06.md")
+        code, out, _ = run("companion.py", "forget", "--entry", "2026-06-05", home=self.home)
+        self.assertEqual(code, 3, out)
+        self.assertIn("runs past", json.loads(out)["error"])
+        self.assertEqual(self.text_of("journal/2026-06.md"), before)
+
+    def test_a_refusal_after_a_finished_step_says_what_was_already_done(self):
+        run("companion.py", "consent", "--set", "mood=yes", home=self.home)
+        for day, text, mood in (("2026-08-10", "AUG", "5"), ("2026-06-05", "JUN", "4")):
+            run("companion.py", "add-entry", "--date", day, "--text", text, "--mood", mood,
+                home=self.home)
+        body = self.text_of("journal/2026-06.md")
+        with open(os.path.join(self.home, "journal", "2026-06.md"), "w", encoding="utf-8") as f:
+            f.write("hand-edited preface\n" + body)
+        # --entry rewrites August and succeeds; --mood then meets the hand edit in June
+        code, out, _ = run("companion.py", "forget", "--entry", "2026-08-10", "--mood",
+                           home=self.home)
+        self.assertEqual(code, 3, out)
+        payload = json.loads(out)
+        self.assertIn("Nothing more was changed", payload["error"])
+        self.assertNotIn("Nothing was changed", payload["error"])
+        self.assertTrue(payload["done_before_this_refusal"], payload)
+
 
 class TestForgetEntryReachesEveryCopy(HomeCase):
     """safety.md §4 says each forget cleans the journal, the index, the relationship log,
@@ -3396,6 +3440,13 @@ class TestLowMoodReadsDaysAndDates(HomeCase):
                 json.dumps({"wellbeing_checked": value}), home=self.home)
             self.assertEqual("_wellbeing_check" in self.brief(), asks, value)
 
+    def test_a_day_is_read_by_its_average_not_its_lowest_entry(self):
+        # a 2 in the morning and an 8 at night make a middling day, not a low one
+        for n in range(5, 0, -1):
+            self.log(n, 2)
+            self.log(n, 8)
+        self.assertNotIn("_wellbeing_check", self.brief())
+
 
 class TestCrisisScanReadsHowPeopleSayIt(unittest.TestCase):
     """The crisis backstop missed traditional-script passive ideation: 著 is also a
@@ -3599,6 +3650,18 @@ class TestNotesSayWhenTheDayPillarMoves(unittest.TestCase):
     def test_a_southern_summer_is_daylight_saving_too(self):
         r = self.chart(date="2024-01-10", time="13:10", gender="m", tz="Australia/Sydney")
         self.assertTrue(any("夏令时" in a for a in r["ambiguities"]), r["ambiguities"])
+
+    def test_a_winter_clock_behind_its_zone_is_not_daylight_saving(self):
+        # zoneinfo gives Dublin's winters a negative dst. An hour added to 12:30 would move the
+        # 时柱, so a note here would claim a summer time that isn't there.
+        r = self.chart(date="1993-02-03", time="12:30", gender="m", tz="Europe/Dublin")
+        self.assertFalse(any("夏令时" in a for a in r["ambiguities"]), r["ambiguities"])
+
+    def test_half_an_hour_of_daylight_saving_is_named_as_half_an_hour(self):
+        r = self.chart(date="2024-01-10", time="01:15", gender="m", tz="Australia/Lord_Howe")
+        notes = [a for a in r["ambiguities"] if "夏令时" in a]
+        self.assertTrue(notes, r["ambiguities"])
+        self.assertIn("快 30 分钟", notes[0])
 
 
 class TestBoundaryNotesUseTheBirthplaceDayAndClock(unittest.TestCase):

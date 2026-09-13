@@ -14,6 +14,7 @@ computed half falsifiable instead of merely asserted.
 """
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -3924,8 +3925,9 @@ class TestDailyCardFollowsTheChartConventions(unittest.TestCase):
     def test_the_card_command_passes_every_chart_convention(self):
         s = open(os.path.join(SKILL, "references", "modules", "daily-fortune.md"),
                  encoding="utf-8").read()
-        start = s.find("python3 $D/scripts/bazi.py")
-        block = s[start:s.find("python3 $D/scripts/astro.py", start)]
+        start = s.find('python3 "$D/scripts/bazi.py"')
+        self.assertNotEqual(start, -1, "daily-fortune.md no longer shows the bazi.py command")
+        block = s[start:s.find('python3 "$D/scripts/astro.py"', start)]
         for flag in ("--tz", "--lon", "--true-solar-time", "--early-zishi", "--time-window"):
             self.assertIn(flag, block, flag)
 
@@ -4659,6 +4661,211 @@ class TestInterestFitComparesShapes(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.cm.correlation_fit([0.1, 0.5, 0.9], [0.1, 0.5, 0.9, 0.2, 0.4, 0.6])
 
+
+class TestDocumentedCommandsMatchTheScripts(unittest.TestCase):
+    """An agent that is not Claude runs the commands SKILL.md, AGENTS.md, the READMEs and
+    references/ spell out, exactly as written. A flag renamed in a script but not in a doc, or a
+    subcommand a doc invents, ends that run in an argparse error. Every documented command's
+    script, subcommand and --flags are read back from the script's own --help."""
+
+    DOCS = ("SKILL.md", "AGENTS.md", "README.md", "README.zh-CN.md")
+    _help = {}
+
+    @classmethod
+    def setUpClass(cls):
+        cls.scripts = sorted(n for n in os.listdir(os.path.join(SKILL, "scripts"))
+                             if n.endswith(".py") and not n.startswith("_"))
+        refs = []
+        for root, _dirs, files in os.walk(os.path.join(SKILL, "references")):
+            refs += [os.path.relpath(os.path.join(root, f), SKILL) for f in files if f.endswith(".md")]
+        cls.docs = list(cls.DOCS) + sorted(refs)
+
+    def help_text(self, script, sub=None):
+        if (script, sub) not in self._help:
+            with tempfile.TemporaryDirectory() as home:
+                r = subprocess.run(
+                    [sys.executable, os.path.join(SKILL, "scripts", script)] + ([sub] if sub else [])
+                    + ["--help"], capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=120,
+                    env=dict(os.environ, COMPANION_HOME=home, LIFE_COMPANION_NO_AUTOINSTALL="1"))
+            self.assertEqual(r.returncode, 0, f"{script} {sub or ''} --help: {(r.stdout + r.stderr)[-300:]}")
+            self._help[(script, sub)] = r.stdout
+        return self._help[(script, sub)]
+
+    def commands(self):
+        """(doc, line number, script, argument tokens, whether the line writes it as a command)"""
+        pattern = re.compile(r"(?:scripts/)?\b(" + "|".join(map(re.escape, self.scripts))
+                             + r")\"?((?:[ \t]+[^\s`#|]+)*)")
+        for doc in self.docs:
+            with open(os.path.join(SKILL, doc), encoding="utf-8") as f:
+                for n, line in enumerate(f, 1):
+                    for m in pattern.finditer(line):
+                        tokens = [t.strip("[]()'\"`,;.:。，") for t in m.group(2).split()]
+                        as_command = re.search(r'(python3?|py -3)\s+"?(\$D/)?$|`$', line[:m.start()])
+                        yield doc, n, m.group(1), [t for t in tokens if t], as_command is not None
+
+    def test_every_documented_subcommand_and_flag_exists(self):
+        subcommands = set(re.search(r"\{([a-z0-9_,-]+)\}", self.help_text("companion.py")).group(1).split(","))
+        problems, checked = [], 0
+        for doc, n, script, tokens, as_command in self.commands():
+            sub = None
+            if script == "companion.py" and tokens and not tokens[0].startswith("-"):
+                if tokens[0] not in subcommands:
+                    if as_command:
+                        problems.append(f"{doc}:{n}: companion.py has no subcommand {tokens[0]!r}")
+                    continue
+                sub = tokens[0]
+            flags = [t.split("=")[0] for t in tokens if t.startswith("--")]
+            if not flags:
+                continue
+            checked += 1
+            known = set(re.findall(r"(?<![\w-])--[a-z0-9][a-z0-9-]*", self.help_text(script, sub)))
+            problems += [f"{doc}:{n}: {' '.join(filter(None, (script, sub)))} has no {f}"
+                         for f in flags if f not in known]
+        self.assertGreater(checked, 80, "the docs carry about ninety commands; the parser lost them")
+        self.assertEqual(problems, [])
+
+    def test_every_script_a_doc_names_ships(self):
+        missing = []
+        for doc in self.docs:
+            with open(os.path.join(SKILL, doc), encoding="utf-8") as f:
+                text = f.read()
+            missing += [f"{doc}: scripts/{name}" for name in sorted(set(re.findall(r"scripts/(\w+\.py)", text)))
+                        if not os.path.exists(os.path.join(SKILL, "scripts", name))]
+        self.assertEqual(missing, [])
+
+    def test_every_documented_command_quotes_D(self):
+        # a clone under a folder with a space in its name split an unquoted $D in two
+        unquoted = []
+        for doc in self.docs:
+            with open(os.path.join(SKILL, doc), encoding="utf-8") as f:
+                unquoted += [f"{doc}:{n}" for n, line in enumerate(f, 1) if re.search(r'(?<!")\$D/', line)]
+        self.assertEqual(unquoted, [])
+
+class TestTheSkillFindsItsOwnFolder(unittest.TestCase):
+    """Every command in SKILL.md starts with $D, the folder the skill is installed in. The recipe
+    that finds it looked only where Claude Code keeps skills, so a skill installed for Codex,
+    Cursor, Gemini CLI or OpenCode, in the folders `npx skills add` uses, resolved to nothing and
+    the next command ran scripts/companion.py from wherever the agent happened to be."""
+
+    INSTALLS = (("home", ".claude/skills/life-companion"), ("home", ".codex/skills/life-companion"),
+                ("home", ".cursor/skills/life-companion"), ("home", ".gemini/skills/life-companion"),
+                ("home", ".config/opencode/skills/life-companion"),
+                ("home", ".config/agents/skills/life-companion"), ("home", ".agents/skills/life-companion"),
+                ("project", ".agents/skills/life-companion"), ("project", ".claude/skills/life-companion"))
+
+    def recipe(self):
+        with open(os.path.join(SKILL, "SKILL.md"), encoding="utf-8") as f:
+            m = re.search(r"\*\*1\. `\$D`.*?```bash\n(.*?)```", f.read(), re.S)
+        self.assertIsNotNone(m, "SKILL.md no longer carries the $D recipe as a bash block")
+        return m.group(1)
+
+    def resolve(self, where, rel):
+        with tempfile.TemporaryDirectory() as tmp:
+            home, project = os.path.join(tmp, "home"), os.path.join(tmp, "project")
+            target = os.path.join(home if where == "home" else project, rel)
+            os.makedirs(os.path.dirname(target))
+            os.makedirs(project, exist_ok=True)
+            os.symlink(SKILL, target)
+            r = subprocess.run(["bash", "-c", "python3() { :; }\n" + self.recipe() + '\nprintf "%s" "$D"\n'],
+                               cwd=project, capture_output=True, text=True, timeout=60,
+                               env=dict(os.environ, HOME=home))
+            found = r.stdout.strip()
+            return os.path.realpath(os.path.join(project, found)) if found else None
+
+    def test_every_install_folder_resolves(self):
+        missed = [("~/" if where == "home" else "./") + rel for where, rel in self.INSTALLS
+                  if self.resolve(where, rel) != os.path.realpath(SKILL)]
+        self.assertEqual(missed, [])
+
+    def test_another_skill_in_the_working_folder_is_not_taken_for_this_one(self):
+        # the recipe also tries the folder the agent works in, which may hold a different skill
+        with tempfile.TemporaryDirectory() as tmp:
+            home, project = os.path.join(tmp, "home"), os.path.join(tmp, "project")
+            os.makedirs(os.path.join(home, ".codex", "skills"))
+            os.symlink(SKILL, os.path.join(home, ".codex", "skills", "life-companion"))
+            os.makedirs(project)
+            with open(os.path.join(project, "SKILL.md"), "w", encoding="utf-8") as f:
+                f.write("---\nname: some-other-skill\n---\n")
+            r = subprocess.run(["bash", "-c", "python3() { :; }\n" + self.recipe() + '\nprintf "%s" "$D"\n'],
+                               cwd=project, capture_output=True, text=True, timeout=60,
+                               env=dict(os.environ, HOME=home))
+            self.assertEqual(os.path.realpath(os.path.join(project, r.stdout.strip() or "?")),
+                             os.path.realpath(SKILL), r.stdout)
+
+
+class TestPillarsAgreeWithAnIndependentCalendar(unittest.TestCase):
+    """bazi.py reads the pillars with lunar-python, and sxtwl is a separate calendar engine. Only
+    the 立春 year boundary used to be checked against it. Here all four pillars are, for births at
+    six UTC offsets: 年柱 and 月柱 on the Beijing clock of the birth moment, 日柱 and 时柱 on the
+    local clock. sxtwl works by date, so days that hold a solar term, and 23:00-00:59, are left
+    out: those are exactly the places it cannot decide."""
+
+    def test_all_four_pillars_match_sxtwl(self):
+        try:
+            import sxtwl
+        except ImportError:
+            self.skipTest("sxtwl is optional and not installed")
+        import datetime as dt
+        import random
+        import bazi
+        gan, zhi = "甲乙丙丁戊己庚辛壬癸", "子丑寅卯辰巳午未申酉戌亥"
+
+        def gz(o):
+            return gan[o.tg] + zhi[o.dz]
+
+        def near_a_term(day):
+            return any(sxtwl.fromSolar(x.year, x.month, x.day).hasJieQi()
+                       for x in (day - dt.timedelta(1), day, day + dt.timedelta(1)))
+
+        rng, checked, differ = random.Random(4242), 0, []
+        while checked < 150:
+            off = rng.choice((8, -5, 1, 9, 5.5, -3))
+            local = dt.datetime(rng.randint(1902, 2098), rng.randint(1, 12), rng.randint(1, 28),
+                                rng.randint(1, 22), rng.randint(0, 59))
+            beijing = local + dt.timedelta(hours=8 - off)
+            if near_a_term(beijing.date()) or near_a_term(local.date()):
+                continue
+            checked += 1
+            p = bazi.compute(local.strftime("%Y-%m-%d"), local.strftime("%H:%M"), "m", tz=off)["computed"]["pillars"]
+            b = sxtwl.fromSolar(beijing.year, beijing.month, beijing.day)
+            day = sxtwl.fromSolar(local.year, local.month, local.day)
+            ours = tuple(p[k]["ganzhi"] for k in ("year", "month", "day", "hour"))
+            theirs = (gz(b.getYearGZ()), gz(b.getMonthGZ()), gz(day.getDayGZ()), gz(day.getHourGZ(local.hour)))
+            if ours != theirs:
+                differ.append((off, str(local), ours, theirs))
+        self.assertEqual(differ, [])
+
+class TestGateReadsHowRefusalsAreWorded(unittest.TestCase):
+    """A codex run declined the 合婚 verdict in the draft it checked (「我不能把它算成“合”或“不合”的
+    判决」), reworded it to 「不下“合／不合”的判决」, and the gate blocked that refusal as a verdict: it
+    knew 不能 and 不是, not 不下…判决, 不给…结论 or "won't". Its 合婚 disclaimer check also missed
+    「不是科学预测」 and 「文化视角」, so a reply that said both was told it said neither."""
+
+    def gate(self, module, text):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "draft.md")
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(text)
+            r = subprocess.run([sys.executable, os.path.join(SCRIPTS, "selfcheck.py"), "--module", module,
+                                "--file", path], capture_output=True, text=True, timeout=120)
+        return r.stdout + r.stderr
+
+    def test_a_declined_verdict_is_not_read_as_one(self):
+        for text in ("不下“合／不合”的判决。你们日支亥巳相冲，传统上读作推拉感。",
+                     "我不给合不合的结论，只说盘里有哪些关系。",
+                     "这里不做「合不合」的判断，相处得怎么样是你们的事。",
+                     "I won't tell you whether you two are compatible; the chart only lists branch relations."):
+            self.assertNotIn("synastry-verdict", self.gate("synastry", text), text)
+
+    def test_a_verdict_that_only_shares_words_with_a_refusal_still_blocks(self):
+        for text in ("你们放不下彼此，天生一对。",
+                     "你们八字不合，不给自己留遗憾就早点分开。",
+                     "Honestly, you two are not compatible."):
+            self.assertIn("synastry-verdict", self.gate("synastry", text), text)
+
+    def test_the_synastry_disclaimer_is_read_in_its_common_wordings(self):
+        out = self.gate("synastry", "命盘按传统规则计算；解读只是文化视角，不是科学预测。日支亥巳相冲，传统上读作推拉感。")
+        self.assertNotIn("missing-disclaimer", out)
 
 class TestDeps(unittest.TestCase):
     def test_doctor_reports_without_installing(self):

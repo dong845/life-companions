@@ -25,9 +25,9 @@ result once they submit:
 
 ```bash
 # onboarding (pre-fills anything already in the profile):
-python3 $D/scripts/form_server.py --form onboarding &
+python3 "$D/scripts/form_server.py" --form onboarding &
 # career assessment:
-python3 $D/scripts/form_server.py --form career &
+python3 "$D/scripts/form_server.py" --form career &
 ```
 It prints `SERVING http://127.0.0.1:8760/ …` and opens the browser. On submit it
 prints `SUBMITTED {...}`, writes the data, then **stops itself** and prints `DONE`.

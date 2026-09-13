@@ -20,7 +20,7 @@ the install command instead. Nothing after that touches the network.
 ```bash
 D="$(dirname "$(realpath AGENTS.md)")"     # or wherever this repo is checked out
 python3 "$D/scripts/companion.py" doctor   # python + dependencies + what degrades
-python3 "$D/tests/test_scripts.py"         # regression suite (400 tests, ~70s, offline)
+python3 "$D/tests/test_scripts.py"         # regression suite (409 tests, ~70s, offline)
 ```
 
 `doctor` names every missing package with its install command and what stops working
@@ -68,7 +68,8 @@ an improvised crisis helpline number.** The canonical list is inline in SKILL.md
 `references/safety.md` §2.
 
 `scripts/selfcheck.py` is the deterministic backstop for all of that. Run it on your
-draft before sending:
+draft before sending, and send the draft you checked (an edit after it passed has not been
+checked):
 
 ```bash
 python3 "$D/scripts/selfcheck.py" --module destiny --file draft.md   # exit 1 = blocker

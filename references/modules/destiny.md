@@ -33,7 +33,7 @@ and it must not turn into one in the reading.
 Read the birth block, then run the flagship script with the profile's frozen
 conventions:
 ```bash
-python3 $D/scripts/bazi.py \
+python3 "$D/scripts/bazi.py" \
   --date <birth.date> [--time <birth.time>] --gender <m|f> \
   --tz <birth.tz_at_birth>                     # ← ALWAYS pass this when you have it \
   [--lon <birth.lon> --true-solar-time]        # only if conventions.true_solar_time
@@ -301,7 +301,7 @@ not fabrication; `tz_at_birth` must reflect any historical DST/zone in force the
 `onboarding.md` Tier 1). Only truly leave them null if the place itself is unknown.
 
 ```bash
-python3 $D/scripts/astro.py --natal \
+python3 "$D/scripts/astro.py" --natal \
   --date <birth.date> [--time <birth.time>] \
   [--lat <birth.lat> --lon <birth.lon> --tz <birth.tz_at_birth>]   # for 上升/宫位
   --format json      # or text for a quick human view
@@ -342,7 +342,7 @@ Offer this when they ask for **紫微 / 斗数 / 命宫** by name. It is a third
 beside BaZi and the Western chart, not a better one.
 
 ```bash
-python3 $D/scripts/ziwei.py --date <birth.date> --time <birth.time> \
+python3 "$D/scripts/ziwei.py" --date <birth.date> --time <birth.time> \
                             --gender <m|f> --tz <birth.tz_at_birth> \
                             [--on-year 2026] --format json
 ```
@@ -399,7 +399,7 @@ one-way valve: the traditional relations are computed honestly, and the verdict 
 unavailable.
 
 ```bash
-python3 $D/scripts/synastry.py --a <A date> [--a-time HH:MM] --a-gender m --a-tz <A's birthplace zone> \
+python3 "$D/scripts/synastry.py" --a <A date> [--a-time HH:MM] --a-gender m --a-tz <A's birthplace zone> \
                                --b <B date> [--b-time HH:MM] --b-gender f --b-tz <B's birthplace zone> \
                                [--a-lon … --b-lon … --true-solar-time] [--early-zishi] --format json
 ```
@@ -488,4 +488,4 @@ Read it back at the start of any destiny turn (`companion.py cache --module dest
   (rising/houses/Moon) instead of guessing?
 - Did I read `cross_check_sxtwl.agrees` (not eyeball the two ganzhi), and surface any
   立春-proximity ambiguity?
-- **Machine backstop:** `python3 $D/scripts/selfcheck.py --module destiny --file draft.md` — exit 1 means a blocker; fix it before sending. Passing is not proof it's honest, only that it's free of the known bad shapes.
+- **Machine backstop:** `python3 "$D/scripts/selfcheck.py" --module destiny --file draft.md` — exit 1 means a blocker; fix it before sending. Passing is not proof it's honest, only that it's free of the known bad shapes.

@@ -121,7 +121,7 @@ disclaimer at the top already established what kind of claim it is.
 ## Before sending
 
 ```bash
-python3 $D/scripts/selfcheck.py --module <lens> --file draft.md
+python3 "$D/scripts/selfcheck.py" --module <lens> --file draft.md
 ```
 The `voice` section prints counts with thresholds, so the fix is always concrete —
 "cut three of these", never "sound more human". It never blocks; two or three findings

@@ -34,20 +34,26 @@ the whole point and is enforced in code, not just asked for.
 
 ## Before the first command: two things to resolve
 
-**1. `$D` — this skill's own directory.** Every command below uses it. Some harnesses
-tell you the skill's base directory; most do not. Resolve it once, at the start:
+**1. `$D` — this skill's own directory.** Every command below uses it. If your harness told
+you where this SKILL.md is (Claude Code gives a base directory; Codex lists each skill with its
+path), `$D` is that folder. Otherwise resolve it once, at the start:
 
 ```bash
-for c in ~/.claude/skills/life-companion ~/.config/skills/life-companion \
-         ./skills/life-companion ./life-companion .; do
-  [ -f "$c/SKILL.md" ] && D="$c" && break
+D=""
+for c in ./.agents/skills/life-companion ./.claude/skills/life-companion \
+         ./skills/life-companion ./life-companion . \
+         ~/.codex/skills/life-companion ~/.claude/skills/life-companion \
+         ~/.cursor/skills/life-companion ~/.gemini/skills/life-companion \
+         ~/.config/opencode/skills/life-companion ~/.config/agents/skills/life-companion \
+         ~/.agents/skills/life-companion; do
+  grep -qs '^name: life-companion$' "$c/SKILL.md" && D="$c" && break
 done
 # still not found? then: D="$(dirname "$(find ~ -name SKILL.md -path '*life-companion*' \
 #                                        -not -path '*/.git/*' 2>/dev/null | head -1)")"
 python3 "$D/scripts/companion.py" doctor      # confirms $D is right AND that deps are present
 ```
-It is simply **the folder containing this SKILL.md** — usually `~/.claude/skills/life-companion`
-or a clone of `life-companions`. If `doctor` reports a missing dependency, it prints the
+It is simply **the folder containing this SKILL.md**: a project's `.agents/skills/life-companion`,
+`~/.codex/skills/life-companion`, `~/.claude/skills/life-companion`, or a clone of `life-companions`. If `doctor` reports a missing dependency, it prints the
 exact install command and what degrades without it; say that plainly rather than
 letting a script fail mid-reading. On Windows use `python` (or `py -3`), and note that
 `COMPANION_HOME` cannot be `chmod 700` there — don't repeat the stronger privacy claim.
@@ -81,7 +87,7 @@ statistic, or delivers a fatalistic verdict, has failed even if it sounds good.
 Run this each time the skill is engaged. It is cheap and keeps the companion
 coherent, safe, and non-repetitive.
 
-1. **One call loads everything.** `python3 $D/scripts/companion.py brief` returns, in
+1. **One call loads everything.** `python3 "$D/scripts/companion.py" brief` returns, in
    a single JSON: whether they're set up, their profile, their consent, the rolling
    summary + open threads, the last few journal entries, and any follow-ups due. The
    user's private data lives at `COMPANION_HOME` (default `~/.companion`).
@@ -160,9 +166,10 @@ facts. The reading gets to say what they feel about it. It does not get a vote.
    the facts; then build the reflective reading, keeping the two visibly separate
    and honoring the user's `locale` and `tone`.
 
-7. **Run the gate before you send.** Draft the reply, then check it:
+7. **Run the gate before you send.** Draft the reply, check it, and send the text you checked:
+   an edit made after it passed has not been checked, so run it again.
    ```bash
-   python3 $D/scripts/selfcheck.py --module <destiny|daily|career|relationships|synastry|crisis|journal|none> --file draft.md
+   python3 "$D/scripts/selfcheck.py" --module <destiny|daily|career|relationships|synastry|crisis|journal|none> --file draft.md
    ```
    The same command also prints a **`voice`** section: the wording tells that make a
    reply read like a form a machine filled in — 「不是X，是Y」 as a reflex, stock phrases
@@ -326,29 +333,29 @@ AGENTS.md                    entry point for harnesses that read AGENTS.md
 `$D` = this skill's directory (resolve it once — see the top of this file).
 
 ```bash
-python3 $D/scripts/companion.py doctor          # python + deps + what degrades if missing
-python3 $D/scripts/companion.py resolve-tz 柏林   # their words -> IANA zone (offline; asks if unsure)
-python3 $D/scripts/companion.py lunar-to-solar 1993 3 21 [--leap]   # 农历生日 -> 公历 (years 1901–2099); refuses dates that don't exist. Never convert by hand
-python3 $D/scripts/companion.py brief           # ★ the every-turn snapshot, one call
-python3 $D/scripts/companion.py init
-python3 $D/scripts/companion.py status          # slim version of brief
-python3 $D/scripts/companion.py read-profile
-python3 $D/scripts/companion.py set-profile --merge-json '{"identity":{"name":"…"}}'
-python3 $D/scripts/companion.py consent --set birth=yes mood=yes   # birth · relationships · mood, =yes or =no; anything else exits 2
-python3 $D/scripts/companion.py add-entry --text "…" --mood 6 --tags "career" --reflection "…"
-python3 $D/scripts/companion.py add-entry --text "…" --crisis   # force crisis flag if scan missed it
-python3 $D/scripts/companion.py continuity --merge-json '{"rolling_summary":"…","open_threads":[…]}'
-python3 $D/scripts/companion.py followups       # threads due for a gentle nudge
-python3 $D/scripts/companion.py cache --module destiny   # what reading you already gave them
-python3 $D/scripts/companion.py trend --days 30
-python3 $D/scripts/companion.py journal --since 2026-07-01   # re-read prose entries
-python3 $D/scripts/companion.py forget --birth        # real deletion
-python3 $D/scripts/companion.py forget --entry 2026-08-10 --nth 2      # ONE entry (lists them if you omit --nth)
-python3 $D/scripts/companion.py forget --person 小李 --with-entries    # everything about one person
+python3 "$D/scripts/companion.py" doctor          # python + deps + what degrades if missing
+python3 "$D/scripts/companion.py" resolve-tz 柏林   # their words -> IANA zone (offline; asks if unsure)
+python3 "$D/scripts/companion.py" lunar-to-solar 1993 3 21 [--leap]   # 农历生日 -> 公历 (years 1901–2099); refuses dates that don't exist. Never convert by hand
+python3 "$D/scripts/companion.py" brief           # ★ the every-turn snapshot, one call
+python3 "$D/scripts/companion.py" init
+python3 "$D/scripts/companion.py" status          # slim version of brief
+python3 "$D/scripts/companion.py" read-profile
+python3 "$D/scripts/companion.py" set-profile --merge-json '{"identity":{"name":"…"}}'
+python3 "$D/scripts/companion.py" consent --set birth=yes mood=yes   # birth · relationships · mood, =yes or =no; anything else exits 2
+python3 "$D/scripts/companion.py" add-entry --text "…" --mood 6 --tags "career" --reflection "…"
+python3 "$D/scripts/companion.py" add-entry --text "…" --crisis   # force crisis flag if scan missed it
+python3 "$D/scripts/companion.py" continuity --merge-json '{"rolling_summary":"…","open_threads":[…]}'
+python3 "$D/scripts/companion.py" followups       # threads due for a gentle nudge
+python3 "$D/scripts/companion.py" cache --module destiny   # what reading you already gave them
+python3 "$D/scripts/companion.py" trend --days 30
+python3 "$D/scripts/companion.py" journal --since 2026-07-01   # re-read prose entries
+python3 "$D/scripts/companion.py" forget --birth        # real deletion
+python3 "$D/scripts/companion.py" forget --entry 2026-08-10 --nth 2      # ONE entry (lists them if you omit --nth)
+python3 "$D/scripts/companion.py" forget --person 小李 --with-entries    # everything about one person
 #   also --month YYYY-MM · --relationships · --mood · --all --yes. Each removes what it names
 #   from EVERY store (journal, index, relationship log, continuity, caches, form marker).
 #   `consent --set X=no` only STOPS use: scripts refuse to read X and report what is kept.
-python3 $D/scripts/bazi.py --date 1993-04-12 --time 07:35 --gender m --tz Asia/Shanghai --on-date today --format json  # 生肖/五行tips
+python3 "$D/scripts/bazi.py" --date 1993-04-12 --time 07:35 --gender m --tz Asia/Shanghai --on-date today --format json  # 生肖/五行tips
 #   --tz is the BIRTHPLACE zone (profile birth.tz_at_birth). 節氣 are absolute instants
 #   resolved on a Beijing clock, so omitting it can hand back the wrong year/month
 #   pillar for any birth outside UTC+8 — the payload says when it had to assume.
@@ -358,27 +365,27 @@ python3 $D/scripts/bazi.py --date 1993-04-12 --time 07:35 --gender m --tz Asia/S
 #   --time-window N (from birth.time_window_min) lists every pillar a rough birth time could
 #   give; ambiguities flag 时辰, 日柱 and 節 boundaries, daylight saving and the True Solar
 #   Time 日柱/时柱 — pass them on.
-python3 $D/scripts/astro.py --date 1993-04-12 --time 07:35 --tz Asia/Shanghai --on-date today --format json  # 星座 daily
+python3 "$D/scripts/astro.py" --date 1993-04-12 --time 07:35 --tz Asia/Shanghai --on-date today --format json  # 星座 daily
 #   --tz matters in DAILY mode too: without it the birth clock is read as UT, and the
 #   daily card can report a different Sun sign than the natal chart for the same person.
-python3 $D/scripts/astro.py --date 1993-04-12 --time 07:35 --natal --lat 52.16 --lon 4.49 --tz Europe/Amsterdam --format json  # full natal chart (星盘)
-python3 $D/scripts/career_match.py --find "产品经理"   # map their WORDS to a real O*NET occupation first
-python3 $D/scripts/career_match.py --score-intake     # score the career form; --answers JSON [--values LIST] for chat
+python3 "$D/scripts/astro.py" --date 1993-04-12 --time 07:35 --natal --lat 52.16 --lon 4.49 --tz Europe/Amsterdam --format json  # full natal chart (星盘)
+python3 "$D/scripts/career_match.py" --find "产品经理"   # map their WORDS to a real O*NET occupation first
+python3 "$D/scripts/career_match.py" --score-intake     # score the career form; --answers JSON [--values LIST] for chat
 #   always score through this (exit 3 = the answers carry no shape: "can't measure", not
 #   "low match"); --soc CODE reports one occupation. Never import score_person directly.
-python3 $D/scripts/career_match.py --selftest   # career-fit engine; --demo to rank shipped occupations
-python3 $D/scripts/relationship_patterns.py --format text   # base-rate over logged relationship incidents
-python3 $D/scripts/synastry.py --a 1993-04-12 --a-time 07:35 --a-tz Asia/Shanghai --b 1995-08-30 --b-tz Europe/Amsterdam --format text   # 合婚: NO verdict
+python3 "$D/scripts/career_match.py" --selftest   # career-fit engine; --demo to rank shipped occupations
+python3 "$D/scripts/relationship_patterns.py" --format text   # base-rate over logged relationship incidents
+python3 "$D/scripts/synastry.py" --a 1993-04-12 --a-time 07:35 --a-tz Asia/Shanghai --b 1995-08-30 --b-tz Europe/Amsterdam --format text   # 合婚: NO verdict
 #   each side takes the same --a-tz/--b-tz (and --a-lon/--b-lon) as bazi.py; --true-solar-time
 #   and --early-zishi apply to both, so each chart is the one that person's own 命盘 shows.
 #   --true-solar-time is refused unless every side with a birth time has its longitude.
-python3 $D/scripts/ziwei.py --date 1993-04-12 --time 07:35 --gender m --tz Asia/Shanghai --format text  # 紫微命盘 (needs the hour)
-python3 $D/scripts/selfcheck.py --module destiny --file draft.md   # ★ honesty + voice gate
+python3 "$D/scripts/ziwei.py" --date 1993-04-12 --time 07:35 --gender m --tz Asia/Shanghai --format text  # 紫微命盘 (needs the hour)
+python3 "$D/scripts/selfcheck.py" --module destiny --file draft.md   # ★ honesty + voice gate
 #   --module must match the lens: synastry has its OWN no-verdict blockers that fire
 #   under NO other module, and crisis has its own. Passing the wrong one silently
 #   skips the checks that matter most for that reply.
-python3 $D/scripts/form_server.py --form onboarding &   # HTML onboarding form; stops itself on submit
-python3 $D/scripts/form_server.py --form career &       # 21-item interest check + values ranking
+python3 "$D/scripts/form_server.py" --form onboarding &   # HTML onboarding form; stops itself on submit
+python3 "$D/scripts/form_server.py" --form career &       # 21-item interest check + values ranking
 ```
 
 `--tz` takes an **IANA zone name** (`Europe/Amsterdam`, `Asia/Shanghai`) as well as a

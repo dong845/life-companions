@@ -86,7 +86,7 @@ current role's occupation vector from the shipped data.
 Guessing that mapping is a wrong answer that looks right, because every downstream
 number is then about a job they didn't mean.
 ```bash
-python3 $D/scripts/career_match.py --find "产品经理"        # ranked candidates + data quality
+python3 "$D/scripts/career_match.py" --find "产品经理"        # ranked candidates + data quality
 ```
 Show the top candidates, **confirm with them** («你说的X，我按 O*NET 的「<title>」来算，
 行吗?»), and note whether the chosen one carries numeric interests or is code-only —
@@ -210,12 +210,12 @@ When `locale` is `zh`, keep the O\*NET title in English and add a short Chinese 
 don't invent a localized occupation name.
 
 ```bash
-python3 $D/scripts/career_match.py --score-intake                  # score what the career form saved
-python3 $D/scripts/career_match.py --answers '{"1":3,"2":1,…,"21":0}' \
+python3 "$D/scripts/career_match.py" --score-intake                  # score what the career form saved
+python3 "$D/scripts/career_match.py" --answers '{"1":3,"2":1,…,"21":0}' \
     --values "Independence,Achievement,Working Conditions,Recognition,Support,Relationships"
                                                                     # answers collected in chat
-python3 $D/scripts/career_match.py --score-intake --soc 15-2041.00  # one occupation, code from --find
-python3 $D/scripts/career_match.py --selftest   # verify the math
+python3 "$D/scripts/career_match.py" --score-intake --soc 15-2041.00  # one occupation, code from --find
+python3 "$D/scripts/career_match.py" --selftest   # verify the math
 ```
 **Always score through this command.** It runs `score_person_grouped`, so an answer set
 with no shape comes back refused (exit 3; say "can't measure", not "low match") and the
@@ -234,7 +234,7 @@ the input is missing or malformed, and the payload says which.
 - Not a hiring predictor, not a personality label, not destiny.
 - Occupation data ships with its **CC BY 4.0 O\*NET attribution**
   (`data/career/occupations.json`); keep it intact.
-- **Machine backstop:** `python3 $D/scripts/selfcheck.py --module career --file draft.md` — exit 1 means a blocker; fix it before sending. Passing is not proof it's honest, only that it's free of the known bad shapes.
+- **Machine backstop:** `python3 "$D/scripts/selfcheck.py" --module career --file draft.md` — exit 1 means a blocker; fix it before sending. Passing is not proof it's honest, only that it's free of the known bad shapes.
 
 ## Deep employment / relocation analysis — applying safety.md §1 rule 6
 

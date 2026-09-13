@@ -248,7 +248,7 @@ failure. Safety outranks balance.
   employer's or program's current status — answered from memory instead of verified,
   or a threshold/number stated without a dated source? → §1 rule 6.
 
-**Then run the machine backstop**: `python3 $D/scripts/selfcheck.py --module <lens>
+**Then run the machine backstop**: `python3 "$D/scripts/selfcheck.py" --module <lens>
 --file draft.md`. It catches fabricated percentages and star ratings, fatalistic
 shapes, clinical labels, an **invented helpline number**, a missing disclaimer,
 unglossed 十神, and a high-stakes claim with no fact-check block. Exit 1 = don't send

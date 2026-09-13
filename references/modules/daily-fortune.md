@@ -16,13 +16,13 @@ woven with your journal + continuity. Pairs with `references/journaling.md`.
    all: journaling.md, "When the low lasts".
 2. **Compute the day from real systems** (never hand-compute):
    ```bash
-   python3 $D/scripts/bazi.py  --date <birth.date> [--time <birth.time>] --gender <m|f> \
+   python3 "$D/scripts/bazi.py"  --date <birth.date> [--time <birth.time>] --gender <m|f> \
      --tz <birth.tz_at_birth> \
      [--lon <birth.lon> --true-solar-time] [--early-zishi] \
      [--time-window <birth.time_window_min>] \
      --on-date today --format json     # → computed.daily: 流年/流月/流日 十神+favor,
                                         #   zodiac_day (生肖 vs 日支), wuxing_tips
-   python3 $D/scripts/astro.py --date <birth.date> [--time <birth.time>] \
+   python3 "$D/scripts/astro.py" --date <birth.date> [--time <birth.time>] \
      --tz <birth.tz_at_birth> \
      --on-date today --format json     # → 星座/双鱼…, 今日月亮星座, 逆行, 本命相位
    ```
@@ -124,5 +124,5 @@ shape — it's the most-flagged construction in `voice.md`, and 「混着来」 
 - Close the loop: offer to log the day (`add-entry`, with your reflection), and offer
   a deeper drill-down on any layer. Keep it a daily touch — rich, but not exhausting;
   if they want the quick version, give just 基调 + 宜/忌.
-- **Machine backstop:** `python3 $D/scripts/selfcheck.py --module daily --file draft.md` — exit 1 means a blocker; fix it before sending. Passing is not proof it's honest, only that it's free of the known bad shapes.
+- **Machine backstop:** `python3 "$D/scripts/selfcheck.py" --module daily --file draft.md` — exit 1 means a blocker; fix it before sending. Passing is not proof it's honest, only that it's free of the known bad shapes.
   (Invented 综合运 stars and lucky numbers are the two things it catches most often here.)

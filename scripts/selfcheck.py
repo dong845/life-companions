@@ -487,8 +487,8 @@ DISCLAIMER_MARKERS = {
                r"don'?t predict"],
     "relationships": [r"只听到了?你(这)?一面", r"看不到全部", r"不是替你下判断", r"几种可能的角度",
                       r"only hearing your side", r"not a verdict"],
-    "synastry": [r"不是预测", r"不是.*依据", r"一种(文化)?视角", r"怎么相处", r"反思",
-                 r"not a prediction", r"cultural lens"],
+    "synastry": [r"不是(科学)?预测", r"不是.*依据", r"(一种|文化)(的)?视角", r"怎么相处", r"反思",
+                 r"not a (scientific )?prediction", r"cultural lens"],
 }
 # 合婚 has its own blockers because it is the highest-harm output this skill can
 # produce: a 属相不合 verdict has ended relationships that were fine. synastry.py
@@ -546,8 +546,10 @@ MODULES = ["destiny", "daily", "career", "relationships", "synastry",
 REFUSAL_CUE = re.compile(
     r"不是|并非|别拿|不该|不能|不作数|决定的|替你决定|取决于|要看|得看|怎么相处|"
     r"由你们|自己决定|没有?依据|说了不算|不构成|无关|谈不上|不替你|"
+    r"(不|没法|无法|不会|不愿)(给|下|做|作|打)[^。！？\n]{0,10}(判决|结论|定论|断语|判断|评判|评分|打分|分数)|"
+    r"不(评判|打分|下定论)|"
     r"回到.{0,4}模块|走.{0,4}模块|交给|"
-    r"isn'?t|is not|doesn'?t|does not|cannot|can'?t|never|rather than|not a |no such")
+    r"isn'?t|is not|doesn'?t|does not|cannot|can'?t|won'?t|will not|never|rather than|not a |no such")
 
 
 # ---------------------------------------------------------------------------

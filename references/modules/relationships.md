@@ -45,7 +45,7 @@ it set how firmly you speak.
 - **Per-person memory:** `companion.py cache --module relationships` → the tracked
   people, their inferred tendencies, and prior patterns. This is what lets you say
   *"上次你和她也是这个'一个追一个退'的循环"* instead of starting cold each time.
-- **Computed base-rate (run it):** `python3 $D/scripts/relationship_patterns.py
+- **Computed base-rate (run it):** `python3 "$D/scripts/relationship_patterns.py"
   --format json` (add `--person <name>` to focus one person). This returns the honest
   recurrence facts over the log — recurring lens-tags with counts + dates, cadence, a
   `confidence` band, and `cross_person_patterns` (a tag recurring across *different*
@@ -109,4 +109,4 @@ therapist, you only have one side).
 - Stored only what's consented; tendencies framed as tendencies?
 - **Did I run `relationship_patterns.py` and speak to its `confidence`?** No calling a
   1-incident `insufficient` result a pattern; a "pattern" claim cites a real ≥2 count.
-- **Machine backstop:** `python3 $D/scripts/selfcheck.py --module relationships --file draft.md` — exit 1 means a blocker; fix it before sending. Passing is not proof it's honest, only that it's free of the known bad shapes.
+- **Machine backstop:** `python3 "$D/scripts/selfcheck.py" --module relationships --file draft.md` — exit 1 means a blocker; fix it before sending. Passing is not proof it's honest, only that it's free of the known bad shapes.

@@ -156,8 +156,10 @@ violence or sexual coercion**, and the tell-tale marker: **fear + loss of autono
 2. **Do NOT say "just leave"**, and do **NOT** coach communication tactics *at* an
    abuser — leaving is the highest-risk moment and "use I-statements" can escalate
    danger. Never both-sides it.
-3. **Route to specialized help** — localized DV services (from `identity.timezone`;
-   NL **Veilig Thuis 0800-2000**, US **1-800-799-7233**, else findahelpline.com).
+3. **Route to specialized help** — the abuse / domestic-violence column of the crisis
+   table in SKILL.md (safety.md §2 has the same lines), picked by where they are:
+   `identity.location` first, then `identity.timezone`, never `birth.place`. Location
+   unknown → findahelpline.com. Keep no second list here; a copy is what drifts.
 4. **Digital safety (do this early).** A monitored phone means **this very
    conversation is exposure too** — gently note she may want to close/clear this
    chat and continue on another device. **Lead with "use a safer device"** over

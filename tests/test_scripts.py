@@ -4179,6 +4179,37 @@ class TestTimezoneResolutionRanksTheCityOverItsCountry(HomeCase):
             self.assertTrue(any(city in t for t in summary["todo"]), (city, summary["todo"]))
 
 
+class TestAbuseRoutingHasOneSource(unittest.TestCase):
+    """data/content/relationships.md, which relationships.md tells the model to read, still
+    routed abuse help by identity.timezone to two countries and findahelpline.com for the
+    rest, so a Hong Kong user was sent to findahelpline instead of 18281, against the crisis
+    table's location-first rule. The table's US / Canada row also gave a Canadian nothing for
+    abuse or for danger to life."""
+
+    @staticmethod
+    def _text(rel):
+        with open(os.path.join(SKILL, rel), encoding="utf-8") as f:
+            return f.read()
+
+    def test_the_content_note_routes_through_the_crisis_table(self):
+        import re
+        note = self._text("data/content/relationships.md")
+        start = note.find("Route to specialized help")
+        self.assertGreater(start, -1)
+        step = note[start:note.find("\n4.", start)]
+        self.assertIn("SKILL.md", step)
+        self.assertIn("identity.location", step)
+        skill = self._text("SKILL.md")
+        for number in re.findall(r"\d[\d\- ]{2,}\d", step):
+            self.assertIn(number, skill, f"a number only the content note carries: {number}")
+
+    def test_the_us_canada_row_speaks_to_canada_in_every_column(self):
+        row = next(l for l in self._text("SKILL.md").splitlines() if l.startswith("| US / Canada |"))
+        cells = [c.strip() for c in row.strip().strip("|").split("|")]
+        for cell in cells[2:]:
+            self.assertIn("Canada", cell, row)
+
+
 class TestDeps(unittest.TestCase):
     def test_doctor_reports_without_installing(self):
         rep = jrun("companion.py", "doctor")

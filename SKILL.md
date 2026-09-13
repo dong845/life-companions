@@ -242,9 +242,9 @@ moralize. Then surface **real** help — **never invent or approximate a number:
 |---|---|---|---|
 | **Location unknown** (the normal first-contact state) | **findahelpline.com** — works worldwide, they enter their country. **Do not guess a country's number.** You may instead ask "where are you, roughly?" | findahelpline.com | local emergency services |
 | Netherlands | **113 Zelfmoordpreventie — 0800-0113** (free, 24/7), chat at 113.nl | **Veilig Thuis 0800-2000** | **112** |
-| US / Canada | **988** (call or text) | US **1-800-799-7233** | US **911** |
+| US / Canada | **988** (call or text) | US **1-800-799-7233**; Canada: findahelpline.com | **911** (US and Canada) |
 | China (mainland) | **全国心理援助热线 12356**（24/7）; 北京心理危机干预中心 **010-82951332**; 希望24 **400-161-9995** | findahelpline.com | local emergency services |
-| UK / Ireland | **Samaritans 116 123** | findahelpline.com | local emergency services; **112** in Ireland, as across the EU |
+| UK / Ireland | **Samaritans 116 123** | findahelpline.com | **999** in the UK; **112** in Ireland, as across the EU |
 | Hong Kong | **情緒通 18111**（政府，24 小時，電話或 WhatsApp）; 香港撒瑪利亞防止自殺會 **2389 2222**（24 小時）; 生命熱線 **2382 0000**（24 小時）; 撒瑪利亞會 **2896 0000**（24 小時，多種語言） | 芷若園 **18281**; 向晴熱線 **18288**（都是 24 小時） | **999** |
 | Macau | 澳門明愛生命熱線 **2852 5222**（中文，24 小時）; 社工局 24 小時電話熱線 **28261126** | 社工局 24 小時家庭暴力求助專線 **28233030** | **999** |
 | Taiwan | **安心專線 1925**（衛福部，24 小時，免費）; 生命線 **1995** | **113** 保護專線（24 小時） | **110** 警察 · **119** 消防局 |

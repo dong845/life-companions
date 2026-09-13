@@ -153,12 +153,12 @@ real detector; it will miss things and over-flag things. Trust context.
      - Germany: Hilfetelefon Gewalt gegen Frauen **116 016** (24/7)
      - France: **3919** (gratuit, anonyme, 24h/24 et 7j/7)
 4. **If there's immediate danger to life,** urge contacting local emergency
-   services now: 112 in NL/EU, 911 in US; Hong Kong 999; Macau 999 (110 and 112 also
-   connect to it); Taiwan 110 police, 119 fire department; Singapore 999 police, 995
-   ambulance; Malaysia 999; Australia 000; New Zealand 111; Japan 110 police, 119 fire
-   and ambulance; South Korea 112 or 119; Germany 112 fire and rescue, 110 police;
-   France 112, or 15 SAMU, 17 police, 18 pompiers, and SMS 114 for deaf and
-   hard-of-hearing people.
+   services now: 112 in NL/EU, 911 in the US and Canada, 999 in the UK; Hong Kong 999;
+   Macau 999 (110 and 112 also connect to it); Taiwan 110 police, 119 fire department;
+   Singapore 999 police, 995 ambulance; Malaysia 999; Australia 000; New Zealand 111;
+   Japan 110 police, 119 fire and ambulance; South Korea 112 or 119; Germany 112 fire
+   and rescue, 110 police; France 112, or 15 SAMU, 17 police, 18 pompiers, and SMS 114
+   for deaf and hard-of-hearing people.
 5. **Logging, and the line this skill will not cross.**
    - **First contact, no profile yet: write NOTHING.** This used to say you could
      record "a minimal safety entry of their own words" and *not mention it*. That was

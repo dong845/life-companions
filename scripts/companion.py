@@ -184,8 +184,23 @@ CONSENT_GATED = {
 _MODULE_CONSENT = {"relationships": "relationships", "destiny": "birth"}
 
 
+def _consent_granted(consent, category):
+    """True only for `{granted: true}`. A hand edit (`birth: yes`, an empty `mood:`) or a
+    consent.yaml that isn't a mapping grants nothing, and must not crash brief, which runs
+    on every turn."""
+    entry = consent.get(category) if isinstance(consent, dict) else None
+    return isinstance(entry, dict) and entry.get("granted") is True
+
+
+def _consent_values(consent):
+    """{category: granted} for display; a malformed entry shows as None, never asked."""
+    if not isinstance(consent, dict):
+        return {c: None for c in CONSENT_GATED}
+    return {k: (v.get("granted") if isinstance(v, dict) else None) for k, v in consent.items()}
+
+
 def _granted(home, category):
-    return _load_yaml(_paths(home)["consent"]).get(category, {}).get("granted") is True
+    return _consent_granted(_load_yaml(_paths(home)["consent"]), category)
 
 
 def _refuse_ungated(home, category):
@@ -262,6 +277,10 @@ def _refuse_ungranted_read(home, category):
     }
 
 
+# The first line of the README that init writes. `forget --all` wipes only a folder that has it.
+_README_FIRST_LINE = "This folder holds your private life-companion data."
+
+
 def cmd_init(args):
     home = home_dir(args.home)
     p = _paths(home)
@@ -298,7 +317,7 @@ def cmd_init(args):
                                      "recent_moods": [], "updated": _today()})
     if not os.path.exists(p["readme"]):
         _atomic_write(p["readme"],
-            "This folder holds your private life-companion data.\n"
+            _README_FIRST_LINE + "\n"
             f"Location: {home}\n\n"
             "• profile.yaml   — who you are + preferences (plain text, editable)\n"
             "• consent.yaml   — what you've allowed to be stored\n"
@@ -329,7 +348,7 @@ def cmd_status(args):
         "name": prof.get("identity", {}).get("name"),
         "locale": prof.get("identity", {}).get("locale"),
         "modules_enabled": prof.get("modules_enabled"),
-        "consent": {k: v.get("granted") for k, v in consent.items()},
+        "consent": _consent_values(consent),
         "journal_entries": len(rows),
         "last_entry": last,
     }, ensure_ascii=False, indent=2))
@@ -562,20 +581,38 @@ def cmd_set_profile(args):
     print(json.dumps({"ok": True, "updated_keys": list(patch.keys())}, ensure_ascii=False))
 
 
+_YES, _NO = ("yes", "true", "1", "y"), ("no", "false", "0", "n")
+
+
 def cmd_consent(args):
     home = home_dir(args.home)
     p = _paths(home)
     consent = _load_yaml(p["consent"])
-    withdrawn = []
+    if not isinstance(consent, dict):
+        consent = {}
+    # Every pair is read before any is written. `relationship=yes` (a typo) and `birth:yes`
+    # used to return ok and store junk keys while the real category stayed ungranted, and
+    # `birth=maybe` quietly revoked.
+    changes = []
     for pair in args.set:
-        k, _, v = pair.partition("=")
-        k = k.strip()
-        granted = v.strip().lower() in ("yes", "true", "1", "y")
+        k, sep, v = pair.partition("=")
+        k, v = k.strip().lower(), v.strip().lower()
+        if not sep or k not in CONSENT_GATED or v not in _YES + _NO:
+            print(json.dumps({
+                "ok": False,
+                "error": f"can't read {pair!r}: expected CATEGORY=yes or CATEGORY=no",
+                "categories": list(CONSENT_GATED),
+                "_next": "Nothing was changed. For example: `consent --set mood=yes`."},
+                ensure_ascii=False))
+            raise SystemExit(2)
+        changes.append((k, v in _YES))
+    withdrawn = []
+    for k, granted in changes:
         if not granted:
             withdrawn.append(k)
         consent[k] = {"granted": granted, "date": _today()}
     _save_yaml(p["consent"], consent)
-    out = {"ok": True, "consent": {k: val.get("granted") for k, val in consent.items()}}
+    out = {"ok": True, "consent": _consent_values(consent)}
     # Saying no stops every script from reading or using the category (see
     # _refuse_ungranted_read). It deletes nothing, so a mistaken revoke costs nothing, and
     # the reply has to say what is still stored and how to remove it.
@@ -741,7 +778,7 @@ def cmd_brief(args):
         "initialized": True,
         "home": home,
         "onboarding_complete": prof.get("onboarding_complete"),
-        "consent": {k: v.get("granted") for k, v in consent.items()},
+        "consent": _consent_values(consent),
         "profile": prof,
         "continuity": {
             "rolling_summary": cont.get("rolling_summary"),
@@ -802,9 +839,17 @@ def cmd_cache(args):
     profile+continuity but write ONLY their own cache (prevents cross-module clobber)."""
     home = home_dir(args.home)
     p = _paths(home)
-    os.makedirs(p["modules"], exist_ok=True)
-    path = os.path.join(p["modules"], f"{args.module}.yaml")
-    category = _MODULE_CONSENT.get(args.module)
+    # The gate compares names and the disk may not: `Destiny` walked past birth consent on a
+    # case-insensitive disk, and `./destiny` read the chart. One spelling per module.
+    module = str(args.module).strip().lower()
+    if not re.fullmatch(r"[a-z][a-z0-9_-]*", module):
+        print(json.dumps({"ok": False,
+                          "error": ("--module must be a plain name such as destiny or "
+                                    f"career_intake (letters, digits, _ and -); got {args.module!r}")},
+                         ensure_ascii=False))
+        raise SystemExit(2)
+    path = os.path.join(p["modules"], f"{module}.yaml")
+    category = _MODULE_CONSENT.get(module)
     if not args.merge_json and category:
         refusal = _refuse_ungranted_read(home, category)
         if refusal:
@@ -819,8 +864,9 @@ def cmd_cache(args):
                 raise SystemExit(3)
         _deep_merge(data, json.loads(args.merge_json))
         data["updated"] = _today()
+        os.makedirs(p["modules"], exist_ok=True)     # only now: a refused write leaves nothing
         _save_yaml(path, data)
-        print(json.dumps({"ok": True, "module": args.module}, ensure_ascii=False))
+        print(json.dumps({"ok": True, "module": module}, ensure_ascii=False))
     else:
         print(yaml.dump(data, allow_unicode=True, sort_keys=False))
 
@@ -856,14 +902,14 @@ def cmd_add_entry(args):
     # Report the drop; a silent one makes the model tell the person it logged a mood
     # that is not in the file.
     dropped = []
-    if mood is not None and consent.get("mood", {}).get("granted") is not True:
+    if mood is not None and not _consent_granted(consent, "mood"):
         mood = None
         dropped.append("mood — consent.mood not granted (ask, then "
                        "`consent --set mood=yes`); the entry text was still saved")
 
     # Another person's name is relationship data about someone who never consented, and
     # `people` is exactly what pattern-tracking counts, so it is gated like that cache.
-    if people and consent.get("relationships", {}).get("granted") is not True:
+    if people and not _consent_granted(consent, "relationships"):
         people = []
         dropped.append("people — consent.relationships not granted (other people's names "
                        "belong to that category; ask, then `consent --set relationships=yes`); "
@@ -1172,6 +1218,8 @@ def _drop_form_marker(home, predicate):
 def _set_consent(home, category, granted):
     p = _paths(home)
     consent = _load_yaml(p["consent"])
+    if not isinstance(consent, dict):
+        consent = {}
     consent[category] = {"granted": granted, "date": _today()}
     _save_yaml(p["consent"], consent)
 
@@ -1490,11 +1538,18 @@ def _forget_mood(home):
     _write_index(home, rows)
     done = [f"{n} mood value(s) removed from the journal"] + notes
     cont = _load_yaml(p["continuity"], {})
+    cleared = []
     if cont.get("recent_moods"):
         cont["recent_moods"] = []
+        cleared.append("continuity recent_moods cleared")
+    if "wellbeing_checked" in cont:
+        # the date the low-mood check last asked is read off the moods too
+        del cont["wellbeing_checked"]
+        cleared.append("continuity wellbeing_checked removed (when the low-mood check last asked)")
+    if cleared:
         cont["updated"] = _today()
         _save_yaml(p["continuity"], cont)
-        done.append("continuity recent_moods cleared")
+        done += cleared
     _set_consent(home, "mood", False)
     done.append("consent.mood revoked")
     return done, None
@@ -1509,27 +1564,36 @@ def cmd_forget(args):
             return
         # `--yes` alone was the ONLY guard, so this would rmtree whatever COMPANION_HOME
         # (or --home) happened to point at — a typo, a stale export, or a shell variable
-        # meant for something else took an unrelated directory with it. Refuse anything
-        # that is not recognisably a companion home: init writes README.txt and
-        # consent.yaml, so requiring them makes the target prove what it is.
-        markers = [p["readme"], p["consent"], p["profile"]]
-        present = [m for m in markers if os.path.exists(m)]
-        if len(present) < 2:
+        # meant for something else took an unrelated directory with it. Two of three marker
+        # files then counted as proof, and `consent --set` or an earlier forget writes two of
+        # them into any folder. Only `init` writes the README, so its README is the proof,
+        # beside consent.yaml or profile.yaml. A symlinked home is wiped at the folder it
+        # points to, since rmtree refuses a link.
+        real = os.path.realpath(home)
+        rp = _paths(real)
+        try:
+            with open(rp["readme"], encoding="utf-8") as f:
+                readme_ok = f.readline().strip() == _README_FIRST_LINE
+        except OSError:
+            readme_ok = False
+        if not (readme_ok and (os.path.exists(rp["consent"]) or os.path.exists(rp["profile"]))):
+            present = [os.path.basename(m) for m in (rp["readme"], rp["consent"], rp["profile"])
+                       if os.path.exists(m)]
             print(json.dumps({
                 "ok": False,
                 "error": f"refusing to wipe {home}: it does not look like a companion home",
-                "why": ("--all deletes the directory RECURSIVELY. It must contain at least "
-                        "two of README.txt / consent.yaml / profile.yaml, which `init` "
-                        "writes. Found: " + (", ".join(os.path.basename(m) for m in present)
-                                             or "none")),
+                "why": ("--all deletes the directory RECURSIVELY. It must hold the README.txt "
+                        "that `init` writes, and consent.yaml or profile.yaml. Found: "
+                        + (", ".join(present) or "none")),
                 "_next": ("Check COMPANION_HOME / --home. If you really meant this "
                           "directory, run `init` in it first, or delete it yourself — "
                           "this tool will not remove a directory it did not create."),
             }, ensure_ascii=False, indent=2))
             raise SystemExit(3)
         import shutil
-        if os.path.exists(home):
-            shutil.rmtree(home)
+        shutil.rmtree(real)
+        if os.path.islink(home):
+            os.unlink(home)
         print(json.dumps({"ok": True, "wiped": home}, ensure_ascii=False))
         return
 
@@ -1556,6 +1620,11 @@ def cmd_forget(args):
         usage("--with-entries only makes sense with --person NAME")
     if args.person is not None and not args.person.strip():
         usage("--person needs a name")
+    # A forget in a folder that was never a home wrote consent.yaml and profile.yaml into it,
+    # and those were the very files `forget --all` used to take as proof. Nothing to forget.
+    if not (os.path.exists(p["consent"]) or os.path.exists(p["profile"])):
+        refuse({"ok": False, "error": f"no companion home at {home}: nothing to forget",
+                "_next": "Check COMPANION_HOME / --home. Nothing was changed."})
 
     done, extra = [], {}
 

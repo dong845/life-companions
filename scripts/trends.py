@@ -112,8 +112,10 @@ def aggregate(home=None, days=30):
         from _deps import ensure
         with open(consent_path, encoding="utf-8") as f:
             consent = ensure("PyYAML", "yaml").safe_load(f) or {}
+    if not isinstance(consent, dict):       # a hand-edited file grants nothing, and doesn't crash
+        consent = {}
     withheld = [c for c in ("mood", "relationships")
-                if (consent.get(c) or {}).get("granted") is not True]
+                if not (isinstance(consent.get(c), dict) and consent[c].get("granted") is True)]
 
     moods = ([r["mood"] for r in recent if isinstance(r.get("mood"), (int, float))]
              if "mood" not in withheld else [])

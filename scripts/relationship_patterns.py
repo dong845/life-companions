@@ -315,7 +315,8 @@ def main():
     if os.path.exists(consent_path):
         with open(consent_path, encoding="utf-8") as f:
             consent = yaml.safe_load(f) or {}
-    if (consent.get("relationships") or {}).get("granted") is not True:
+    entry = consent.get("relationships") if isinstance(consent, dict) else None
+    if not (isinstance(entry, dict) and entry.get("granted") is True):   # a hand edit grants nothing
         refusal = {"ok": False,
                    "error": ("consent.relationships is not granted — relationship records "
                              "are withheld"),

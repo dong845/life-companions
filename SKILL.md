@@ -330,7 +330,7 @@ python3 $D/scripts/companion.py init
 python3 $D/scripts/companion.py status          # slim version of brief
 python3 $D/scripts/companion.py read-profile
 python3 $D/scripts/companion.py set-profile --merge-json '{"identity":{"name":"…"}}'
-python3 $D/scripts/companion.py consent --set birth=yes mood=yes
+python3 $D/scripts/companion.py consent --set birth=yes mood=yes   # birth · relationships · mood, =yes or =no; anything else exits 2
 python3 $D/scripts/companion.py add-entry --text "…" --mood 6 --tags "career" --reflection "…"
 python3 $D/scripts/companion.py add-entry --text "…" --crisis   # force crisis flag if scan missed it
 python3 $D/scripts/companion.py continuity --merge-json '{"rolling_summary":"…","open_threads":[…]}'

@@ -3827,6 +3827,140 @@ class TestDailyCardFollowsTheChartConventions(unittest.TestCase):
         self.assertFalse(daily["zodiac_day"]["uncertain"])
 
 
+class TestConsentAndCacheSurviveHandEdits(HomeCase):
+    """A hand-edited consent.yaml (`birth: yes`, an empty `mood:`) crashed brief, status,
+    add-entry, trend and relationship_patterns with AttributeError, and brief runs on every
+    turn. `consent --set relationship=yes` (a typo) and `birth:yes` returned ok and stored
+    junk keys, while `birth=maybe` quietly revoked. The cache gate compared the module name
+    exactly, so `--module Destiny` walked past birth consent on a case-insensitive disk, and
+    a refused write still left an empty state/modules behind in a folder that was never a
+    home. `forget --mood` also left the date the low-mood check last asked."""
+
+    def _consent_file(self, text):
+        with open(os.path.join(self.home, "consent.yaml"), "w", encoding="utf-8") as f:
+            f.write(text)
+
+    def test_a_hand_edited_consent_file_reads_as_not_granted(self):
+        self._consent_file("birth: yes\nmood:\nrelationships: [1]\n")
+        for args in (("brief",), ("status",), ("trend", "--days", "30")):
+            code, out, err = run("companion.py", *args, home=self.home)
+            self.assertNotIn("Traceback", err, args)
+            self.assertEqual(code, 0, (args, err))
+        brief = jrun("companion.py", "brief", home=self.home)
+        self.assertEqual(brief["consent"], {"birth": None, "mood": None, "relationships": None})
+        r = jrun("companion.py", "add-entry", "--text", "今天还行", "--mood", "6",
+                 "--people", "小李", home=self.home)
+        self.assertTrue(r["ok"], r)
+        row = _index_rows(self.home)[-1]
+        self.assertIsNone(row["mood"])
+        self.assertEqual(row["people"], [])
+        for script, args in (("relationship_patterns.py", ()),
+                             ("companion.py", ("cache", "--module", "destiny"))):
+            code, out, err = run(script, *args, home=self.home)
+            self.assertNotIn("Traceback", err, script)
+            self.assertEqual(code, 3, (script, out, err))
+
+    def test_a_consent_file_that_is_not_a_mapping_grants_nothing(self):
+        self._consent_file("yes\n")
+        code, out, err = run("companion.py", "brief", home=self.home)
+        self.assertEqual(code, 0, err)
+        self.assertFalse(any(json.loads(out)["consent"].values()))
+
+    def test_consent_set_takes_only_the_three_categories_and_a_yes_or_no(self):
+        path = os.path.join(self.home, "consent.yaml")
+        before = open(path, encoding="utf-8").read()
+        for pairs in (("relationship=yes",), ("birth:yes",), ("birth=maybe",), ("=yes",),
+                      ("mood=yes", "relationship=yes")):
+            code, out, err = run("companion.py", "consent", "--set", *pairs, home=self.home)
+            self.assertEqual(code, 2, (pairs, out, err))
+            self.assertFalse(json.loads(out)["ok"], pairs)
+            self.assertEqual(open(path, encoding="utf-8").read(), before, pairs)
+        r = jrun("companion.py", "consent", "--set", "Birth=YES", "mood=no", home=self.home)
+        self.assertEqual((r["consent"]["birth"], r["consent"]["mood"]), (True, False))
+
+    def test_the_cache_gate_reads_a_module_name_the_way_the_disk_does(self):
+        for module in ("Destiny", "DESTINY", "Relationships"):
+            code, out, err = run("companion.py", "cache", "--module", module, "--merge-json",
+                                 '{"chart": {"pillars": "x"}}', home=self.home)
+            self.assertEqual(code, 3, (module, out, err))
+        for module in ("./destiny", "../profile", "destiny.yaml", "", "a/b"):
+            code, out, err = run("companion.py", "cache", "--module", module, home=self.home)
+            self.assertEqual(code, 2, (module, out, err))
+        self.assertEqual(os.listdir(os.path.join(self.home, "state", "modules")), [])
+
+    def test_a_refused_cache_write_leaves_no_folder_behind(self):
+        with tempfile.TemporaryDirectory() as t:
+            fresh = os.path.join(t, "never-initialised")
+            code, out, _ = run("companion.py", "cache", "--module", "destiny", "--merge-json",
+                               '{"chart": 1}', home=fresh)
+            self.assertEqual(code, 3, out)
+            self.assertFalse(os.path.exists(fresh))
+
+    def test_forget_mood_also_forgets_when_the_low_mood_check_last_asked(self):
+        import companion
+        import yaml
+        run("companion.py", "consent", "--set", "mood=yes", home=self.home)
+        run("companion.py", "continuity", "--merge-json", '{"wellbeing_checked": "2026-09-01"}',
+            home=self.home)
+        self.assertTrue(jrun("companion.py", "forget", "--mood", home=self.home)["ok"])
+        with open(companion._paths(self.home)["continuity"], encoding="utf-8") as f:
+            self.assertNotIn("wellbeing_checked", yaml.safe_load(f) or {})
+
+
+class TestForgetOnlyTouchesACompanionHome(unittest.TestCase):
+    """`forget --birth` in a folder that was never a companion home wrote consent.yaml and
+    profile.yaml into it, and those two files were exactly what `forget --all --yes` took as
+    proof that the folder was safe to delete: a thesis folder went on the second try. Other
+    forget flags created a home at a path that didn't exist, and a symlinked home crashed
+    --all with a traceback."""
+
+    def test_forget_in_a_plain_folder_refuses_and_creates_nothing(self):
+        with tempfile.TemporaryDirectory() as t:
+            folder = os.path.join(t, "thesis")
+            os.makedirs(folder)
+            with open(os.path.join(folder, "notes.txt"), "w") as f:
+                f.write("mine")
+            for flags in (("--birth",), ("--mood",), ("--relationships",), ("--month", "2026-08")):
+                code, out, _ = run("companion.py", "forget", *flags, home=folder)
+                self.assertEqual(code, 3, (flags, out))
+            self.assertEqual(sorted(os.listdir(folder)), ["notes.txt"])
+            code, out, _ = run("companion.py", "forget", "--all", "--yes", home=folder)
+            self.assertEqual(code, 3, out)
+            self.assertTrue(os.path.exists(os.path.join(folder, "notes.txt")))
+
+    def test_forget_does_not_create_a_missing_home(self):
+        with tempfile.TemporaryDirectory() as t:
+            missing = os.path.join(t, "nowhere")
+            code, out, _ = run("companion.py", "forget", "--mood", home=missing)
+            self.assertEqual(code, 3, out)
+            self.assertFalse(os.path.exists(missing))
+
+    def test_a_wipe_needs_the_readme_that_init_writes(self):
+        with tempfile.TemporaryDirectory() as t:
+            armed = os.path.join(t, "armed")
+            os.makedirs(armed)
+            for name in ("consent.yaml", "profile.yaml"):
+                with open(os.path.join(armed, name), "w") as f:
+                    f.write("{}\n")
+            with open(os.path.join(armed, "thesis.docx"), "w") as f:
+                f.write("mine")
+            code, out, _ = run("companion.py", "forget", "--all", "--yes", home=armed)
+            self.assertEqual(code, 3, out)
+            self.assertTrue(os.path.exists(os.path.join(armed, "thesis.docx")))
+
+    def test_a_symlinked_home_is_wiped_without_a_traceback(self):
+        with tempfile.TemporaryDirectory() as t:
+            real = os.path.join(t, "real")
+            run("companion.py", "init", home=real)
+            link = os.path.join(t, "link")
+            os.symlink(real, link)
+            code, out, err = run("companion.py", "forget", "--all", "--yes", home=link)
+            self.assertNotIn("Traceback", err)
+            self.assertEqual(code, 0, err)
+            self.assertFalse(os.path.exists(real))
+            self.assertFalse(os.path.lexists(link))
+
+
 class TestDeps(unittest.TestCase):
     def test_doctor_reports_without_installing(self):
         rep = jrun("companion.py", "doctor")

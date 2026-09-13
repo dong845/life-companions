@@ -52,6 +52,7 @@ VALUES_COS_FLOOR = 0.615
 
 BAND_LOW_MAX = 0.55       # score < 0.55 -> "Low"
 BAND_MODERATE_MAX = 0.75  # 0.55 <= score < 0.75 -> "Moderate"; >= 0.75 -> "Strong"
+# The interest fit is (r + 1) / 2, so on it these thresholds sit at r = 0.1 and r = 0.5.
 
 INTEREST_ITEM_MAX = 4     # per-item liking response is stored 0..4
 FULL_INTEREST_ITEMS = 21  # the full interest-check item bank size
@@ -113,11 +114,12 @@ def occupation_interest_vector(occ):
 def response_discrimination(responses, scoring_key):
     """How much SHAPE the answers carry, as the spread of the six type means in [0,1].
 
-    Cosine ignores magnitude, so answering the same value to every item yields the
-    vector [k,k,k,k,k,k] — identical in DIRECTION for k=1,2,3,4 and carrying no
-    information about the person. It still produced a full 188-occupation ranking with
-    bands, always topped by whichever occupation sits closest to the uniform direction.
-    A flat answer set is a non-answer and has to be refused, not scored.
+    Answering the same value to every item yields the vector [k,k,k,k,k,k], which carries
+    no information about the person. The cosine this fit used to be still produced a full
+    188-occupation ranking from it, always topped by whichever occupation sits closest to
+    the uniform direction. The correlation reads only shape, so it would stretch type means
+    that barely differ into a full-strength shape. A flat answer set is a non-answer and has
+    to be refused, not scored.
     """
     vec, _n = person_interest_vector(responses, scoring_key)
     # a type with no answers is unmeasured, not a zero: counting it as 0 read a skipped type
@@ -171,10 +173,10 @@ def person_interest_vector(responses, scoring_key):
 
 
 def cosine_congruence(p, o):
-    """Normalized cosine similarity of two non-negative 6-vectors -> [0,1].
+    """Cosine similarity of two non-negative vectors -> [0,1], or None for an all-zero one.
 
-    Scale-tolerant (someone who 'likes everything' still gets a meaningful shape
-    match). Returns None for a degenerate all-zero vector (not scorable).
+    values_fit uses it, rescaled against its floor. It is no longer the interest fit: two
+    non-negative profiles always point roughly the same way (see correlation_fit).
     """
     denom = _norm(p) * _norm(o)
     if denom == 0:
@@ -182,11 +184,32 @@ def cosine_congruence(p, o):
     return _dot(p, o) / denom
 
 
+def correlation_fit(p, o):
+    """Interest fit in [0,1]: (r + 1) / 2, r the Pearson correlation of the two profiles.
+
+    Taking out each profile's own mean compares shape, not level. The cosine of the raw
+    vectors used to be this fit, and every score here is non-negative, so any two profiles
+    already pointed roughly the same way: answering all 21 items at random put a median of
+    about 70% of the 188 occupations in Strong, against about 11% now, and a clear favourite
+    read differently depending on how the other types were answered. Returns None for a flat
+    profile (all six equal), which has no shape to compare.
+    """
+    if len(p) != len(o):
+        raise ValueError(f"profiles of different lengths: {len(p)} and {len(o)}")
+    mp, mo = sum(p) / len(p), sum(o) / len(o)
+    dp, do = [x - mp for x in p], [y - mo for y in o]
+    spread_p, spread_o = _norm(dp), _norm(do)
+    if spread_p < 1e-9 or spread_o < 1e-9:
+        return None
+    r = max(-1.0, min(1.0, _dot(dp, do) / (spread_p * spread_o)))
+    return (r + 1.0) / 2.0
+
+
 def euclid_fit(p, o):
     """Documented alternative (selectable): 1 - ||p-o||2 / sqrt(6), in [0,1].
 
     Each vector lives in the unit 6-cube, so max L2 distance is sqrt(6).
-    Default engine stays cosine.
+    The default interest fit is correlation_fit.
     """
     d = math.sqrt(sum((x - y) ** 2 for x, y in zip(p, o)))
     return 1.0 - d / math.sqrt(6.0)
@@ -363,7 +386,7 @@ def _score_occupation(person_vec, n_interest_items, occ,
     raw_overall_float is for INTERNAL ranking only and must not be surfaced.
     """
     o_vec, from_code = occupation_interest_vector(occ)
-    i_fit = cosine_congruence(person_vec, o_vec)
+    i_fit = correlation_fit(person_vec, o_vec)
 
     v_fit = None
     if person_values is not None and occ.get("work_values"):
@@ -804,6 +827,17 @@ def _selftest():
                                                           [0, 1, 0, 0, 0, 0])) < 1e-9)
     check("cosine degenerate -> None", cosine_congruence([0, 0, 0, 0, 0, 0],
                                                          [0, 1, 0, 0, 0, 0]) is None)
+
+    # the interest fit: centered correlation, shape not level
+    check("correlation same shape == 1", abs(correlation_fit(
+        [0, 1, 0, 0, 0, 0], [0.1, 0.9, 0.1, 0.1, 0.1, 0.1]) - 1.0) < 1e-9)
+    check("correlation opposite shape == 0", abs(correlation_fit(
+        [1, 0, 0, 0, 0, 0], [0, 1, 1, 1, 1, 1])) < 1e-9)
+    occ_shape = [0.8, 0.3, 0.2, 0.2, 0.5, 0.7]
+    check("correlation ignores level", abs(
+        correlation_fit([0.9, 0.2, 0.1, 0.4, 0.3, 0.6], occ_shape)
+        - correlation_fit([0.65, 0.3, 0.25, 0.4, 0.35, 0.5], occ_shape)) < 1e-9)
+    check("correlation flat -> None", correlation_fit([0.5] * 6, [0, 1, 0, 0, 0, 0]) is None)
 
     # person vector normalization (uneven item counts)
     key = {"R": [1, 2, 3, 4], "I": [5, 6, 7, 8], "A": [9, 10, 11, 12],

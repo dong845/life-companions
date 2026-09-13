@@ -2239,7 +2239,7 @@ class TestCareerValidity(unittest.TestCase):
 
     # --- A: an undiscriminating answer set is a non-answer -------------------
     def test_straight_lining_is_refused_not_ranked(self):
-        # cosine ignores magnitude, so [k,k,k,k,k,k] is the SAME direction for every k
+        # [k,k,k,k,k,k] has no shape: the cosine ranked it anyway, and a correlation can't read it
         for v in (0, 1, 2, 3, 4):
             r = self.cm.score_person_grouped({i: v for i in range(1, 22)},
                                              self.key, self.occ)
@@ -4581,6 +4581,83 @@ class TestTiedWorkValuesShareARank(unittest.TestCase):
                                                   "Support": 5, "Relationships": 6})
         self.assertIsNone(ranking)
         self.assertIn("once", why)
+
+
+class TestInterestFitComparesShapes(unittest.TestCase):
+    """The interest fit was the cosine of two six-score profiles. Every score is non-negative,
+    so any two profiles already point roughly the same way: answering all 21 items at random
+    put a median of about 70% of the 188 occupations in Strong, and a person with one clear
+    favourite who answered the other types 3 instead of 0 saw other types enter their top five.
+    The fit is now (r + 1) / 2, r the Pearson correlation of the two profiles: shape, not level."""
+
+    @classmethod
+    def setUpClass(cls):
+        import career_match as cm
+        cls.cm = cm
+        cls.key = cm.load_scoring_key()
+        cls.occ, _ = cm.load_occupations()
+        cls.items = sorted({i for ids in cls.key.values() for i in ids})
+        cls.lead = {o["soc_code"]: o["high_point_code"][0] for o in cls.occ}
+
+    def test_random_answers_rarely_read_strong(self):
+        import random
+        import statistics
+        rng = random.Random(7)
+        shares = []
+        for _ in range(150):
+            r = self.cm.score_person_grouped({i: rng.randint(0, 4) for i in self.items},
+                                             self.key, self.occ)
+            if r.get("refused"):
+                continue
+            rows = r["numeric_interests"]
+            shares.append(sum(p["interest_band"] == "Strong" for p in rows) / len(rows))
+        self.assertGreater(len(shares), 100)
+        self.assertLess(statistics.median(shares), 0.25)   # the cosine: about 0.70; now about 0.11
+
+    def test_a_clear_favourite_reads_the_same_at_any_level(self):
+        for letter in self.cm.RIASEC_ORDER:
+            bands = {}
+            for rest in (0, 3):
+                resp = {i: (4 if i in self.key[letter] else rest) for i in self.items}
+                r = self.cm.score_person_grouped(resp, self.key, self.occ)
+                self.assertFalse(r.get("refused"), (letter, rest))
+                rows = r["numeric_interests"]
+                self.assertEqual([self.lead[p["onet_code"]] for p in rows[:5]], [letter] * 5,
+                                 (letter, rest, [p["occupation"] for p in rows[:5]]))
+                self.assertEqual(rows[0]["interest_band"], "Strong", (letter, rest))
+                bands[rest] = {p["onet_code"]: p["interest_band"] for p in rows}
+            self.assertEqual(bands[0], bands[3], letter)
+
+    def test_a_flat_profile_has_no_shape_to_compare(self):
+        o = [0.1, 0.9, 0.2, 0.3, 0.4, 0.5]
+        self.assertIsNone(self.cm.correlation_fit([1 / 3] * 6, o))
+        self.assertIsNone(self.cm.correlation_fit(o, [0.5] * 6))
+        # flat up to rounding is flat too: 0.1 + 0.2 is 0.30000000000000004
+        self.assertIsNone(self.cm.correlation_fit([0.1 + 0.2] + [0.3] * 5, o))
+
+    def test_the_fit_reads_shape_not_level(self):
+        cm = self.cm
+        p, o = [0.9, 0.2, 0.1, 0.4, 0.3, 0.6], [0.8, 0.3, 0.2, 0.2, 0.5, 0.7]
+        self.assertAlmostEqual(cm.correlation_fit(p, o),
+                               cm.correlation_fit([0.2 + 0.5 * x for x in p], o))
+        self.assertAlmostEqual(cm.correlation_fit([0, 1, 0, 0, 0, 0], [0.1, 0.9, 0.1, 0.1, 0.1, 0.1]), 1.0)
+        self.assertAlmostEqual(cm.correlation_fit([1, 0, 0, 0, 0, 0], [0, 1, 1, 1, 1, 1]), 0.0)
+        self.assertEqual(cm.band(cm.correlation_fit([1, 0, 0, 0, 0, 0], [0, 1, 1, 1, 1, 1])), "Low")
+
+    def test_the_fit_never_leaves_zero_to_one(self):
+        # a profile against itself or its mirror image is r = 1 or -1, and rounding can overshoot
+        import random
+        rng = random.Random(11)
+        for _ in range(300):
+            p = [rng.random() for _ in range(6)]
+            for o in (p, [1 - x for x in p]):
+                fit = self.cm.correlation_fit(p, o)
+                self.assertTrue(0.0 <= fit <= 1.0, (p, o, fit))
+
+    def test_profiles_of_different_lengths_are_an_error(self):
+        # zip would quietly compare the first three types and call it a fit
+        with self.assertRaises(ValueError):
+            self.cm.correlation_fit([0.1, 0.5, 0.9], [0.1, 0.5, 0.9, 0.2, 0.4, 0.6])
 
 
 class TestDeps(unittest.TestCase):

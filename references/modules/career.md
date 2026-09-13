@@ -18,7 +18,7 @@ you describe a result.
 
 ## Computed vs interpretive (the skill's one rule, applied here)
 - **Computed (facts).** The RIASEC-6 vector from the person's answers, the
-  cosine congruence, the band, the confidence note — all from
+  interest correlation, the band, the confidence note — all from
   `career_match.py`. Deterministic, offline. **Never hand-score it.**
 - **Interpretive (a lens).** What a "Strong on Investigative, softer on your #1
   value" result *means* for them. Always "one way to read this", never a verdict.
@@ -125,12 +125,23 @@ Then, two separate outputs, never merged into one number:
    rejection, never a fabricated readiness number.
 
 ## Scoring engine (`scripts/career_match.py`)
-Person RIASEC-6 vector vs each occupation's RIASEC vector via **normalized cosine
-congruence**. Occupations given only a 3-letter high-point code (`riasec: null`)
+Person RIASEC-6 vector vs each occupation's RIASEC vector via a **centered
+correlation**: the interest fit is `(r + 1) / 2`, with `r` the Pearson correlation of the
+two six-score profiles. Occupations given only a 3-letter high-point code (`riasec: null`)
 are expanded **3-2-1** and flagged **lower-confidence**; occupations with full
 six-value ratings use `(x-1)/6`. Optional **values** (ipsative cosine, **rescaled** — see below) and
 **traits** (soft mean-abs-difference over mapped traits only) blend in with the
 disclosed default weights, **renormalized** when components are absent.
+
+The interest fit used to be the plain cosine of the two vectors. Every score is
+non-negative, so any two profiles already point roughly the same way: answering all 21
+items at random put a median of about 70% of the 188 occupations in Strong, and a person
+with one clear favourite who answered the other types 3 instead of 0 saw other types enter
+their top five (for a Realistic favourite, Strong grew from 15 occupations to 163).
+Centering each profile compares shape, not level: the same random answers put about 11% in
+Strong, and a clear favourite reads the same at any level. On the interest fit the bands
+mean `r ≥ 0.5` for Strong and `r ≥ 0.1` for Moderate; a flat profile has no shape and is
+not scorable.
 
 The values cosine needed rescaling because an ipsative rank vector cannot point near
 the origin: over all 720 orderings its minimum is **0.615**, not 0. Fed straight into
@@ -154,10 +165,12 @@ numeric set came out 63% "Strong" and the code-only set 20%. **If a code-only oc
 ever appears, never merge the lists into one table, and never say a code-only
 occupation fits better than a numeric one.**
 
-**An answer set with no shape is refused, not scored.** Cosine ignores magnitude, so
-answering the same value to all 21 items produced the vector [k,k,k,k,k,k] — identical
-in direction for every k — and still yielded a full ranking, always topped by whichever
-occupation sits nearest the uniform direction. `score_person_grouped` now returns
+**An answer set with no shape is refused, not scored.** Under the old cosine, answering
+the same value to all 21 items produced the vector [k,k,k,k,k,k] — identical in direction
+for every k — and still yielded a full ranking, always topped by whichever occupation sits
+nearest the uniform direction. A correlation reads only shape, so a flat set has none, and
+type scores that barely differ would stretch noise into a full-strength shape.
+`score_person_grouped` now returns
 `{"refused": true, …}` when the six type scores barely differ, and the same way when a
 type has fewer than two answers: assessment_items.json's short form is two items per type,
 and a skipped item is no information, not dislike. Say what it says: this is

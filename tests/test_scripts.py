@@ -4458,6 +4458,54 @@ class TestCareerScoringRefusesWhatItCannotMeasure(HomeCase):
         self.assertIn("career_intake.yaml", str(caught.exception))
 
 
+class TestDocsAndCodeSayTheSameThing(HomeCase):
+    """Four places where the docs said one thing and the code did another. lunar-to-solar told
+    the model to store its `lunar` object as birth.date_input, a shape profile-schema.md doesn't
+    have and the onboarding form doesn't write. SKILL.md and safety.md say a first contact
+    stores nothing, while add-entry on a path that was never a home created one and wrote the
+    crisis text into it. daily-fortune.md calls 「宜静养，忌远行」 an almanac line the card must
+    not write, and the gate let it through. And the card was told to show 幸运色/方位/数 with its
+    label, when the gate blocks 「幸运数字」."""
+
+    def test_lunar_to_solar_hands_back_date_input_in_the_stored_shape(self):
+        import form_server
+        import yaml
+        out = jrun("companion.py", "lunar-to-solar", "1993", "3", "21", home=self.home)
+        form = {"name": ["X"], "locale": ["zh"], "region": ["cn"], "tone": ["concise"],
+                "birth_consent": ["on"], "birth_calendar": ["lunar"], "birth_lunar_year": ["1993"],
+                "birth_lunar_month": ["3"], "birth_lunar_day": ["21"], "gender": ["male"]}
+        form_server.write_onboarding(self.home, form)
+        with open(os.path.join(self.home, "profile.yaml"), encoding="utf-8") as f:
+            stored = yaml.safe_load(f)["birth"]
+        self.assertEqual(out["date_input"], {"calendar": "lunar", "lunar": "1993-03-21", "leap": False})
+        self.assertEqual(out["date_input"], stored["date_input"])
+        self.assertIn("date_input", out["_note"])
+
+    def test_a_first_contact_stores_nothing(self):
+        with tempfile.TemporaryDirectory() as t:
+            nowhere = os.path.join(t, "never-a-home")
+            code, out, _ = run("companion.py", "add-entry", "--text", "我不想活了", "--crisis",
+                               home=nowhere)
+            self.assertEqual(code, 3, out)
+            self.assertFalse(os.path.exists(nowhere))
+
+    def test_the_gate_blocks_the_almanac_line_the_card_must_not_write(self):
+        import selfcheck
+        self.assertFalse(selfcheck.check("今天宜静养，忌远行。", "daily")["ok"])
+        self.assertTrue(selfcheck.check("今天别熬夜，早点睡，收尾比开新战线划算。", "daily")["ok"])
+
+    def test_the_card_names_its_five_element_numbers_the_way_the_gate_allows(self):
+        import selfcheck
+        with open(os.path.join(SKILL, "references", "modules", "daily-fortune.md"),
+                  encoding="utf-8") as f:
+            doc = f.read()
+        self.assertNotIn("verbatim with its label", doc)
+        example = "五行数 3、8（按你喜用五行的传统对应，图个彩头，不是保证）"
+        self.assertIn(example, doc)
+        self.assertTrue(selfcheck.check(example, "daily")["ok"])
+        self.assertFalse(selfcheck.check("幸运数字：3、8", "daily")["ok"])
+
+
 class TestDeps(unittest.TestCase):
     def test_doctor_reports_without_installing(self):
         rep = jrun("companion.py", "doctor")

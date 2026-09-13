@@ -167,7 +167,8 @@ real detector; it will miss things and over-flag things. Trust context.
      There is no continuity to protect for someone you have never met; the logging
      served the system, not them. Be present, give them a real resource, store nothing.
      Never force onboarding in order to log.
-   - **An existing user who has consented to journaling**: logging is inside what they
+   - **Someone who already keeps a journal here** (onboarded, so a companion home exists;
+     `add-entry` refuses without one): logging is inside what they
      agreed to, so log it — `add-entry --crisis` sets `crisis_flag:true` even when the
      keyword scan missed it. But **do not conceal it.** Don't make a production of it
      either: one plain line is enough, at the end, and tell them it is theirs to

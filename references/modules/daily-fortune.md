@@ -89,9 +89,11 @@ Open with a one-line disclaimer note once, then, in the person's `locale`/`tone`
 - **♓ 星座今日** — from astro.py: X座 · **今日月亮在…座** · any **逆行**(水逆 etc.) ·
   notable **本命相位**. Frame the positions as astronomical fact, the meaning as a
   reflective lens ("水逆传统上提醒…沟通/复盘慢一点" — never "水逆导致你…").
-- **🎨 五行小贴士** — `wuxing_tips`: 幸运色/方位/数, verbatim with its label
-  ("按你喜用五行的传统对应,图个彩头,不是保证"). If tips are empty (中和), say so;
-  don't invent.
+- **🎨 五行小贴士** — `wuxing_tips`: the colours, directions and numbers that go with the
+  person's 喜用五行 by the traditional correspondence, always with its `note`. Name them as
+  that, not as luck: 「颜色 青/绿，方位 东，五行数 3、8（按你喜用五行的传统对应，图个彩头，不是保证）」.
+  Never write the label 「幸运数字」: it reads as a promise, and the gate blocks it. If tips
+  are empty (中和), say so; don't invent.
 - **✅ 宜 / ⛔ 忌** — 2–3 agency-framed nudges synthesized from the above (a repair,
   a rest, a "别拍板大事" when 冲/刑). Never a lucky-number command, never fatalism.
   Write these as things a friend would say, not as almanac entries: 「收尾比开新战线

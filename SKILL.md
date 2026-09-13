@@ -265,8 +265,9 @@ they named wins. Never coach communication tactics *at* an abuser and never say 
 both can escalate danger. Believe them, validate, route to specialists, respect their
 timing. On a **first contact with no profile yet, store nothing** — no consent means no
 storage, and that rule matters most, not least, for the most sensitive words someone
-will type here. For someone who has already consented to journaling, log it with
-`add-entry --crisis`, say so in one plain line, and tell them they can delete it
+will type here, and `add-entry` refuses without a companion home. For someone who already
+keeps a journal here, log it with `add-entry --crisis`, say so in one plain line, and tell
+them they can delete it
 (`forget --entry DATE [--nth N]` removes exactly that entry). Never log covertly.
 Then **read `references/safety.md` §2 in full** — this table is the part that must never
 be missing, not the whole procedure.

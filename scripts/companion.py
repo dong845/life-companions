@@ -571,10 +571,13 @@ def cmd_lunar_to_solar(args):
         "ok": True, "solar": solar,
         "lunar": {"year": args.year, "month": args.month, "day": args.day,
                   "leap": bool(args.leap)},
+        # the shape profile-schema.md documents and the onboarding form writes
+        "date_input": {"calendar": "lunar",
+                       "lunar": f"{args.year:04d}-{args.month:02d}-{args.day:02d}",
+                       "leap": bool(args.leap)},
         "_note": ("Converted on the Chinese calendar's own day boundary. For a birth abroad "
                   "close to midnight the solar date can be a day off, so confirm it with the "
-                  "person. Store the solar date as birth.date and this input as "
-                  "birth.date_input."),
+                  "person. Store `solar` as birth.date and `date_input` as birth.date_input."),
     }, ensure_ascii=False, indent=2))
 
 
@@ -929,6 +932,16 @@ def cmd_cache(args):
 def cmd_add_entry(args):
     home = home_dir(args.home)
     p = _paths(home)
+    # No home means no onboarding and no consent, and a first contact stores nothing (safety.md
+    # §2). This used to create a home on the spot and write whatever they had just said,
+    # crisis words included.
+    if not (os.path.exists(p["consent"]) or os.path.exists(p["profile"])):
+        print(json.dumps({"ok": False, "error": f"no companion home at {home}: nothing was stored",
+                          "_next": ("A first contact stores nothing. If they want a journal, "
+                                    "onboard them first (`companion.py init`, with their "
+                                    "agreement), then add the entry.")},
+                         ensure_ascii=False))
+        raise SystemExit(3)
     consent = _load_yaml(p["consent"])
     date = args.date or _today()
     try:

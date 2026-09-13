@@ -3342,6 +3342,35 @@ class TestLowMoodReadsDaysAndDates(HomeCase):
             self.assertEqual("_wellbeing_check" in self.brief(), asks, value)
 
 
+class TestCrisisScanReadsHowPeopleSayIt(unittest.TestCase):
+    """The crisis backstop missed traditional-script passive ideation: 著 is also a
+    simplified character, so 「活著好累」 never folds to 活着. It missed the burden phrasing
+    people actually use (「我是家里的负担」, "I feel like a burden to everyone"), and it fired
+    on money talk (「这个价钱我是负担得起的」) and sleep advice, which then set a crisis flag
+    and switched off the low-mood check."""
+
+    def flag(self, t):
+        import safety_scan
+        return safety_scan.scan_text(t)["crisis_flag"]
+
+    def test_passive_ideation_in_traditional_script(self):
+        for t in ("活著好累", "活著沒什麼意思", "覺得活著沒意義", "活著沒甚麼意思", "覺得活著沒勁"):
+            self.assertTrue(self.flag(t), t)
+
+    def test_burden_phrasing_people_actually_use(self):
+        for t in ("我是家里的负担", "我就是个累赘。", "我只会拖累大家", "我走了大家會比較好",
+                  "如果我消失，大家會比較輕鬆", "我係屋企嘅負累", "I feel like a burden to everyone",
+                  "I've become a burden", "Everyone would be better off without me"):
+            self.assertTrue(self.flag(t), t)
+
+    def test_ordinary_sentences_that_share_the_words(self):
+        for t in ("这个价钱我是负担得起的", "我是负担全家开销的人", "房租我成了负担最多的那个",
+                  "感觉自己负担很重，得换个便宜点的房子", "负担得起就买吧",
+                  "Everyone is better off with a good night's sleep.",
+                  "everyone would be better off if we split the bill"):
+            self.assertFalse(self.flag(t), t)
+
+
 class TestDeps(unittest.TestCase):
     def test_doctor_reports_without_installing(self):
         rep = jrun("companion.py", "doctor")

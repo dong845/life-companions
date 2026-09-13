@@ -41,8 +41,9 @@ PATTERNS = {
         r"\bself[-\s]?harm", r"\bcut(ting)?\s+myself\b", r"\boverdos",
         r"\bbetter\s+off\s+(dead|without me)\b", r"\bcan'?t\s+see\s+the\s+point\b",
         # Chinese — cover common phrasings AND variants that a naive list misses
-        r"不想活", r"活不下去", r"撑不下去", r"活着没(什么|啥)?(意思|意义)",
-        r"活着.{0,3}没(什么|啥)?意思", r"不想(活了|醒来|存在)", r"活着(好累|没劲|真累)",
+        # 著 is a simplified character too, so the traditional 「活著」 never folds to 活着
+        r"不想活", r"活不下去", r"撑不下去", r"活[着著]没(什么|甚么|啥)?(意思|意义)",
+        r"活[着著].{0,3}没(什么|甚么|啥)?意思", r"不想(活了|醒来|存在)", r"活[着著](好累|没劲|真累)",
         r"自杀", r"结束(自己的|这一切|生命)", r"轻生", r"了结(自己|生命)",
         r"一了百了", r"走了算了", r"生无可恋",
         r"伤害自己", r"自残", r"想死", r"死了算了", r"没有活下去的意义",
@@ -51,12 +52,19 @@ PATTERNS = {
         # the words above.
         r"没有我[，,\s]*(大家|你们|他们|家里人?|爸妈|父母|所有人)(都)?(会|能|就)?(过得|变得)?"
         r"(更好|更轻松|更开心)",
-        r"我(就是|只是|是|成了)(个|一个)?(累赘|负担|拖累|包袱)",
-        r"(觉得|感觉)自己(就是|只是|是|成了)?(个|一个)?(累赘|负担|拖累|包袱)",
-        r"我(不在|走|死)了[，,\s]*(大家|你们|他们|家里人?|爸妈|父母|所有人)?(就|会|都|也)?"
-        r"(更好|更轻松|解脱)",
+        # The noun has to end the phrase: 「我是负担得起的」 and 「我是负担全家开销的人」 are
+        # about money, and a false flag here switches the low-mood check off.
+        r"我(就是|只是|是|成了|系)(个|一个)?((家里|家人|大家|你们|他们|所有人|爸妈|父母|屋企)(的|嘅))?"
+        r"(累赘|负担|拖累|包袱|负累)(?=$|[。！？!?.,，、…~～\s]|了|啊|呀|吧|呢|而已|罢了)",
+        r"(觉得|感觉)自己(就是|只是|是|成了)?(个|一个)?(累赘|负担|拖累|包袱|负累)"
+        r"(?=$|[。！？!?.,，、…~～\s]|了|啊|呀|吧|呢|而已|罢了)",
+        r"我(只会|总是|一直在|老是|就会)拖累(了)?(大家|你们|他们|家里人?|家人|爸妈|父母|所有人)",
+        r"我(不在|走|死|消失)了?[，,\s]*(大家|你们|他们|家里人?|家人|爸妈|父母|所有人)?(就|会|都|也)?"
+        r"(更好|更轻松|解脱|比较好|比较轻松|好过一点|好过些)",
         r"\b(i'?m|i am)\s+(just\s+)?(a|such a)\s+burden\b",
-        r"\beveryone('?s| is| would be| will be)\s+better\s+off\b",
+        r"\b(i\s+)?(feel|felt)\s+like\s+(i'?m\s+)?(a|such a|just a)\s+burden\b",
+        r"\b(i'?ve|i have)\s+become\s+(a|such a)\s+burden\b",
+        r"\beveryone('?s| is| would be| will be)\s+better\s+off\s+(without me|if i\b|with me gone)",
     ],
     "abuse_violence": [
         r"\bhit(s|ting)?\s+me\b", r"\bhurt(s|ing)?\s+me\b", r"\bafraid\s+of\s+(him|her|them|my)\b",

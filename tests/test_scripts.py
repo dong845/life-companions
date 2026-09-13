@@ -4863,7 +4863,11 @@ class TestGateReadsHowRefusalsAreWorded(unittest.TestCase):
                      "我不会给出你们合不合的结论。",
                      "盘里没有合不合的定论，只有几组关系。",
                      "你问我们俩合不合？这里不下这个判决。",
-                     "Whether you two are compatible is made of what you do, not of the chart."):
+                     "Whether you two are compatible is made of what you do, not of the chart.",
+                     # a third codex run declined by refusing to classify or to discuss it
+                     "所以我不把这些归成“合”或“不合”。这次盘里同时有接点和张力。",
+                     "我不会把它说成合或不合。",
+                     "这里不谈合不合，只说盘里有哪些关系。"):
             self.assertNotIn("synastry-verdict", self.gate("synastry", text), text)
 
     def test_a_verdict_that_only_shares_words_with_a_refusal_still_blocks(self):
@@ -4871,7 +4875,9 @@ class TestGateReadsHowRefusalsAreWorded(unittest.TestCase):
                      "你们八字不合，不给自己留遗憾就早点分开。",
                      "Honestly, you two are not compatible.",
                      "你们八字不合的结论很明确。",
-                     "你们天生一对，不需要什么评分。"):
+                     "你们天生一对，不需要什么评分。",
+                     "你们不合，别把这段关系当成终身依靠。",
+                     "你们真的不合，不要把时间浪费在对方身上。"):
             self.assertIn("synastry-verdict", self.gate("synastry", text), text)
 
     def test_the_synastry_disclaimer_is_read_in_its_common_wordings(self):

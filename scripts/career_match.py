@@ -429,38 +429,65 @@ def rank_occupations(responses, scoring_key, occupations, top_n=10, **kw):
 # Words that carry no signal for matching a job title.
 _STOP = {"the", "a", "an", "of", "and", "or", "for", "in", "at", "to", "&",
          "工作", "职业", "岗位", "工程师", "师", "员", "人员", "专家", "做"}
+# Seniority and standing say how far along someone is, not which job it is.
+_MODIFIERS = ("资深", "高级", "中级", "初级", "首席", "副", "实习", "senior", "junior",
+              "experienced", "intern")
+# Chinese endings that only say a person does the work. 工程师 is not one of them: it says
+# which kind of work, so it is an alias below and a title has to be one an engineer holds.
+_GENERIC_SUFFIXES = {"人员", "专家", "师", "员", "家"}
 
 # A small bridge from everyday words (incl. Chinese) to O*NET title vocabulary. It is
 # deliberately small and visible rather than a fuzzy black box — an unmatched query
 # must come back empty so the model asks, instead of quietly picking something near.
+# Each alias names ALTERNATIVE phrases: 数据分析 is "data scientist" OR "operations research
+# analyst". A title takes an alias only when one whole phrase fits it, so "research" from one
+# and "scientist" from the other can't add up to a third title.
 _ALIASES = {
-    "产品经理": "product manager", "程序员": "programmer software developer",
-    "软件工程师": "software developer", "算法": "data scientist research computer",
-    "机器学习": "data scientist computer research", "人工智能": "computer research scientist",
-    "数据": "data scientist database", "数据分析": "data scientist operations research",
-    "统计": "statistician",
-    "医生": "physician", "护士": "nurse", "老师": "teacher", "教师": "teacher",
-    "律师": "lawyer", "会计": "accountant", "设计师": "designer", "平面": "graphic",
-    "记者": "reporter journalist", "翻译": "interpreters translators",
-    "心理咨询": "counseling psychologists counselors", "社工": "social worker",
-    "厨师": "chef cook", "摄影": "photographer", "建筑师": "architect",
-    "护理": "nurse", "影像": "imaging radiologic", "放射": "radiologic imaging",
-    "核磁": "magnetic resonance imaging", "磁共振": "magnetic resonance imaging",
-    "mri": "magnetic resonance imaging",
-    "理疗": "physical therapist", "药剂": "pharmacist", "销售": "sales",
-    "市场": "marketing market research", "人力资源": "human resources",
-    "运营": "operations management", "研究员": "research scientist",
-    "教授": "professor teacher postsecondary", "咨询顾问": "management analyst",
-    "ux": "web digital interface", "ui": "web digital interface",
-    "product manager": "management analyst project management",
+    "产品经理": ("product manager",), "程序员": ("programmer", "software developer"),
+    "软件工程师": ("software developer",),
+    "算法": ("data scientist", "computer research scientist"),
+    "机器学习": ("data scientist", "computer research scientist"),
+    "人工智能": ("computer research scientist",),
+    "数据": ("data scientist", "database"),
+    "数据分析": ("data scientist", "operations research analyst"),
+    "统计": ("statistician",),
+    "医生": ("physician",), "护士": ("nurse",), "老师": ("teacher",), "教师": ("teacher",),
+    "律师": ("lawyer",), "会计": ("accountant",), "设计师": ("designer",), "平面": ("graphic",),
+    "记者": ("reporter", "journalist"), "翻译": ("interpreter", "translator"),
+    "心理咨询": ("counseling psychologist", "counselor"), "社工": ("social worker",),
+    "厨师": ("chef", "cook"), "摄影": ("photographer",), "建筑师": ("architect",),
+    "护理": ("nurse",), "影像": ("imaging", "radiologic"), "放射": ("radiologic", "imaging"),
+    "核磁": ("magnetic resonance imaging",), "磁共振": ("magnetic resonance imaging",),
+    "mri": ("magnetic resonance imaging",),
+    "理疗": ("physical therapist",), "药剂": ("pharmacist",), "销售": ("sales",),
+    "市场": ("marketing", "market research"), "人力资源": ("human resources",),
+    "运营": ("operations", "management"), "研究员": ("research scientist",),
+    "教授": ("professor", "postsecondary teacher"), "咨询顾问": ("management analyst",),
+    "ux": ("web digital interface",), "ui": ("web digital interface",),
+    "product manager": ("management analyst", "project management"),
     # everyday words for occupations that ARE in the data and still found nothing
-    "小学": "elementary school", "中学": "secondary school",
-    "土木工程": "civil engineer", "电气工程": "electrical engineer",
-    "电工": "electricians", "木工": "carpenters", "客服": "customer service",
-    "司机": "driver", "卡车": "truck", "货车": "truck", "牙医": "dentists",
-    "消防员": "firefighters", "兽医": "veterinarians", "物理治疗": "physical therapist",
-    "前端": "web developer", "房地产经纪": "real estate sales agent",
-    "房产中介": "real estate sales agent", "hr": "human resources",
+    "小学": ("elementary school",), "中学": ("secondary school",), "高中": ("secondary school",),
+    "土木工程": ("civil engineer",), "电气工程": ("electrical engineer",),
+    "电工": ("electrician",), "木工": ("carpenter",),
+    "客服": ("customer service representative",),
+    "司机": ("driver",), "卡车": ("truck",), "货车": ("truck",), "牙医": ("dentist",),
+    "消防员": ("firefighter",), "兽医": ("veterinarian",), "物理治疗": ("physical therapist",),
+    "前端": ("web developer",), "房地产经纪": ("real estate sales agent",),
+    "房产中介": ("real estate sales agent",), "hr": ("human resources",),
+    # the words that decide BETWEEN titles, now that a word the title leaves unexplained keeps
+    # a hit weak: 数据库管理员 is a database administrator, not a data scientist
+    "工程师": ("engineer", "developer", "programmer", "architect"),
+    "技师": ("technologist", "technician"), "tech": ("technologist", "technician"),
+    "数据库": ("database",), "管理员": ("administrator",), "生物统计": ("biostatistician",),
+    "经理": ("manager",), "总监": ("manager",), "科学家": ("scientist",),
+    "大学": ("postsecondary",), "college": ("postsecondary",),
+    "professor": ("postsecondary teacher",), "high school": ("secondary school",),
+    "软件": ("software developer",), "软体": ("software developer",), "开发": ("developer",),
+    "经济学": ("economist",), "精算": ("actuary",), "地质": ("geoscientist",),
+    "geologist": ("geoscientist",), "ceo": ("chief executive",),
+    "首席执行官": ("chief executive",), "管理咨询": ("management analyst",),
+    "调研": ("research analyst",), "厨师长": ("chef", "head cook"), "新闻": ("news",),
+    "auto": ("automotive",), "sales associate": ("salesperson",),
 }
 # Aliases that point at NEIGHBOURS because O*NET has no such occupation. A hit that leans
 # on one of these can open a conversation; it is never a strong mapping.
@@ -468,6 +495,21 @@ _APPROXIMATE = {"产品经理", "product manager", "运营", "研究员"}
 
 _LATIN = re.compile(r"[a-z0-9]+")
 _CJK = re.compile(r"[一-鿿]+")
+_WORDLIKE = re.compile(r"[a-z0-9]+|[一-鿿]+")
+
+
+def _fold_query(query):
+    """What the person typed, in the form the aliases and titles are written in: NFKC for
+    full-width letters (ＵＩ设计师), traditional folded to simplified (軟體工程師), lower case,
+    and no space between two Chinese words (土木 工程师). Each of those found nothing."""
+    import sys
+    import unicodedata
+    here = os.path.dirname(os.path.abspath(__file__))
+    if here not in sys.path:
+        sys.path.insert(0, here)
+    from _zh import to_simplified
+    text = to_simplified(unicodedata.normalize("NFKC", str(query))).lower()
+    return re.sub(r"(?<=[一-鿿])\s+(?=[一-鿿])", "", text).strip()
 
 
 def _words(s):
@@ -477,27 +519,42 @@ def _words(s):
             if w not in _STOP and not w.isdigit()]
 
 
-def _alias_in(key, text):
+def _alias_spans(key, text):
     # A Latin key must stand alone: as a bare substring, 「ui」 matched inside "equipment".
     # Chinese has no spaces between words, so a Chinese key matches anywhere, except that
     # the 工 of 电工 and 木工 also sits inside 工程: 「机电工程师」 is not an electrician.
     if key.isascii():
-        return re.search(r"(?<![a-z0-9])" + re.escape(key) + r"(?![a-z0-9])", text) is not None
-    return any(not (key.endswith("工") and text[m.end():m.end() + 1] == "程")
-               for m in re.finditer(re.escape(key), text))
+        return [m.span() for m in
+                re.finditer(r"(?<![a-z0-9])" + re.escape(key) + r"(?![a-z0-9])", text)]
+    return [m.span() for m in re.finditer(re.escape(key), text)
+            if not (key.endswith("工") and text[m.end():m.end() + 1] == "程")]
+
+
+def _alias_in(key, text):
+    return bool(_alias_spans(key, text))
+
+
+def _query_parts(query):
+    """(folded query, its words plus every word its aliases stand for,
+    [(alias, [its phrases as word lists], where it sits)], whether any of it leans on an
+    approximate alias). Aliases expand the QUERY only — run over occupation titles as well,
+    they turned "Agricultural Equipment Operators" into a designer."""
+    text = _fold_query(query)
+    aliases, expansions, approximate = [], [], False
+    for key, phrases in _ALIASES.items():
+        spans = _alias_spans(key, text)
+        if spans:
+            aliases.append((key, [_words(p) for p in phrases], spans))
+            expansions.extend(phrases)
+            approximate = approximate or key in _APPROXIMATE
+    return text, set(_words(" ".join([text] + expansions))), aliases, approximate
 
 
 def _query_words(query):
     """What the person said plus the O*NET words it stands for, and whether any of it
-    leans on an approximate alias. Aliases expand the QUERY only — run over occupation
-    titles as well, they turned "Agricultural Equipment Operators" into a designer."""
-    text = query.lower()
-    approximate = False
-    for key, en in _ALIASES.items():
-        if _alias_in(key, text):
-            text += " " + en
-            approximate = approximate or key in _APPROXIMATE
-    return set(_words(text)), approximate
+    leans on an approximate alias."""
+    _text, words, _aliases, approximate = _query_parts(query)
+    return words, approximate
 
 
 # O*NET titles say who is left OUT after "Except" ("Elementary School Teachers, Except
@@ -516,9 +573,72 @@ def _title_words(title):
     return named, (set(_words(m.group(1))) - named if m else set())
 
 
+def _title_heads(title):
+    """The roles a title names: the word before " of " (First-Line Supervisors of Police and
+    Detectives are supervisors); otherwise the last word of each "and" part before the first
+    comma (Radiologic Technologists and Technicians), and the title's last word
+    (Securities, Commodities, and Financial Services Sales Agents)."""
+    base = _GENERAL.sub("", _EXCEPT.sub("", title)).lower()
+    before_of = re.split(r"\s+of\s+", base, maxsplit=1)
+    if len(before_of) == 2:
+        return set(_words(before_of[0])[-1:])
+    heads = set(_words(base)[-1:])
+    for part in re.split(r"\s+and\s+", base.split(",", 1)[0]):
+        heads |= set(_words(part)[-1:])
+    return heads
+
+
 def _same_word(a, b):
-    # exact, or an ending apart: "statistic" finds "Statisticians"
-    return a == b or (len(a) > 3 and (b.startswith(a) or a.startswith(b)))
+    """The same word, or one grammatical ending apart: "statistician" finds "Statisticians"
+    and "actuary" finds "Actuaries". A bare prefix is not the same word: "special" is not
+    "specialties", "tech" is neither "technicians" nor "technologists", and "market" is not
+    "marketing"."""
+    if a == b:
+        return True
+    short, long_ = sorted((a, b), key=len)
+    return (long_ in (short + "s", short + "es")
+            or (short.endswith("y") and long_ == short[:-1] + "ies"))
+
+
+def _fits(words, title_words):
+    return bool(words) and all(any(_same_word(a, b) for b in title_words) for a in words)
+
+
+def _unexplained(text, aliases, title_words):
+    """What the query says that this title doesn't account for: the parts no title word and
+    no fitting alias covers, less seniority words, stop words and the endings that only say
+    a person does the work. 「牙医助理」 leaves 助理 against Dentists; 「核磁共振工程师」 leaves
+    工程师 against MRI technologists."""
+    mask = [False] * len(text)
+    for _key, phrases, spans in aliases:
+        if any(_fits(p, title_words) for p in phrases):
+            for start, end in spans:
+                mask[start:end] = [True] * (end - start)
+    for m in _LATIN.finditer(text):
+        if any(_same_word(m.group(0), b) for b in title_words):
+            mask[m.start():m.end()] = [True] * (m.end() - m.start())
+    rest = "".join(" " if covered else ch for ch, covered in zip(text, mask))
+    left = []
+    for w in _WORDLIKE.findall(rest):
+        if w.isascii():
+            if not (w in _STOP or w in _MODIFIERS or w.isdigit()):
+                left.append(w)
+            continue
+        for filler in _MODIFIERS + ("工作", "岗位", "做"):
+            w = w.replace(filler, "")
+        if w and w not in _GENERIC_SUFFIXES:
+            left.append(w)
+    return left
+
+
+def _matching_parts(text, aliases, title_words):
+    """How many separate parts of the query fit this title: each Latin word that is a title
+    word, and each alias with a phrase that fits. One alias that happens to name two title
+    words (工程师: engineer … architect) is still one part."""
+    parts = {m.group(0) for m in _LATIN.finditer(text)
+             if m.group(0) not in _STOP and any(_same_word(m.group(0), b) for b in title_words)}
+    parts |= {key for key, phrases, _spans in aliases if any(_fits(p, title_words) for p in phrases)}
+    return len(parts)
 
 
 def find_occupations(query, occupations, limit=8):
@@ -528,13 +648,16 @@ def find_occupations(query, occupations, limit=8):
     match}], best first, and **an empty list when nothing matches** — that is the honest
     answer, not a reason to reach for the nearest title.
 
-    `match` is "strong" for an exact title, or when the query covers two or more words
-    of the title (or all of a one-word title) without leaning on an approximate alias.
-    Anything less is "weak": 「司机」 shares only "drivers" with Heavy and Tractor-Trailer
-    Truck Drivers, and one shared word is not a mapping. So is a title asked for the group
-    its "Except" clause leaves out, and one whose matched words another strong title covers
-    and more. Strong hits sort first."""
-    q, approximate = _query_words(query)
+    `match` is "strong" for an exact title, or when all of these hold: the title explains
+    everything the query says (「牙医助理」 leaves 助理 unexplained against Dentists), the
+    title's own role is among the words matched (First-Line Supervisors of Police and
+    Detectives are supervisors, not detectives), two separate parts of the query fit the
+    title or the title is covered whole (「司机」 fits only "drivers" in Heavy and
+    Tractor-Trailer Truck Drivers), and nothing leans on an approximate alias or asks for the
+    group an "Except" clause leaves out. A title whose matched words another strong title
+    covers and more is weak too. Strong hits sort first, and when more than one title is
+    strong (and none is exact) they are all marked `tied`."""
+    text, q, aliases, approximate = _query_parts(query)
     if not q:
         return []
     out, exact_titles = [], set()
@@ -548,10 +671,12 @@ def find_occupations(query, occupations, limit=8):
         covered = {b for b in t if any(_same_word(a, b) for a in q)}
         if not covered:
             continue
-        exact = query.strip().lower() == title.lower()
+        exact = text == title.lower()
         asks_for_excluded = any(_same_word(a, b) for a in q for b in excluded)
         strong = exact or (not approximate and not asks_for_excluded
-                           and (len(covered) >= 2 or covered == t))
+                           and (_matching_parts(text, aliases, t) >= 2 or covered == t)
+                           and bool(covered & _title_heads(title))
+                           and not _unexplained(text, aliases, t))
         if exact:
             exact_titles.add(title)
         out.append({
@@ -572,12 +697,12 @@ def find_occupations(query, occupations, limit=8):
                 and any(set(r["matched_on"]) < s for s in strong_sets)):
             r["match"] = "weak"
     out.sort(key=lambda r: (r["match"] != "strong", -r["score"], r["title"]))
-    # Strong titles that match on exactly the same words are equally good: 「大学教授」 covers
-    # "Teachers, Postsecondary" in every subject, and alphabetical order is not a choice.
+    # Every title still strong here explains the whole query, so none of them is the choice:
+    # 「大学教授」 fits "Teachers, Postsecondary" in every subject, and 数据分析师 fits Data
+    # Scientists and Operations Research Analysts on different words. An exact title wins.
     strong_hits = [r for r in out if r["match"] == "strong"]
-    tied = [r for r in strong_hits if strong_hits and r["matched_on"] == strong_hits[0]["matched_on"]]
-    if len(tied) > 1:
-        for r in tied:
+    if len(strong_hits) > 1 and not exact_titles:
+        for r in strong_hits:
             r["tied"] = True
     return out[:limit]
 
@@ -830,14 +955,20 @@ if __name__ == "__main__":
         raise SystemExit(0 if _selftest() else 1)
     if args.score_intake or args.answers is not None:
         raise SystemExit(_cli_score(args))
-    if args.find:
+    if args.find is not None:
         occs, _ = load_occupations()
+        if not args.find.strip():
+            print(json.dumps({"ok": False, "error": "--find needs the words the person used "
+                              "for the job, e.g. --find \"产品经理\""}, ensure_ascii=False))
+            raise SystemExit(2)
         hits = find_occupations(args.find, occs)
         if not hits:
-            note = (f"NO MATCH in the {len(occs)} shipped occupations. Do NOT substitute the "
-                    "nearest title. Say the role isn't in the dataset, ask which of the shipped "
-                    "ones is closest in day-to-day WORK (not job title), or give an "
-                    "interests-only read with no occupation congruence at all.")
+            note = (f"NO MATCH: no title among the {len(occs)} shipped occupations shares a word "
+                    "with what they said. That is not proof the job is missing, so don't say it "
+                    "is. Do NOT substitute the nearest title: ask what the work is day to day and "
+                    "try --find with those words, ask which shipped occupation is closest in "
+                    "day-to-day WORK, or give an interests-only read with no occupation "
+                    "congruence at all.")
         elif all(h["match"] == "weak" for h in hits):
             note = ("Every candidate is a WEAK match: one shared word, or an alias that points "
                     "at neighbouring occupations because O*NET has no such job. Say plainly "
@@ -845,10 +976,9 @@ if __name__ == "__main__":
                     "day-to-day WORK, or give an interests-only read. Don't score a weak "
                     "match as if it were their job.")
         elif hits[0].get("tied"):
-            note = ("Several titles fit equally well (" + "、".join(
-                        h["title"] for h in hits if h.get("tied")) + "): they match on the "
-                    "same words, so their order means nothing. Ask which one is their actual "
-                    "work before scoring any of them.")
+            note = ("Several titles fit everything they said equally well (" + "、".join(
+                        h["title"] for h in hits if h.get("tied")) + "), so their order means "
+                    "nothing. Ask which one is their actual work before scoring any of them.")
         else:
             note = ("Confirm the mapping with the person before scoring — «你说的X，我按 O*NET "
                     "的「<title>」来算，行吗?» Scoring them against a title they didn't mean is "
@@ -859,7 +989,7 @@ if __name__ == "__main__":
             print(json.dumps(payload, ensure_ascii=False, indent=2))
         else:
             if not hits:
-                print(f"no match for {args.find!r} among the 188 shipped occupations.")
+                print(f"no match for {args.find!r} among the {len(occs)} shipped occupations.")
             for h in hits:
                 flags = ("numeric-interests" if h["has_numeric_interests"] else "code-only") + \
                         (" +values" if h["has_work_values"] else "")

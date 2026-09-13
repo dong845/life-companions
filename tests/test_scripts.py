@@ -4210,6 +4210,104 @@ class TestAbuseRoutingHasOneSource(unittest.TestCase):
             self.assertIn("Canada", cell, row)
 
 
+class TestFindCallsStrongOnlyWhatTheQueryNames(unittest.TestCase):
+    """`--find` called a hit strong whenever it covered two title words, whatever else the
+    query said: 「牙医助理」 came back as Dentists, "police detective" as their supervisors,
+    "light truck driver" as heavy-truck drivers and 「核磁共振工程师」 as the technologists. A
+    bare prefix counted as the same word ("special" in "specialties", "tech" in technicians),
+    a Chinese alias fired inside a longer word (数据 in 数据库), and traditional script,
+    full-width letters or a space between Chinese words found nothing at all."""
+
+    @classmethod
+    def setUpClass(cls):
+        import career_match as cm
+        cls.cm = cm
+        cls.occs, _ = cm.load_occupations()
+
+    def strong(self, q):
+        return [h["title"] for h in self.cm.find_occupations(q, self.occs) if h["match"] == "strong"]
+
+    def top(self, q):
+        hits = self.cm.find_occupations(q, self.occs)
+        return (hits[0]["title"], hits[0]["match"]) if hits else None
+
+    def test_a_query_word_the_title_does_not_explain_keeps_it_weak(self):
+        for q, wrong in (("牙医助理", "Dentists, General"), ("兽医助理", "Veterinarians"),
+                         ("小学校长", "Elementary School Teachers, Except Special Education"),
+                         ("小学生", "Elementary School Teachers, Except Special Education"),
+                         ("景观建筑师", "Architects, Except Landscape and Naval"),
+                         ("职业中学老师", "Secondary School Teachers, Except Special and "
+                                        "Career/Technical Education"),
+                         ("HR专员", "Human Resources Managers"),
+                         ("light truck driver", "Heavy and Tractor-Trailer Truck Drivers"),
+                         ("MRI physicist", "Magnetic Resonance Imaging Technologists"),
+                         ("核磁共振工程师", "Magnetic Resonance Imaging Technologists"),
+                         ("special education teacher", "Health Specialties Teachers, Postsecondary")):
+            self.assertNotIn(wrong, self.strong(q), q)
+
+    def test_a_title_led_by_another_role_is_not_the_job(self):
+        self.assertNotIn("First-Line Supervisors of Police and Detectives",
+                         self.strong("police detective"))
+
+    def test_a_prefix_is_not_the_same_word(self):
+        for q in ("vet tech", "MRI tech"):
+            self.assertNotIn("Cardiovascular Technologists and Technicians", self.strong(q), q)
+        self.assertNotIn("Market Research Analysts and Marketing Specialists",
+                         self.strong("marketing manager"))
+
+    def test_the_right_title_wins_when_the_data_has_it(self):
+        for q, title in (("数据库管理员", "Database Administrators"), ("生物统计师", "Biostatisticians"),
+                         ("市场经理", "Marketing Managers"), ("MRI tech", "Magnetic Resonance Imaging Technologists"),
+                         ("高中老师",
+                          "Secondary School Teachers, Except Special and Career/Technical Education"),
+                         ("high school teacher",
+                          "Secondary School Teachers, Except Special and Career/Technical Education")):
+            self.assertEqual(self.top(q), (title, "strong"),
+                             (q, self.cm.find_occupations(q, self.occs)[:3]))
+
+    def test_an_alias_counts_only_when_one_of_its_phrases_fits_the_title(self):
+        # 数据分析 stands for "data scientist" or "operations research analyst"; one word from
+        # each ("research", "scientist") does not make a third title
+        for q, wrong in (("数据分析师", "Computer and Information Research Scientists"),
+                         ("土木工程師", "Computer Systems Engineers/Architects"),
+                         ("客服经理", "Social and Community Service Managers"),
+                         ("工程师", "Computer Systems Engineers/Architects")):
+            self.assertNotIn(wrong, self.strong(q), q)
+        for q, title in (("radiologic technologist", "Radiologic Technologists and Technicians"),
+                         ("auto mechanic", "Automotive Service Technicians and Mechanics"),
+                         ("厨师长", "Chefs and Head Cooks"), ("数据科学家（实习）", "Data Scientists"),
+                         ("新闻记者", "News Analysts, Reporters, and Journalists")):
+            self.assertEqual(self.top(q), (title, "strong"),
+                             (q, self.cm.find_occupations(q, self.occs)[:3]))
+
+    def test_traditional_full_width_and_spaced_queries_find_the_same_titles(self):
+        for q, title in (("軟體工程師", "Software Developers"), ("律師", "Lawyers"),
+                         ("電工", "Electricians"), ("牙醫", "Dentists, General"),
+                         ("ＵＩ设计师", "Web and Digital Interface Designers"),
+                         ("ＭＲＩ技师", "Magnetic Resonance Imaging Technologists"),
+                         ("土木 工程师", "Civil Engineers")):
+            self.assertEqual(self.top(q), (title, "strong"), q)
+
+    def test_strong_titles_with_equal_scores_are_marked_as_a_tie(self):
+        strong = [h for h in self.cm.find_occupations("administrative assistant", self.occs)
+                  if h["match"] == "strong"]
+        self.assertGreater(len(strong), 1, strong)
+        self.assertTrue(all(h.get("tied") for h in strong), strong)
+
+    def test_every_title_that_fits_the_whole_query_is_marked_as_a_tie(self):
+        # 数据分析师 fits Data Scientists and Operations Research Analysts on different words;
+        # the order between them is not a choice either
+        for q in ("数据分析师", "health specialist"):
+            strong = [h for h in self.cm.find_occupations(q, self.occs) if h["match"] == "strong"]
+            self.assertGreater(len(strong), 1, (q, strong))
+            self.assertTrue(all(h.get("tied") for h in strong), (q, strong))
+
+    def test_an_empty_query_answers_instead_of_printing_help(self):
+        code, out, _ = run("career_match.py", "--find", "", "--json")
+        self.assertEqual(code, 2, out)
+        self.assertFalse(json.loads(out)["ok"])
+
+
 class TestDeps(unittest.TestCase):
     def test_doctor_reports_without_installing(self):
         rep = jrun("companion.py", "doctor")

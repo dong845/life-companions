@@ -90,19 +90,28 @@ python3 $D/scripts/career_match.py --find "产品经理"        # ranked candida
 ```
 Show the top candidates, **confirm with them** («你说的X，我按 O*NET 的「<title>」来算，
 行吗?»), and note whether the chosen one carries numeric interests or is code-only —
-that sets the confidence you may claim. If it returns **no match**, say the role isn't
-in the 188-occupation dataset: ask which shipped occupation is closest in *day-to-day
-work* (not job title), or give an interests-only read with **no** occupation congruence
-at all. Never substitute the nearest-looking title.
+that sets the confidence you may claim. If it returns **no match**, no shipped title
+shares a word with what they said. That is not proof the role is missing from the
+188-occupation dataset: ask what the work is day to day and try `--find` with those words,
+ask which shipped occupation is closest in *day-to-day work* (not job title), or give an
+interests-only read with **no** occupation congruence at all. Never substitute the
+nearest-looking title.
 
-Every candidate carries `match`. **`strong`** means the title is the job they named (an
-exact title, or two or more of its words). **`weak`** means one shared word, or an alias
-that points at neighbours because O\*NET has no such occupation (产品经理, 运营, 研究员):
-「司机」 shares only "drivers" with Heavy and Tractor-Trailer Truck Drivers. A title never
-matches on the group its "Except" clause leaves out, and a title whose matched words another
-strong title covers and more is weak too (for 「中学老师」, Elementary School Teachers).
-Present a weak candidate as a neighbour, never as their job, and when every candidate is
-weak say that none of them is the job they named.
+Every candidate carries `match`. **`strong`** means the title is the job they named: an
+exact title, or one that explains *everything* they said, whose own role is among the
+matched words, and that two separate parts of what they said fit (or that they named whole).
+「牙医助理」 leaves 助理 unexplained against Dentists, so that hit is weak; First-Line
+Supervisors of Police and Detectives are supervisors, so "police detective" is weak there
+too. **`weak`** means less than that: one shared word (「司机」 shares only "drivers" with
+Heavy and Tractor-Trailer Truck Drivers), a word the title doesn't explain, or an alias that
+points at neighbours because O\*NET has no such occupation (产品经理, 运营, 研究员). A title
+never matches on the group its "Except" clause leaves out, and a title whose matched words
+another strong title covers and more is weak too (for 「中学老师」, Elementary School
+Teachers). When more than one title is strong they are all marked `tied`: ask which one is
+their work. Present a weak candidate as a neighbour, never as their job, and when every
+candidate is weak say that none of them is the job they named. Traditional script,
+full-width letters and spaces are folded first, so 軟體工程師 and ＵＩ设计师 find the same
+titles as their plain forms.
 
 Then, two separate outputs, never merged into one number:
 1. **Fit** — congruence band of the person against the aspiration occupation

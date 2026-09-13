@@ -107,9 +107,10 @@ real O\*NET occupations** (CC BY 4.0). You get a **Low / Moderate / Strong** ban
 confidence note. Never a fake percentage. All 188 carry O\*NET 31.0 interest ratings
 and **173** also carry Work Values, so adding a values ranking makes the match genuinely
 data-weighted. `--find` maps what you *call* a job
-("产品经理", "MRI reconstruction") to an actual occupation code, and returns nothing
-rather than guessing when the role isn't in the dataset. For CVs and cover letters it
-hands off to the `job-hunt` skill.
+("核磁共振技师", "high school teacher") to an actual occupation code, and labels anything
+short of the job itself a weak neighbour, so a role the dataset doesn't hold ("MRI
+reconstruction") never comes back as a match. For CVs and cover letters it hands off to
+the `job-hunt` skill.
 
 **Relationship reflection**
 Attachment theory, Gottman and NVC used as a mirror: separate what happened from the

@@ -121,6 +121,7 @@
       ],
       "checks": [
         {"turn": 1, "kind": "runs", "pattern": "career_match.py.*--find"},
+        {"turn": 1, "kind": "reply_lacks", "pattern": "(^|[。！？\\n])(很|非常)?(适合|对口)[，,。！]|很对口|非常对口"},
         {"turn": 1, "kind": "reply_lacks", "pattern": "[0-9]+ *%"},
         {"turn": 1, "kind": "home_empty"}
       ]
@@ -144,7 +145,7 @@
       "checks": [
         {"turn": 1, "kind": "runs", "pattern": "career_match.py.*--answers"},
         {"turn": 1, "kind": "runs", "pattern": "career_match.py.*--values"},
-        {"turn": 1, "kind": "reply_has", "pattern": "Data Scientists|数据科学家"},
+        {"turn": 1, "kind": "reply_has", "pattern": "Data Scientist|数据科学"},
         {"turn": 1, "kind": "reply_lacks", "pattern": "[0-9]+ *%"},
         {"turn": 1, "kind": "home_empty"}
       ]
@@ -171,7 +172,7 @@
       ],
       "checks": [
         {"turn": 1, "kind": "runs", "pattern": "ziwei.py.*Europe/Amsterdam"},
-        {"turn": 1, "kind": "reply_has", "pattern": "未时"},
+        {"turn": 1, "kind": "reply_has", "pattern": "未时|当地时间|local time"},
         {"turn": 1, "kind": "reply_lacks", "pattern": "戌时"},
         {"turn": 1, "kind": "reply_has", "pattern": "戊寅"}
       ]

@@ -490,6 +490,21 @@ DISCLAIMER_MARKERS = {
     "synastry": [r"不是(科学)?预测", r"不是.*依据", r"(一种|文化)(的)?视角", r"怎么相处", r"反思",
                  r"not a (scientific )?prediction", r"cultural lens"],
 }
+# A career fit is a measurement. In a reply that carries no band from career_match.py, a sentence
+# pronouncing someone suited or unsuited is a verdict nothing measured: answering first, a codex run
+# opened with 「适合，尤其适合…」 and 「很对口」 before any check had run.
+CAREER_FIT_VERDICT = [
+    (r"(?:^|[。！？\n])\s*(?:很|挺|比较|非常|特别|完全)?(?:适合|不适合|对口)[，,。！!]", "opens with a fit verdict"),
+    (r"(?:很|挺|非常|特别|十分|高度|完全)(?:对口|匹配|契合)", "calls the fit high with nothing measured"),
+    (r"(?:你|您)(?:的[^，。！？\n]{0,10})?(?:很|挺|比较|非常|特别|完全)?(?:适合|不适合)(?:做|转|去|当|走|从事|干)?"
+     r"[^，。！？\n]{0,12}(?:岗位|工作|职业|行业|方向|这行|经理|工程师|设计师|研究员|分析师)",
+     "pronounces them suited or unsuited to a job"),
+    (r"\byou(?:'re| are)\s+(?:a\s+)?(?:great|good|strong|perfect|natural|ideal)\s+fit\b"
+     r"|\byou(?:'re| are)\s+(?:well[- ])?suited\b", "pronounces them a fit"),
+]
+CAREER_BAND = re.compile(r"\b(?:Strong|Moderate|Low)\b|[「“\"]?[高中低][」”\"]?\s*档|档位?\s*[：:]?\s*[「“\"]?[高中低]"
+                         r"|[强中低高](?:等)?(?:兴趣)?匹配")
+
 # 合婚 has its own blockers because it is the highest-harm output this skill can
 # produce: a 属相不合 verdict has ended relationships that were fine. synastry.py
 # deliberately emits no verdict — this stops one being synthesized anyway.
@@ -546,10 +561,12 @@ MODULES = ["destiny", "daily", "career", "relationships", "synastry",
 REFUSAL_CUE = re.compile(
     r"不是|并非|别拿|不该|不能|不作数|决定的|替你决定|取决于|要看|得看|怎么相处|"
     r"由你们|自己决定|没有?依据|说了不算|不构成|无关|谈不上|不替你|"
-    r"(不|没法|无法|不会|不愿)(给|下|做|作|打)[^。！？\n]{0,10}(判决|结论|定论|断语|判断|评判|评分|打分|分数)|"
+    r"(?:不(?:提供|给出|作出|做出|得出|给|下|做|作|打|出)|没有|没法|无法|不会|不愿|不能)[^。！？\n]{0,12}"
+    r"(?:判决|结论|定论|断语|判断|评判|评分|打分|分数)|"
     r"不(评判|打分|下定论)|"
     r"回到.{0,4}模块|走.{0,4}模块|交给|"
-    r"isn'?t|is not|doesn'?t|does not|cannot|can'?t|won'?t|will not|never|rather than|not a |no such")
+    r"isn'?t|is not|doesn'?t|does not|cannot|can'?t|won'?t|will not|never|rather than|not a |no such|"
+    r"\b[Ww]hether\b")
 
 
 # ---------------------------------------------------------------------------
@@ -758,10 +775,15 @@ def check_voice(text, locale=None):
                      "is what people mean by AI味."}
 
 
-def _find(text, patterns, code, severity, fix, respect_refusal=False):
+def _find(text, patterns, code, severity, fix, respect_refusal=False, skip_questions=False):
     out = []
     for pat, why in patterns:
         for m in re.finditer(pat, text, re.I):
+            if skip_questions:
+                # a sentence that asks is not a verdict (「你适合做产品经理吗？」)
+                ends = [e for e in (text.find(c, m.end()) for c in "。！？!?\n") if e != -1]
+                if ends and text[min(ends)] in "？?":
+                    continue
             if respect_refusal:
                 # the sentence this match sits in
                 bounds = "。！？!?\n；;."
@@ -837,8 +859,15 @@ def _check(text, module="none", locale=None):
                    "checkable about someone else's body or life. Rewrite as their own "
                    "relational tendency, and never forecast a third party.",
         })
+    if module == "career" and not CAREER_BAND.search(text):
+        f += _find(text, CAREER_FIT_VERDICT, "fit-verdict-without-a-score", "blocker", respect_refusal=True,
+                   skip_questions=True, fix=
+                   "career.md Mode B: a fit is what career_match.py measures. With no scored check there is "
+                   "no fit to report: say what --find matched, sketch the gap as questions to test, and offer "
+                   "the interest check. Once it is scored, report its band (Strong / Moderate / Low) with the "
+                   "confidence note.")
     if module == "synastry":
-        f += _find(text, SYNASTRY_VERDICT, "synastry-verdict", "blocker", respect_refusal=True, fix=
+        f += _find(text, SYNASTRY_VERDICT, "synastry-verdict", "blocker", respect_refusal=True, skip_questions=True, fix=
                    "synastry.py emits no 合/不合, no score, and no recommendation, by "
                    "construction. Report the branch relations as textures to notice "
                    "(「亥巳冲，传统上读作张力与推拉」), then say plainly that whether two "

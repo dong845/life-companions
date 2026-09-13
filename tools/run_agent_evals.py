@@ -127,6 +127,14 @@ def _tree_state(path):
     return state
 
 
+def _clip(text, head=6000, tail=2000):
+    """A command's output with its beginning kept: the payload a reply is graded against comes
+    first, and keeping only the tail lost it."""
+    if len(text) <= head + tail:
+        return text
+    return text[:head] + f"\n…[{len(text) - head - tail} characters cut]…\n" + text[-tail:]
+
+
 def _events(path):
     thread, commands, other = None, [], []
     with open(path, encoding="utf-8", errors="replace") as f:
@@ -141,7 +149,7 @@ def _events(path):
                 item = ev.get("item") or {}
                 if item.get("type") == "command_execution":
                     commands.append({"command": item.get("command") or "", "exit_code": item.get("exit_code"),
-                                     "output": (item.get("aggregated_output") or "")[-4000:]})
+                                     "output": _clip(item.get("aggregated_output") or "")})
                 elif item.get("type") != "agent_message":
                     other.append(item.get("type"))
     return thread, commands, other

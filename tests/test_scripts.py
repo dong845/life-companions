@@ -4857,13 +4857,21 @@ class TestGateReadsHowRefusalsAreWorded(unittest.TestCase):
         for text in ("不下“合／不合”的判决。你们日支亥巳相冲，传统上读作推拉感。",
                      "我不给合不合的结论，只说盘里有哪些关系。",
                      "这里不做「合不合」的判断，相处得怎么样是你们的事。",
-                     "I won't tell you whether you two are compatible; the chart only lists branch relations."):
+                     "I won't tell you whether you two are compatible; the chart only lists branch relations.",
+                     # a second codex run's wording, and others like it
+                     "这套传统规则不提供“合不合”的判决或分数。只从盘面看，有同频也有拉扯。",
+                     "我不会给出你们合不合的结论。",
+                     "盘里没有合不合的定论，只有几组关系。",
+                     "你问我们俩合不合？这里不下这个判决。",
+                     "Whether you two are compatible is made of what you do, not of the chart."):
             self.assertNotIn("synastry-verdict", self.gate("synastry", text), text)
 
     def test_a_verdict_that_only_shares_words_with_a_refusal_still_blocks(self):
         for text in ("你们放不下彼此，天生一对。",
                      "你们八字不合，不给自己留遗憾就早点分开。",
-                     "Honestly, you two are not compatible."):
+                     "Honestly, you two are not compatible.",
+                     "你们八字不合的结论很明确。",
+                     "你们天生一对，不需要什么评分。"):
             self.assertIn("synastry-verdict", self.gate("synastry", text), text)
 
     def test_the_synastry_disclaimer_is_read_in_its_common_wordings(self):
@@ -5019,6 +5027,13 @@ class TestAgentEvalsCanRun(unittest.TestCase):
         missing = self.r.evaluate({"checks": [{"turn": 2, "kind": "reply_has", "pattern": "."}]}, turns[:1])
         self.assertFalse(missing[0]["ok"], "a check on a turn that never ran must fail")
 
+    def test_a_long_command_output_keeps_its_beginning(self):
+        # the payload a reply is graded against comes first; keeping only the tail lost it
+        clipped = self.r._clip('{"first": true}' + "x" * 20000 + "LAST")
+        self.assertTrue(clipped.startswith('{"first": true}'))
+        self.assertTrue(clipped.endswith("LAST"))
+        self.assertLess(len(clipped), 9000)
+
     def test_the_command_line_refuses_what_it_cannot_do(self):
         listed = self.runner("--list")
         self.assertEqual(listed.returncode, 0, listed.stderr)
@@ -5092,8 +5107,35 @@ class TestForgetShowsWhatGoesBeforeDeleting(unittest.TestCase):
         self.assertIn("candidates", out)
         self.assertEqual(self.files(), before)
 
-class TestDeps(unittest.TestCase):
-    def test_doctor_reports_without_installing(self):
+class TestCareerFitNeedsAScore(unittest.TestCase):
+    """Answering first, a codex run asked whether a move into product management suited them
+    opened with 「适合，尤其适合…」 and 「很对口」 before any check had run: a fit verdict nothing
+    measured. In a career reply that carries no band from career_match.py, a fit verdict blocks."""
+
+    def gate(self, text):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "draft.md")
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(text)
+            r = subprocess.run([sys.executable, os.path.join(SCRIPTS, "selfcheck.py"), "--module", "career",
+                                "--file", path], capture_output=True, text=True, timeout=120)
+        return r.stdout + r.stderr
+
+    def test_a_fit_verdict_with_nothing_measured_blocks(self):
+        for text in ("适合，尤其适合先转向医疗 AI 方向的产品经理。",
+                     "你的背景很对口，转产品没问题。",
+                     "你非常适合做产品经理这个方向。",
+                     "Honestly, you're a great fit for product management."):
+            self.assertIn("fit-verdict-without-a-score", self.gate(text), text)
+
+    def test_measured_questioned_or_declined_fit_talk_passes(self):
+        for text in ("高档：Data Scientists、Biostatisticians。你可能更适合数据类岗位，这是兴趣线索，不是能力判断。",
+                     "Strong: Data Scientists. You're a good fit for data roles on this measure.",
+                     "适不适合，要等你做完兴趣小测才说得准。",
+                     "这个方向适合先做一次小验证。",
+                     "你适合做产品经理吗？做完 21 题的兴趣小测再说。",
+                     "Whether you're a good fit is what the interest check measures."):
+            self.assertNotIn("fit-verdict-without-a-score", self.gate(text), text)
         rep = jrun("companion.py", "doctor")
         self.assertIn("dependencies", rep)
         self.assertTrue(all("fix" in d for d in rep["dependencies"]))

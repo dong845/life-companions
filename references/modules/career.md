@@ -114,6 +114,14 @@ candidate is weak say that none of them is the job they named. Traditional scrip
 full-width letters and spaces are folded first, so 軟體工程師 and ＵＩ设计师 find the same
 titles as their plain forms.
 
+**No scored check yet? Then there is no fit to report.** Answer what can be known without
+one: what `--find` matched and whether it is the job itself, what the role involves day to
+day, and which parts of their background carry over, as questions to test rather than a
+verdict. Don't open with 适合/不适合 or call it 很对口: a fit is what `career_match.py`
+measures, and the gate blocks a fit verdict in a career reply that carries no band. Offer the
+interest check as options (the form, the 21 items in chat, or not now), and score it before
+saying where they fit.
+
 Then, two separate outputs, never merged into one number:
 1. **Fit** — congruence band of the person against the aspiration occupation
    vector (same engine), with confidence note.

@@ -179,6 +179,8 @@ data/content/         bazi-interpretation · bazi-life-arc · relationships
 data/career/          occupations.json (188 real O*NET, CC BY 4.0) · assessment_items.json
 data/zh/              OpenCC traditional→simplified table (Apache-2.0): the honesty gate and
                       the crisis scan fold traditional characters before matching
+tools/                build_occupations.py: rebuilds data/career/occupations.json from the
+                      O*NET databases (for maintainers; the skill never runs it)
 tests/                regression suite (plain unittest, fully offline)
 ```
 

@@ -153,6 +153,8 @@ data/content/         bazi-interpretation · bazi-life-arc · relationships
                       （真实框架的内容层，可直接编辑）
 data/career/          occupations.json（188 个真实 O*NET，CC BY 4.0）· assessment_items.json
 data/zh/              OpenCC 繁→简字表（Apache-2.0）：诚实闸门和危机扫描先把繁体转成简体再匹配
+tools/                build_occupations.py：从 O*NET 数据库重建 data/career/occupations.json
+                      （维护用，skill 运行时不会调用）
 tests/                回归测试（纯 unittest，全离线）
 ```
 

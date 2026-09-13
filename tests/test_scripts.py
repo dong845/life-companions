@@ -2264,6 +2264,139 @@ class TestOccupationDataIsOnet31(unittest.TestCase):
         self.assertEqual((len(r["numeric_interests"]), r["code_only"]), (188, []))
 
 
+class TestOccupationBuilder(unittest.TestCase):
+    """tools/build_occupations.py rebuilds data/career/occupations.json from the O*NET text
+    databases, so the next O*NET release is one command and anyone can check that the
+    shipped numbers are O*NET's. The databases aren't shipped, so these tests run the
+    builder on a miniature with two listed occupations and one it must ignore."""
+
+    HEAD = "O*NET-SOC Code\tElement ID\tElement Name\tScale ID\tData Value\tDate\tDomain Source"
+    OI = ["Realistic", "Investigative", "Artistic", "Social", "Enterprising", "Conventional"]
+    IH = ["First Interest High-Point", "Second Interest High-Point", "Third Interest High-Point"]
+    WV = [("1.B.2.a", "Achievement"), ("1.B.2.b", "Working Conditions"), ("1.B.2.c", "Recognition"),
+          ("1.B.2.d", "Relationships"), ("1.B.2.e", "Support"), ("1.B.2.f", "Independence")]
+
+    def setUp(self):
+        import importlib
+        import shutil
+        import tempfile
+        tools = os.path.join(SKILL, "tools")
+        if tools not in sys.path:
+            sys.path.insert(0, tools)
+        self.b = importlib.import_module("build_occupations")
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp)
+        self.idb, self.wdb = os.path.join(self.tmp, "interests"), os.path.join(self.tmp, "values")
+        os.makedirs(self.idb)
+        os.makedirs(self.wdb)
+        occ = {"11-1111.00": ("Alpha Workers", [2, 6, 1, 1, 1, 5], [2, 6, 0], 4),
+               "22-2222.00": ("Beta Workers", [7, 2, 1, 1, 1, 4], [1, 6, 2], 2),
+               "33-3333.00": ("Gamma Workers", [1, 1, 7, 1, 1, 1], [3, 0, 0], 3)}
+        self.write(self.idb, "Occupation Data.txt", "O*NET-SOC Code\tTitle\tDescription",
+                   [f"{c}\t{t}\tx" for c, (t, _, _, _) in occ.items()])
+        rows = []
+        for c, (_, oi, ih, _) in occ.items():
+            rows += [f"{c}\t1.B.1.{'abcdef'[i]}\t{n}\tOI\t{v:.2f}\tx\tMachine Learning/Expert"
+                     for i, (n, v) in enumerate(zip(self.OI, oi))]
+            rows += [f"{c}\t1.B.1.{'ghi'[i]}\t{n}\tIH\t{v:.2f}\tx\tMachine Learning/Expert"
+                     for i, (n, v) in enumerate(zip(self.IH, ih))]
+        self.write(self.idb, "Career Interest Types.txt", self.HEAD, rows)
+        self.write(self.idb, "Job Zones.txt", "O*NET-SOC Code\tJob Zone\tDate\tDomain Source",
+                   [f"{c}\t{z}\tx\tAnalyst" for c, (_, _, _, z) in occ.items()])
+        ex = {"Achievement": 5, "Working Conditions": 5, "Recognition": 3, "Relationships": 2,
+              "Support": 4, "Independence": 6}
+        self.write(self.wdb, "Work Values.txt", self.HEAD,
+                   [f"11-1111.00\t{eid}\t{n}\tEX\t{ex[n]:.2f}\tx\tAnalyst" for eid, n in self.WV])
+        self.data = os.path.join(self.tmp, "occupations.json")
+        self.prev = {
+            "version": "1.0.0+onet30.0",
+            "fetched_from": ["https://www.onetonline.org/explore/interests/Investigative/"],
+            "notes": {"mapped_terms": "none"},
+            "occupations": [
+                {"soc_code": "11-1111.00", "title": "Alpha Workers", "riasec": None,
+                 "high_point_code": "IC", "job_zone": None, "work_values": None,
+                 "source_url": "https://www.onetonline.org/explore/interests/Investigative/"},
+                {"soc_code": "22-2222.00", "title": "Beta Workers",
+                 "riasec": [7.0, 2.0, 1.0, 1.0, 1.0, 4.0], "high_point_code": "RCI", "job_zone": 2,
+                 "work_values": None,
+                 "source_url": "https://www.onetonline.org/explore/interests/Realistic/"}]}
+        self.save(self.prev)
+
+    @staticmethod
+    def write(folder, name, head, rows):
+        with open(os.path.join(folder, name), "w", encoding="utf-8") as f:
+            f.write(head + "\n" + "\n".join(rows) + "\n")
+
+    def save(self, doc):
+        with open(self.data, "w", encoding="utf-8") as f:
+            json.dump(doc, f, ensure_ascii=False, indent=1)
+
+    def text(self):
+        with open(self.data, encoding="utf-8") as f:
+            return f.read()
+
+    def build(self, *extra):
+        return self.b.main(["--interest-db", self.idb, "--work-values-db", self.wdb,
+                            "--data", self.data, *extra])
+
+    def test_builds_the_listed_occupations_from_the_tables(self):
+        self.assertEqual(self.build(), 0)
+        doc = json.loads(self.text())
+        self.assertEqual([o["soc_code"] for o in doc["occupations"]], ["11-1111.00", "22-2222.00"])
+        alpha, beta = doc["occupations"]
+        self.assertEqual((alpha["riasec"], alpha["high_point_code"], alpha["job_zone"]),
+                         ([2.0, 6.0, 1.0, 1.0, 1.0, 5.0], "IC", 4))
+        self.assertEqual((beta["high_point_code"], beta["work_values"],
+                          beta["work_values_extent_1_7"], beta["work_values_db"]),
+                         ("RCI", None, None, None))
+        self.assertEqual(alpha["source_url"], self.prev["occupations"][0]["source_url"])
+        self.assertEqual(doc["count"], 2)
+        self.assertIn("O*NET 31.0 Database", doc["attribution"])
+
+    def test_tied_work_values_rank_alphabetically(self):
+        self.assertEqual(self.build(), 0)
+        self.assertEqual(json.loads(self.text())["occupations"][0]["work_values"],
+                         {"Independence": 1, "Achievement": 2, "Working Conditions": 3,
+                          "Support": 4, "Recognition": 5, "Relationships": 6})
+
+    def test_a_changed_shipped_value_is_refused_until_allowed(self):
+        self.prev["occupations"][1]["riasec"] = [6.0, 2.0, 1.0, 1.0, 1.0, 4.0]
+        self.save(self.prev)
+        before = self.text()
+        self.assertEqual(self.build(), 3)
+        self.assertEqual(self.text(), before, "a refused build must not write")
+        self.assertEqual(self.build("--allow-changes"), 0)
+        self.assertEqual(json.loads(self.text())["occupations"][1]["riasec"],
+                         [7.0, 2.0, 1.0, 1.0, 1.0, 4.0])
+
+    def test_check_passes_on_its_own_output_and_fails_after_a_hand_edit(self):
+        self.assertEqual(self.build(), 0)
+        self.assertEqual(self.build("--check"), 0)
+        doc = json.loads(self.text())
+        doc["occupations"][0]["job_zone"] = 5
+        self.save(doc)
+        before = self.text()
+        self.assertEqual(self.build("--check"), 1)
+        self.assertEqual(self.text(), before, "--check must never write")
+
+    def test_a_missing_table_or_code_stops_without_writing(self):
+        before = self.text()
+        moved = os.path.join(self.tmp, "moved.txt")
+        os.rename(os.path.join(self.idb, "Job Zones.txt"), moved)
+        self.assertEqual(self.build(), 2)
+        self.assertEqual(self.text(), before)
+        os.rename(moved, os.path.join(self.idb, "Job Zones.txt"))
+        self.prev["occupations"].append(dict(self.prev["occupations"][0], soc_code="44-4444.00"))
+        self.save(self.prev)
+        before = self.text()
+        self.assertEqual(self.build(), 2)
+        self.assertEqual(self.text(), before)
+
+    def test_the_shipped_file_names_its_builder(self):
+        with open(os.path.join(SKILL, "data", "career", "occupations.json"), encoding="utf-8") as f:
+            self.assertIn("tools/build_occupations.py", json.load(f)["notes"]["build"])
+
+
 def _home_text(home):
     """Every byte of every file under a companion home, for residue searches."""
     out = []

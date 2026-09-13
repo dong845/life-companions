@@ -1257,10 +1257,11 @@ class TestZiweiInputValidation(unittest.TestCase):
         self.assertEqual(r["computed"]["lunar"]["year_ganzhi"], "癸酉")
         self.assertTrue(any("春节" in a for a in r["ambiguities"]), r["ambiguities"])
 
-    def test_missing_tz_is_disclosed(self):
+    def test_a_chart_without_a_zone_does_not_claim_beijing_time(self):
+        # the zone no longer moves the chart, so leaving it out is not a caveat about the chart
         import ziwei
         r = ziwei.compute("1993-04-12", "07:35", "m")
-        self.assertTrue(any("未提供出生地时区" in a for a in r["ambiguities"]))
+        self.assertFalse(any("北京时间" in a or "东八区" in a for a in r["ambiguities"]), r["ambiguities"])
 
 
 class TestSafetyScan(unittest.TestCase):
@@ -4866,6 +4867,166 @@ class TestGateReadsHowRefusalsAreWorded(unittest.TestCase):
     def test_the_synastry_disclaimer_is_read_in_its_common_wordings(self):
         out = self.gate("synastry", "命盘按传统规则计算；解读只是文化视角，不是科学预测。日支亥巳相冲，传统上读作推拉感。")
         self.assertNotIn("missing-disclaimer", out)
+
+class TestZiweiReadsTheBirthplaceClock(unittest.TestCase):
+    """紫微 moved a birth abroad onto Beijing time before charting, so 14:20 in Amsterdam was
+    cast as 戌时 instead of 未时, and 命宫, 身宫 and every star placed from the 时辰 turned with
+    it. A birth abroad is cast on the birthplace's own clock, the one bazi.py reads the 时柱
+    from; the zone only decides whether daylight-saving time needs a note."""
+
+    CASES = (("1995-08-30", "14:20", "f", "Europe/Amsterdam"), ("1993-04-12", "02:10", "m", "America/New_York"),
+             ("1995-08-30", "23:40", "f", "America/Los_Angeles"), ("1993-07-15", "06:05", "m", "Asia/Kolkata"),
+             ("1993-02-04", "11:30", "f", 1))
+
+    def test_the_zone_does_not_move_the_chart(self):
+        import ziwei
+        for date, time, gender, tz in self.CASES:
+            self.assertEqual(ziwei.compute(date, time, gender, tz=tz)["computed"],
+                             ziwei.compute(date, time, gender)["computed"], (date, time, tz))
+
+    def test_the_hour_is_read_off_the_local_clock(self):
+        import ziwei
+        for date, time, tz, zhi in (("1995-08-30", "14:20", "Europe/Amsterdam", "未"),
+                                    ("1993-04-12", "02:10", "America/New_York", "丑")):
+            self.assertEqual(ziwei.compute(date, time, "m", tz=tz)["computed"]["lunar"]["hour_zhi"], zhi, tz)
+
+    def test_daylight_saving_is_noted_with_the_standard_time_branch(self):
+        import ziwei
+        # 15:10 on an Amsterdam summer clock is 申时; standard time, 14:10, is 未时
+        notes = " ".join(ziwei.compute("1995-08-30", "15:10", "f", tz="Europe/Amsterdam")["ambiguities"])
+        self.assertIn("夏令时", notes)
+        self.assertIn("未时", notes)
+        # a winter clock, Dublin's negative winter offset and a zone without summer time say nothing
+        for date, tz in (("1993-02-04", "Europe/Amsterdam"), ("1993-02-04", "Europe/Dublin"),
+                         ("1995-08-30", "Asia/Shanghai")):
+            self.assertNotIn("夏令时", " ".join(ziwei.compute(date, "15:10", "f", tz=tz)["ambiguities"]), (date, tz))
+
+class TestFirstContactAnswersFirst(unittest.TestCase):
+    """A first message held all 21 career answers, and a codex run replied with questions about a
+    name, a city, a language and a tone, and no result: `brief` on a fresh home said "Run `init`,
+    then onboard", and onboarding.md put those four before any reading. The answer comes first
+    now; storing anything still waits for consent."""
+
+    def test_a_fresh_home_is_told_to_answer_first(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            r = jrun("companion.py", "brief", home=os.path.join(tmp, "none"))
+        self.assertFalse(r["initialized"])
+        self.assertIn("first", r["_next"].lower())
+        self.assertIn("consent", r["_next"])
+        self.assertNotRegex(r["_next"], r"^Not set up yet\. Run `init`, then onboard")
+
+    def test_the_onboarding_docs_no_longer_put_questions_before_the_answer(self):
+        with open(os.path.join(SKILL, "references", "onboarding.md"), encoding="utf-8") as f:
+            self.assertNotIn("before any reading", f.read())
+        with open(os.path.join(SKILL, "SKILL.md"), encoding="utf-8") as f:
+            self.assertNotIn("Don't launch into a chart before the minimum profile exists", f.read())
+
+
+class TestSetProfileKeepsTheSchema(unittest.TestCase):
+    """A codex run stored birth.gender as "f" where profile-schema.md says male or female, left
+    time_known unset for a birth time nobody knows (so it would be asked again), and left
+    identity.timezone empty right after storing "Amsterdam" as where they live."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.home = os.path.join(self.tmp.name, "home")
+        run("companion.py", "init", home=self.home)
+        run("companion.py", "consent", "--set", "birth=yes", home=self.home)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def profile(self):
+        r = jrun("companion.py", "read-profile", "--json", home=self.home)
+        return r.get("profile", r)
+
+    def set(self, patch, **kw):
+        return run("companion.py", "set-profile", "--merge-json", json.dumps(patch, ensure_ascii=False),
+                   home=self.home, **kw)
+
+    def test_gender_is_stored_as_the_schema_spells_it(self):
+        for given, stored in (("f", "female"), ("M", "male"), ("女", "female"), ("male", "male")):
+            self.set({"birth": {"date": "1995-08-30", "gender": given}})
+            self.assertEqual(self.profile()["birth"]["gender"], stored, given)
+
+    def test_a_gender_the_chart_cannot_use_is_refused_and_nothing_is_written(self):
+        before = self.profile()
+        code, out, _ = self.set({"birth": {"date": "1995-08-30", "gender": "x"}}, expect_ok=False)
+        self.assertEqual(code, 2, out)
+        self.assertEqual(self.profile(), before)
+
+    def test_what_follows_is_filled_in_and_what_is_missing_is_named(self):
+        _code, out, _ = self.set({"identity": {"location": "Amsterdam"},
+                                  "birth": {"date": "1995-08-30", "time": None, "time_accuracy": "unknown"}})
+        r = json.loads(out)
+        self.assertIn("resolve-tz", r.get("_next", ""))
+        self.assertIn("birth.time_known", r.get("normalized", {}))
+        self.assertIs(self.profile()["birth"]["time_known"], False)
+
+class TestAgentEvalsCanRun(unittest.TestCase):
+    """evals/evals.json held five scenarios from July that nothing ran, one of them contradicting
+    the shipped career scoring. tools/run_agent_evals.py runs them through codex now, so the file
+    has to stay runnable (every setup step a companion.py command that works, every module one
+    the gate knows) and a check has to grade what its name says."""
+
+    RUNNER = os.path.join(SKILL, "tools", "run_agent_evals.py")
+
+    @classmethod
+    def setUpClass(cls):
+        sys.path.insert(0, os.path.dirname(cls.RUNNER))
+        import run_agent_evals
+        cls.r = run_agent_evals
+        cls.evals = run_agent_evals.load_evals()
+
+    def runner(self, *args):
+        return subprocess.run([sys.executable, self.RUNNER, *args], capture_output=True, text=True, timeout=120)
+
+    def test_every_setup_step_seeds_a_home(self):
+        for e in self.evals:
+            with tempfile.TemporaryDirectory() as tmp:
+                for step in e.get("setup", []):
+                    code, out, err = run("companion.py", *self.r.setup_argv(step),
+                                         home=os.path.join(tmp, "home"), expect_ok=False)
+                    self.assertEqual(code, 0, (e["name"], step[0], out + err))
+
+    def test_every_module_is_one_the_gate_checks(self):
+        _code, out, _err = run("selfcheck.py", "--help", expect_ok=False)
+        modules = set(re.search(r"--module \{([^}]+)\}", out).group(1).split(","))
+        self.assertEqual([e["name"] for e in self.evals if e.get("module") not in modules], [])
+
+    def test_each_check_grades_what_it_says(self):
+        turns = [{"commands": [{"command": "python3 scripts/bazi.py --date 1993-04-12"}], "final": "年柱 癸酉",
+                  "home_after": {}, "selfcheck_exit": 0, "selfcheck": ""},
+                 {"commands": [{"command": "python3 scripts/companion.py forget --person 小李 --yes"}],
+                  "final": "已删除", "home_after": {"journal/2026-09.md": "小李子今天来了"},
+                  "selfcheck_exit": 1, "selfcheck": "BLOCKER"}]
+        checks = [
+            ({"turn": 1, "kind": "runs", "pattern": "bazi.py"}, True),
+            ({"turn": 2, "kind": "runs", "pattern": "bazi.py"}, False),
+            ({"turn": 1, "kind": "does_not_run", "pattern": "forget.*--yes"}, True),
+            ({"kind": "does_not_run", "pattern": "forget.*--yes"}, False),
+            ({"turn": 1, "kind": "reply_has", "pattern": "癸酉"}, True),
+            ({"turn": 1, "kind": "reply_lacks", "pattern": "癸酉"}, False),
+            ({"turn": 1, "kind": "home_empty"}, True),
+            ({"turn": 2, "kind": "home_empty"}, False),
+            ({"turn": 2, "kind": "file_has", "file": "journal/*.md", "pattern": "小李子"}, True),
+            ({"turn": 2, "kind": "file_lacks", "file": "journal/*.md", "pattern": "小李子"}, False)]
+        got = [c["ok"] for c in self.r.evaluate({"checks": [c for c, _ in checks]}, turns)]
+        # then the honesty gate on each turn: the first reply passed it, the second did not
+        self.assertEqual(got, [ok for _, ok in checks] + [True, False])
+        missing = self.r.evaluate({"checks": [{"turn": 2, "kind": "reply_has", "pattern": "."}]}, turns[:1])
+        self.assertFalse(missing[0]["ok"], "a check on a turn that never ran must fail")
+
+    def test_the_command_line_refuses_what_it_cannot_do(self):
+        listed = self.runner("--list")
+        self.assertEqual(listed.returncode, 0, listed.stderr)
+        self.assertEqual(len(listed.stdout.strip().splitlines()), len(self.evals))
+        self.assertEqual(self.runner("--only", "no-such-scenario").returncode, 2)
+        inside = os.path.join(SKILL, "evals", "results-here")
+        r = self.runner("--out", inside, "--only", self.evals[0]["name"])
+        self.assertEqual(r.returncode, 2, r.stderr)
+        self.assertIn("outside the skill folder", r.stderr)
+        self.assertFalse(os.path.exists(inside))
 
 class TestDeps(unittest.TestCase):
     def test_doctor_reports_without_installing(self):

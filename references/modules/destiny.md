@@ -359,10 +359,13 @@ and 流年命宫.
 宫干四化 (飞星), the long tail of 杂曜, and 三方四正 as an interpretive method. This is
 also why there is still **no 紫微 daily layer** in the daily-fortune card.
 
-**Pass `--tz`.** The lunar date and the hour branch both come off a clock the engine
-resolves against China Standard Time, so a birth outside UTC+8 can land on the wrong
-lunar DAY — and the lunar day is what places 紫微 itself, which moves the entire chart.
-Without it the payload says it assumed Beijing time; surface that.
+**The chart is cast on the birthplace's own clock.** The lunar day and the 时辰 come from
+the birth date and time as recorded where they were born, the clock the 八字 时柱 uses too:
+14:20 in Amsterdam is 未时, not the Beijing hour it happened to be. (This engine used to
+convert a birth abroad to Beijing time first, which moved 命宫 and every star with it;
+practitioners cast a birth abroad on its local time.) Still pass `--tz`: the chart does
+not move with it, but it is how the engine knows daylight-saving time was in force, and
+then it names the 时辰 standard time would give. Surface that note.
 
 **The year stem comes from the LUNAR year, not 立春.** 斗数 places 命宫 and 紫微 from the
 lunar month and day, so its year turns at 春节; 立春 is BaZi's boundary. A birth in the

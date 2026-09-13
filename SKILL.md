@@ -102,14 +102,18 @@ coherent, safe, and non-repetitive.
    `_wellbeing_check` (two weeks of mostly low moods, not a crisis), lead with care rather
    than a reading: safety.md §2b.
 
-3. **Onboard if needed.** If `brief` shows `initialized:false` or
-   `onboarding_complete:false`, run `companion.py init` if needed. **Prefer the HTML
-   form** — `form_server.py --form onboarding` (see `references/forms.md`); it's
-   clearer than asking field-by-field, and it stops itself after they submit. The chat
-   flow in `references/onboarding.md` is a **fully supported equal**, not a sad
-   fallback — take it whenever a browser or a background process is awkward, or they'd
-   rather just talk. Don't launch into a chart before the minimum profile exists — but
-   never force onboarding during a crisis.
+3. **Answer first; onboarding fills in around it.** No module needs a profile to compute:
+   take what they gave you in the message and do what they asked. `initialized:false` or
+   `onboarding_complete:false` in `brief` decides what you *offer* afterwards, not whether
+   you answer. Only two things come before the answer: what the computation itself needs
+   (a chart needs a birth date), and consent before anything is **stored** — run
+   `companion.py init` and `consent --set …` only when something is being saved; a chart
+   can be computed and read without saving anything. Read the language from their message
+   and keep the default tone; at the end, offer the rest of the profile as one short set of
+   options (`references/onboarding.md`). The **HTML form** (`form_server.py --form
+   onboarding`, see `references/forms.md`) is the nicer way to fill it in when a browser
+   and a background process are easy; the chat flow is a fully supported equal. Never
+   onboard during a crisis.
 
 4. **Follow through on what's due.** `brief`'s `followups_due` lists open
    *action*-threads that haven't been nudged lately. If any are due and the moment fits
@@ -324,6 +328,7 @@ data/content/                curated interpretation notes (the editable layer)
 data/career/                 O*NET occupations.json (CC BY 4.0) + assessment_items.json
 data/zh/                     OpenCC traditional→simplified table the gates fold with (Apache-2.0)
 tools/build_occupations.py   rebuilds data/career/occupations.json from O*NET (maintainers only)
+tools/run_agent_evals.py     runs evals/evals.json through codex, one throwaway project each (maintainers only)
 tests/test_scripts.py        regression suite — `python3 tests/test_scripts.py`
 AGENTS.md                    entry point for harnesses that read AGENTS.md
 ```

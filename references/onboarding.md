@@ -17,8 +17,11 @@ person strongly prefers picking over typing. Use `AskUserQuestion` if your harne
 it; otherwise a short **numbered list** they answer with numbers. Keep free text for
 names and dates only.
 
-## Tier 0 — identity (always, ~4 quick things)
-Collect once, up front, before any reading:
+## Tier 0 — identity (~4 quick things, after the first answer)
+Offer these once, **after** you have answered what they came for, as one short list of
+options. Don't hold the answer back for them: read the language from the message they
+wrote, keep the default tone until they pick one, and ask where they are when it matters
+(daily timing; the crisis table, where an unknown location means findahelpline.com):
 - **What to call you** (free text).
 - **Language** → sets `identity.locale` (offer 中文 / English / 双语). Ask in the
   language they wrote to you in.
@@ -34,7 +37,9 @@ Collect once, up front, before any reading:
 Write with `companion.py set-profile --merge-json '{"identity":{…},"preferences":{…}}'`.
 
 ## Tier 1 — birth block (only for destiny / daily-fortune)
-First **ask consent**, as options — birth data is sensitive, and it stays on this machine:
+Before anything is **stored**, ask consent, as options — birth data is sensitive, and it stays
+on this machine. If they already gave the details in their message, compute and answer first,
+then ask:
 **存到本机** · **这次算一下，不存** · **不提供**.
 - 存到本机 → `companion.py consent --set birth=yes`, then collect the fields below.
 - 这次算一下，不存 → take the details from the conversation and compute directly
@@ -91,14 +96,19 @@ quiz. See `modules/relationships.md`.
 
 ## Finishing
 When Tier 0 (+ whatever tier the request needed) is in, mark onboarding done —
-`companion.py set-profile --merge-json '{"onboarding_complete": true}'` — and go
-straight to fulfilling the original request —
-don't make them re-ask. A good first run ends with the thing they came for
-(their chart, their first logged day), not a form.
+`companion.py set-profile --merge-json '{"onboarding_complete": true}'`. A good first run
+starts and ends with the thing they came for (their chart, their first logged day, their
+career read); the profile questions ride along at the end, never in front of it.
 
-## Example (first message = "帮我看看八字")
-1. `status` → not initialized → `init`.
-2. Tier 0 (4 options-based questions) → `set-profile`.
-3. Consent birth → Tier 1 birth block → `set-profile`.
-4. Straight into `modules/destiny.md` → compute → deliver their 命盘. One
-   disclaimer note at the top (from disclaimers.md), then the reading.
+## Example (first message = "帮我看看八字，1993-04-12 07:35，男，北京")
+1. `brief` → not initialized. They gave everything the chart needs, so compute it now
+   (`modules/destiny.md`) and deliver their 命盘: one disclaimer note at the top (from
+   disclaimers.md), then the reading. Nothing is stored yet.
+2. At the end, one list of options: keep the birth details on this machine / only this
+   time / don't keep them, plus what to call them, language and tone.
+3. If they choose to keep them: `init` → `consent --set birth=yes` → `set-profile` with the
+   birth block (resolve `tz_at_birth` and the coordinates) and whatever Tier 0 they
+   answered → `onboarding_complete: true`.
+
+If the first message is only "帮我看看八字", the birth details are what the chart needs: ask
+for them, with the three consent options, before computing.

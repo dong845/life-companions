@@ -613,21 +613,58 @@ def cmd_read_profile(args):
         print(yaml.dump(prof, allow_unicode=True, sort_keys=False))
 
 
+# birth.gender is the 大运 convention the chart needs (references/onboarding.md), stored the way
+# profile-schema.md spells it. A codex run stored "f".
+_CHART_GENDER = {"m": "male", "male": "male", "男": "male", "f": "female", "female": "female", "女": "female"}
+
+
 def cmd_set_profile(args):
     home = home_dir(args.home)
     p = _paths(home)
     prof = _load_yaml(p["profile"])
     patch = json.loads(args.merge_json)
-    if isinstance(patch.get("birth"), dict) and any(
-            v is not None for v in patch["birth"].values()):
+    birth = patch.get("birth") if isinstance(patch.get("birth"), dict) else None
+    if birth and any(v is not None for v in birth.values()):
         refusal = _refuse_ungated(home, "birth")
         if refusal:
             print(json.dumps(refusal, ensure_ascii=False, indent=2))
             raise SystemExit(3)
+    normalized = {}
+    if birth and birth.get("gender") is not None:
+        given = birth["gender"]
+        stored = _CHART_GENDER.get(str(given).strip().lower())
+        if stored is None:
+            print(json.dumps({
+                "ok": False,
+                "error": f"birth.gender {given!r} is not a chart convention: store male or female",
+                "why": ("the 大运 direction rule has exactly two conventions; it is a setting the chart "
+                        "needs, not a statement about the person (references/onboarding.md)"),
+                "_next": "Nothing was changed. Ask which of the two to use, then store it."},
+                ensure_ascii=False))
+            raise SystemExit(2)
+        if stored != given:
+            normalized["birth.gender"] = f"{given} -> {stored}"
+        birth["gender"] = stored
     _deep_merge(prof, patch)
+    b = prof.get("birth") if isinstance(prof.get("birth"), dict) else {}
+    # a birth time nobody knows is time_known: false, so it is never asked again
+    if b.get("time_accuracy") == "unknown" and not b.get("time") and b.get("time_known") is not False:
+        b["time_known"] = False
+        normalized["birth.time_known"] = "false, because time_accuracy is unknown"
+    elif b.get("time") and b.get("time_known") is None:
+        b["time_known"] = True
+        normalized["birth.time_known"] = "true, because a birth time is stored"
     prof["updated"] = _today()
     _save_yaml(p["profile"], prof)
-    print(json.dumps({"ok": True, "updated_keys": list(patch.keys())}, ensure_ascii=False))
+    out = {"ok": True, "updated_keys": list(patch.keys())}
+    if normalized:
+        out["normalized"] = normalized
+    ident = prof.get("identity") if isinstance(prof.get("identity"), dict) else {}
+    if ident.get("location") and not ident.get("timezone"):
+        out["_next"] = (f"identity.location is {ident['location']!r} but identity.timezone is empty. Run "
+                        f"`companion.py resolve-tz \"{ident['location']}\"` and store the zone when it gives "
+                        "one clear answer: it sets daily timing and which crisis line is offered.")
+    print(json.dumps(out, ensure_ascii=False))
 
 
 _YES, _NO = ("yes", "true", "1", "y"), ("no", "false", "0", "n")
@@ -769,8 +806,11 @@ def cmd_brief(args):
     if not os.path.exists(p["profile"]):
         print(json.dumps({
             "initialized": False, "home": home,
-            "_next": "Not set up yet. Run `init`, then onboard (references/onboarding.md; "
-                     "prefer the HTML form). Never force onboarding during a crisis.",
+            "_next": ("Not set up yet, and nothing has to be: answer what they asked first, since no "
+                      "module needs a profile to compute. Run `init` and ask consent only when "
+                      "something is to be stored, and offer the rest of onboarding "
+                      "(references/onboarding.md) after the answer, as options. Never onboard during "
+                      "a crisis."),
         }, ensure_ascii=False, indent=2))
         return
 

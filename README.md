@@ -183,6 +183,8 @@ data/zh/              OpenCC traditional→simplified table (Apache-2.0): the ho
                       the crisis scan fold traditional characters before matching
 tools/                build_occupations.py: rebuilds data/career/occupations.json from the
                       O*NET databases (for maintainers; the skill never runs it)
+                      run_agent_evals.py: runs evals/evals.json through codex, one throwaway
+                      project and home each (for maintainers)
 tests/                regression suite (plain unittest, fully offline)
 ```
 

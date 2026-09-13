@@ -176,27 +176,21 @@ def compute(date, time=None, gender="m", on_year=None, tz=None):
 
     ambiguities = []
 
-    # The lunar date and the hour branch both come from a wall clock that
-    # lunar-python resolves against China Standard Time. Same trap bazi.py had: a
-    # birth outside UTC+8 can land on the wrong lunar DAY, which moves 紫微 itself.
+    # 斗数 is cast on the birthplace's own clock: its date gives the lunar day and its hour the
+    # 时辰, the clock bazi.py reads the 日柱 and 时柱 from. This engine used to move a birth
+    # abroad onto Beijing time first, so 14:20 in Amsterdam was cast as 戌时 instead of 未时 and
+    # every palace turned with it. A birth abroad is charted on its local time, not converted
+    # back to 中原 time (紫雲, 平一論命「斗數時辰的取用」); the zone only tells whether
+    # daylight-saving time was in force.
     dt = datetime.datetime(y, m, d, hh, mm)
-    if tz is not None:
-        if isinstance(tz, (int, float)):
-            off = float(tz)
-        else:
-            from zoneinfo import ZoneInfo
-            off = dt.replace(tzinfo=ZoneInfo(tz)).utcoffset().total_seconds() / 3600.0
-        if abs(off - 8.0) > 1e-9:
-            dt = dt + datetime.timedelta(hours=8.0 - off)
-            ambiguities.append(
-                f"出生地时区 {tz}：农历日与时辰按绝对时刻折算到东八区（等效北京时间 "
-                f"{dt.strftime('%Y-%m-%d %H:%M')}）后起盘。海外出生的取法各家不同，"
-                f"这是本引擎的公开约定。")
-    else:
-        ambiguities.append(
-            "未提供出生地时区（--tz）：本引擎的农历与时辰以东八区为准，此盘按"
-            "「出生钟点即北京时间」计算。出生地不在东八区时，农历日可能差一天，"
-            "紫微与命宫会随之移位——请补上 --tz。")
+    summer = None
+    if hour_known and isinstance(tz, str):
+        from zoneinfo import ZoneInfo
+        dst = dt.replace(tzinfo=ZoneInfo(tz)).dst() or datetime.timedelta(0)
+        # zoneinfo gives Dublin's winters a NEGATIVE dst: that clock sits behind the zone's
+        # nominal offset, which is not summer time
+        if dst > datetime.timedelta(0):
+            summer = dst
 
     solar = Solar.fromYmdHms(dt.year, dt.month, dt.day, dt.hour, dt.minute, 0)
     lunar = solar.getLunar()
@@ -217,6 +211,21 @@ def compute(date, time=None, gender="m", on_year=None, tz=None):
     year_gan, year_zhi = year_gz[0], year_gz[1]
     hour_zhi = lunar.getTimeZhi()
     hour_i = IDX[hour_zhi]
+    if summer is not None:
+        # many charting apps take daylight-saving time off first; say what that would give
+        std = dt - summer
+        std_lunar = Solar.fromYmdHms(std.year, std.month, std.day, std.hour, std.minute, 0).getLunar()
+        std_zhi = std_lunar.getTimeZhi()
+        same_day = (std_lunar.getMonth(), std_lunar.getDay()) == (lunar.getMonth(), lunar.getDay())
+        if std_zhi != hour_zhi or not same_day:
+            mins = int(summer.total_seconds() // 60)
+            ahead = f"{mins // 60} 小时" if mins % 60 == 0 else f"{mins} 分钟"
+            ambiguities.append(
+                f"出生时 {tz} 正实行夏令时，钟表比标准时间快 {ahead}：本盘按记录的钟点 "
+                f"{dt.strftime('%H:%M')} 取{hour_zhi}时；按标准时间 {std.strftime('%H:%M')} 取{std_zhi}时"
+                + ("" if same_day else
+                   f"，农历日也换成{abs(std_lunar.getMonth())}月{std_lunar.getDay()}日")
+                + "。有的排盘软件会先减去夏令时，对照时看到的命盘可能不同。")
     if hour_known:
         # In 斗数 the whole chart hangs off the 时辰, and a 时辰 turns on every odd hour.
         minutes = dt.hour * 60 + dt.minute
@@ -527,8 +536,8 @@ def main():
     ap.add_argument("--on-year", type=int, default=None, help="also compute 流年命宫")
     ap.add_argument("--tz", default=None,
                     help="BIRTHPLACE timezone: IANA name (Europe/Amsterdam) or UTC offset "
-                         "(1, -5, +05:30, UTC+8). Without it the birth clock is assumed to be "
-                         "Beijing time and the lunar day — which places 紫微 — can be off by one.")
+                         "(1, -5, +05:30, UTC+8). The chart is cast on the birth clock as given; "
+                         "an IANA zone adds a note when daylight-saving time was in force.")
     ap.add_argument("--format", choices=["json", "text"], default="json")
     ap.add_argument("--selftest", action="store_true")
     args = ap.parse_args(argv_with_offsets(("--tz",)))

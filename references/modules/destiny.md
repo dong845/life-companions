@@ -45,10 +45,12 @@ python3 $D/scripts/bazi.py \
 `--time-window <birth.time_window_min>`. The payload's `time_window` lists every pillar
 the chart could have inside that window, and `changes` names the ones that actually move:
 read those as uncertain and say so; read the rest normally. The ambiguities also flag a
-birth within 15 minutes of a 时辰 boundary (naming both 时柱), a birth within a day of any
-節 (the 月柱; 立春 has its own note for the 年柱), and — when a longitude is known but TST
-is off — the 时柱 True Solar Time would give. Pass these on in plain words. They are the
-places a chart is least sure of itself, and the usual reason two apps disagree.
+birth within 15 minutes of a 时辰 boundary (naming both 时柱) or of the 日柱's turn (midnight
+under 晚子时, 23:00 under 早子时 — naming both 日柱, since the 日柱 carries the 日主), a birth
+within a day of any 節 (the 月柱; 立春 has its own note for the 年柱), a daylight-saving
+birth whose standard-time 日柱 or 时柱 differs, and — when a longitude is known but TST is
+off — the 日柱 and 时柱 True Solar Time would give. Pass these on in plain words. They are
+the places a chart is least sure of itself, and the usual reason two apps disagree.
 
 **`--tz` is not optional for a birth outside China.** 節氣 are absolute astronomical
 instants and the engine resolves them on a Beijing clock, so without the birthplace
@@ -62,7 +64,8 @@ surface that to the person rather than letting it pass.
 
 **True Solar Time changes the clock, not the moment of birth.** With `--true-solar-time`
 the 时柱 is read off the longitude-corrected clock, and so is the 日柱 when the correction
-crosses midnight (the payload says so when it does). 年柱, 月柱, 立春 and 起运 stay on the
+carries the birth across the 日柱's turn — midnight under 晚子时, 23:00 under 早子时 (the
+payload names both 日柱 when it does). 年柱, 月柱, 立春 and 起运 stay on the
 real birth instant. TST used to shift that instant too, so switching it on could move
 立春 and give a western-China birth a different year pillar and a 大运 running the other
 way. Everything the payload derives — 十神, the 五行 tally, 大运, 生肖, 命宫/胎元 — is read

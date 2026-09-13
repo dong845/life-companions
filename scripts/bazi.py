@@ -639,6 +639,33 @@ def _pillar_at(dt, late_zishi, which):
     return getattr(ec, f"get{which}")()
 
 
+def _moved_pillars(chart_clock, other_clock, late_zishi):
+    """The 日柱 and 时柱 that differ between the clock the chart uses and another reading of
+    the same birth, as [(name, on the chart's clock, on the other)]. Compared as pillars,
+    never as calendar dates: under 早子时 the 日柱 turns at 23:00, so a date that changes
+    can leave it alone and a date that stays can move it."""
+    moved = []
+    for name, which in (("日柱", "Day"), ("时柱", "Time")):
+        mine = _pillar_at(chart_clock, late_zishi, which)
+        other = _pillar_at(other_clock, late_zishi, which)
+        if mine != other:
+            moved.append((name, mine, other))
+    return moved
+
+
+def _say_moved(moved):
+    """('日柱会是壬戌（日主变成壬）、时柱会是辛亥', '日柱癸亥、时柱壬子') for a note."""
+    would = "、".join(f"{name}会是{other}" + (f"（日主变成{other[0]}）" if name == "日柱" else "")
+                     for name, _, other in moved)
+    used = "、".join(f"{name}{mine}" for name, mine, _ in moved)
+    return would, used
+
+
+def _clock_text(dt, reference):
+    """HH:MM, with the date in front when it isn't `reference`'s date."""
+    return dt.strftime("%H:%M" if dt.date() == reference.date() else "%Y-%m-%d %H:%M")
+
+
 def compute(date, time, gender, lon=None, true_solar_time=False,
             standard_meridian=None, late_zishi=True, on_date=None, tz=None,
             time_window=None):
@@ -668,28 +695,52 @@ def compute(date, time, gender, lon=None, true_solar_time=False,
         ambiguities.append(
             f"真太阳时已启用：时柱按修正后的钟点 {local.strftime('%H:%M')} 取（经度+均时差）；"
             "年柱、月柱和起运按出生的实际时刻对节气，真太阳时不改变它们。")
-        if local.date() != civil.date():
+        # Compared as pillars: under 早子时 the 日柱 turns at 23:00, so a date that changes
+        # can leave it alone and a date that stays can move it.
+        moved_day = [m for m in _moved_pillars(local, civil, late_zishi) if m[0] == "日柱"]
+        if moved_day:
+            _, solar_day, clock_day = moved_day[0]
             ambiguities.append(
-                f"真太阳时把钟点移过了零点（{local.strftime('%Y-%m-%d %H:%M')}）：日柱按"
-                "这一天取，和按钟表时间取的日柱不同。")
+                f"真太阳时把钟点移到了 {_clock_text(local, civil)}，日柱也跟着换了：本盘按修正后"
+                f"的钟点取{solar_day}（日主{solar_day[0]}）；按钟表时间取是{clock_day}（日主"
+                f"{clock_day[0]}）。")
     elif true_solar_time and lon is None:
         ambiguities.append("请求真太阳时但未提供经度，已回退为民用标准时。")
     elif true_solar_time:
         ambiguities.append("出生时刻未知：真太阳时无从修正（时柱本来就不计算）。")
 
     # Knowing the longitude but charting on the clock is a real choice, and a common reason
-    # two charts of one person disagree. If True Solar Time would give another 时柱, say which.
+    # two charts of one person disagree. If True Solar Time would give another 日柱 or 时柱,
+    # say which.
     if hour_known and lon is not None and not true_solar_time:
         solar_clock = _apply_true_solar_time(civil, lon, standard_meridian)
-        clock_hour = _pillar_at(civil, late_zishi, "Time")
-        solar_hour = _pillar_at(solar_clock, late_zishi, "Time")
-        if clock_hour != solar_hour:
-            crossed = ("，而且跨过了零点，日柱也会不同" if solar_clock.date() != civil.date() else "")
+        moved = _moved_pillars(civil, solar_clock, late_zishi)
+        if moved:
+            would, used = _say_moved(moved)
             ambiguities.append(
-                f"按真太阳时（经度 {lon:g}°）算，出生时刻是 {solar_clock.strftime('%H:%M')}，"
-                f"时柱会是{solar_hour}{crossed}；本盘按钟表时间取{clock_hour}。不同排盘软件"
-                "的默认做法不一样，对照时看到的时柱可能不同。想按真太阳时起盘，加 "
-                "--true-solar-time。")
+                f"按真太阳时（经度 {lon:g}°）算，出生时刻是 {_clock_text(solar_clock, civil)}，"
+                f"{would}；本盘按钟表时间取{used}。不同排盘软件的默认做法不一样，对照时看到的"
+                "四柱可能不同。想按真太阳时起盘，加 --true-solar-time。")
+
+    # Daylight-saving time runs the clock ahead of the zone's standard time (an hour; half
+    # an hour on Lord Howe), and many charting apps take it off before reading the 日柱 and
+    # 时柱. True Solar Time reads the real instant, so it has nothing to add there.
+    if hour_known and isinstance(tz, str) and not tst_applied:
+        from zoneinfo import ZoneInfo
+        dst = civil.replace(tzinfo=ZoneInfo(tz)).dst() or datetime.timedelta(0)
+        # zoneinfo gives Dublin's winters and Morocco's Ramadan months a NEGATIVE dst: those
+        # clocks sit behind the zone's nominal offset, which is not summer time
+        if dst > datetime.timedelta(0):
+            standard = civil - dst
+            moved = _moved_pillars(civil, standard, late_zishi)
+            if moved:
+                would, used = _say_moved(moved)
+                mins = int(dst.total_seconds() // 60)
+                ahead = f"{mins // 60} 小时" if mins % 60 == 0 else f"{mins} 分钟"
+                ambiguities.append(
+                    f"出生时 {tz} 正实行夏令时，钟表比标准时间快 {ahead}：本盘按记录的钟点 "
+                    f"{civil.strftime('%H:%M')} 取{used}；按标准时间 {_clock_text(standard, civil)}"
+                    f" 取，{would}。有的排盘软件会先减去夏令时，对照时看到的四柱可能不同。")
 
     if hour_known and local.hour == 23:
         ambiguities.append(
@@ -703,21 +754,35 @@ def compute(date, time, gender, lon=None, true_solar_time=False,
         ambiguities.append("出生时刻未知也会影响起运：起运时刻由出生到节气的间隔折算，"
                            "时辰不同可差数月，大运的换运年份因此有出入。")
 
-    # A 時辰 turns on every odd hour. Within a few minutes of one, the recorded time decides
-    # the 时柱, and recorded times are often a few minutes off. Judged on the clock the chart
-    # actually uses (the TST clock when TST is on).
+    # A 時辰 turns on every odd hour, and the 日柱 turns at midnight under 晚子时 and at 23:00
+    # under 早子时. Within a few minutes of either, the recorded time decides the pillar, and
+    # recorded times are often a few minutes off. Judged on the clock the chart actually uses
+    # (the TST clock when TST is on).
     if hour_known:
+        said = "修正后的出生时刻" if tst_applied else "出生时刻"
         minutes = local.hour * 60 + local.minute
+        midnight = local.replace(hour=0, minute=0)
         edge = min(range(-60, 24 * 60 + 61, 120), key=lambda b: abs(minutes - b))
         gap = abs(minutes - edge)
         if gap <= SHICHEN_MARGIN_MIN:
-            turn = local.replace(hour=0, minute=0) + datetime.timedelta(minutes=edge)
+            turn = midnight + datetime.timedelta(minutes=edge)
             before = _pillar_at(turn - datetime.timedelta(minutes=1), late_zishi, "Time")
             after = _pillar_at(turn, late_zishi, "Time")
             ambiguities.append(
-                f"出生时刻 {local.strftime('%H:%M')} 离时辰分界（{turn.strftime('%H:%M')}）只有 "
+                f"{said} {local.strftime('%H:%M')} 离时辰分界（{turn.strftime('%H:%M')}）只有 "
                 f"{gap} 分钟：分界之前是{before}时，之后是{after}时。记录差几分钟，时柱就会换"
                 "一柱，请确认出生时间。")
+        edge = min((0, 24 * 60) if late_zishi else (-60, 23 * 60), key=lambda b: abs(minutes - b))
+        gap = abs(minutes - edge)
+        if gap <= SHICHEN_MARGIN_MIN:
+            turn = midnight + datetime.timedelta(minutes=edge)
+            before = _pillar_at(turn - datetime.timedelta(minutes=1), late_zishi, "Day")
+            after = _pillar_at(turn, late_zishi, "Day")
+            ambiguities.append(
+                f"{said} {local.strftime('%H:%M')} 离日柱的分界（{turn.strftime('%H:%M')}，"
+                + ("晚子时零点换日" if late_zishi else "早子时 23:00 换日")
+                + f"）只有 {gap} 分钟：分界之前是{before}日，之后是{after}日。日柱带着日主，"
+                "记录差几分钟日主就会换，请确认出生时间。")
 
     # The INSTANT (年柱/月柱, 立春, 大运, 起运): the civil clock on a Beijing wall clock.
     # Always from `civil`, never from `local`.

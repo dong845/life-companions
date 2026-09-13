@@ -3509,6 +3509,98 @@ class TestTimezoneArgumentsAreReadOrRefused(unittest.TestCase):
         self.assertEqual(code, 0, err)
 
 
+class TestNotesSayWhenTheDayPillarMoves(unittest.TestCase):
+    """The 日柱 carries the 日主, so a note that misses it misses the centre of the chart.
+    The True Solar Time notes compared calendar dates and 时柱 only: under the default
+    晚子时 a Chengdu birth at 00:20 moves to 23:15 the evening before and changes its 日主
+    with no note at all, and under 早子时 the note said the 日柱 moved when it hadn't and
+    stayed silent when it had. Midnight, where the late rule turns the 日柱, had no
+    boundary note, and a birth on daylight-saving time never said that its 时柱 came off a
+    clock an hour ahead of standard time."""
+
+    CHENGDU = dict(tz="Asia/Shanghai", lon=104.07)
+
+    @staticmethod
+    def chart(**kw):
+        import bazi
+        return bazi.compute(**kw)
+
+    @staticmethod
+    def day(r):
+        return r["computed"]["pillars"]["day"]["ganzhi"]
+
+    def test_a_known_longitude_names_the_day_pillar_true_solar_time_gives(self):
+        base = dict(date="1993-04-12", time="00:20", gender="m", **self.CHENGDU)
+        clock, solar = self.chart(**base), self.chart(**base, true_solar_time=True)
+        self.assertNotEqual(self.day(clock), self.day(solar))
+        notes = [a for a in clock["ambiguities"] if "真太阳时" in a]
+        self.assertTrue(notes, clock["ambiguities"])
+        self.assertIn(self.day(clock), notes[0])
+        self.assertIn(self.day(solar), notes[0])
+
+    def test_the_true_solar_time_day_note_follows_the_pillars_under_either_rule(self):
+        import datetime
+        start = datetime.datetime(2024, 3, 11, 22, 30)
+        for late in (True, False):
+            for step in range(0, 181, 15):          # 22:30 to 01:30 on the Chengdu clock
+                t = start + datetime.timedelta(minutes=step)
+                base = dict(date=t.date().isoformat(), time=t.strftime("%H:%M"), gender="f",
+                            late_zishi=late, **self.CHENGDU)
+                clock, solar = self.chart(**base), self.chart(**base, true_solar_time=True)
+                moved = self.day(clock) != self.day(solar)
+                for r, tst in ((clock, False), (solar, True)):
+                    said = any("真太阳时" in a and "日柱" in a for a in r["ambiguities"])
+                    self.assertEqual(said, moved, (t, "late" if late else "early", tst,
+                                                   self.day(clock), self.day(solar),
+                                                   r["ambiguities"]))
+
+    def test_minutes_from_the_day_turn_name_both_day_pillars(self):
+        # 晚子时 turns the 日柱 at midnight, 早子时 at 23:00
+        import bazi, datetime
+        for late, turn in ((True, datetime.datetime(2024, 3, 12, 0, 0)),
+                           (False, datetime.datetime(2024, 3, 11, 23, 0))):
+            before = bazi._pillar_at(turn - datetime.timedelta(minutes=1), late, "Day")
+            after = bazi._pillar_at(turn, late, "Day")
+            self.assertNotEqual(before, after)
+            for off in (-16, -15, -1, 0, 1, 15, 16):
+                t = turn + datetime.timedelta(minutes=off)
+                r = self.chart(date=t.date().isoformat(), time=t.strftime("%H:%M"), gender="f",
+                               tz="Asia/Shanghai", late_zishi=late)
+                notes = [a for a in r["ambiguities"] if "日柱" in a and "分界" in a]
+                self.assertEqual(bool(notes), abs(off) <= bazi.SHICHEN_MARGIN_MIN,
+                                 (t, late, r["ambiguities"]))
+                if notes:
+                    self.assertIn(f"之前是{before}日", notes[0])
+                    self.assertIn(f"之后是{after}日", notes[0])
+
+    def test_a_daylight_saving_birth_names_the_standard_time_pillars(self):
+        r = self.chart(date="1993-07-15", time="13:30", gender="m", tz="Europe/Amsterdam")
+        notes = [a for a in r["ambiguities"] if "夏令时" in a]
+        self.assertTrue(notes, r["ambiguities"])
+        for want in ("12:30", "丙午", "丁未"):
+            self.assertIn(want, notes[0])
+        r = self.chart(date="1993-07-15", time="00:30", gender="m", tz="America/New_York")
+        notes = [a for a in r["ambiguities"] if "夏令时" in a]
+        self.assertTrue(notes, r["ambiguities"])
+        for want in ("丙申", "丁酉"):
+            self.assertIn(want, notes[0])
+
+    def test_no_daylight_saving_note_unless_it_changes_a_pillar(self):
+        for kw in (dict(date="1993-07-15", time="14:10", tz="Europe/Amsterdam"),   # 13:10 is 未 too
+                   dict(date="1993-02-03", time="13:10", tz="America/New_York"),   # winter
+                   dict(date="1993-02-03", time="13:10", tz="Europe/Dublin"),
+                   dict(date="1993-07-15", time="13:30", tz=2),                    # no zone rules
+                   dict(date="1993-07-15", time="13:30", tz="Europe/Amsterdam",   # TST reads the
+                        lon=4.9, true_solar_time=True),                            # real instant
+                   dict(date="1993-07-15", time="13:30")):                         # no tz at all
+            r = self.chart(gender="f", **kw)
+            self.assertFalse(any("夏令时" in a for a in r["ambiguities"]), (kw, r["ambiguities"]))
+
+    def test_a_southern_summer_is_daylight_saving_too(self):
+        r = self.chart(date="2024-01-10", time="13:10", gender="m", tz="Australia/Sydney")
+        self.assertTrue(any("夏令时" in a for a in r["ambiguities"]), r["ambiguities"])
+
+
 class TestDeps(unittest.TestCase):
     def test_doctor_reports_without_installing(self):
         rep = jrun("companion.py", "doctor")

@@ -416,11 +416,18 @@ def _daily_pillars(day_gan, favor_sets, on_date, year_zhi, natal=None):
     # 五行 tips are empty, so this is the one day-specific signal it has.
     if natal:
         day_gz = out["liuri"]["ganzhi"]
-        out["natal_relations"] = [
+        rows = [
             {"pillar": key, "natal": natal[key]["ganzhi"],
              "relations": relations_between(day_gz[1], natal[key]["zhi"]),
              "same_pillar": day_gz == natal[key]["ganzhi"]}
             for key in ("year", "month", "day", "hour") if natal.get(key)]
+        # Some relation lands somewhere in the four pillars on 29.5 days of 30 (measured
+        # over 186 near-balanced charts), so a card that reports them all says nothing.
+        # 冲, 合 and 伏吟 on the 日支 and 月支 land on about 10 days a month.
+        for r in rows:
+            r["notable"] = r["pillar"] in ("day", "month") and (
+                r["same_pillar"] or any(x["relation"] in ("六冲", "六合") for x in r["relations"]))
+        out["natal_relations"] = rows
     return out
 
 

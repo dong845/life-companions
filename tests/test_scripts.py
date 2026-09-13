@@ -2627,6 +2627,61 @@ class TestDailyCardReadsTheDayAgainstTheChart(unittest.TestCase):
         self.assertIs(synastry._relations_between, _branches.relations_between)
 
 
+class TestDailyCardSaysWhichRelationsMatter(unittest.TestCase):
+    """Measured over 186 near-balanced charts: some relation lands somewhere in the four
+    pillars on 29.5 days of 30, so reporting every one is no signal at all. The card now
+    reports 冲, 合 and 伏吟 on the 日支 and 月支 (about 10 days a month) and marks them
+    `notable`; everything else stays in the data."""
+
+    BIRTH = dict(date="1993-04-12", time="07:35", gender="m", tz="Asia/Shanghai")
+
+    def daily(self, on):
+        import bazi
+        return bazi.compute(**self.BIRTH, on_date=on)["computed"]["daily"]
+
+    @staticmethod
+    def days(n=60):
+        import datetime
+        start = datetime.date(2026, 9, 1)
+        return [start + datetime.timedelta(days=i) for i in range(n)]
+
+    def day_row(self, branch):
+        for on in self.days():
+            d = self.daily(on)
+            if d["liuri"]["ganzhi"][1] == branch:
+                return next(x for x in d["natal_relations"] if x["pillar"] == "day")
+        self.fail(f"no {branch} day in 60 days")
+
+    def test_notable_is_a_clash_combine_or_repeat_on_the_day_or_month_pillar(self):
+        for on in self.days():
+            for x in self.daily(on)["natal_relations"]:
+                names = {r["relation"] for r in x["relations"]}
+                expect = x["pillar"] in ("day", "month") and (
+                    x["same_pillar"] or bool(names & {"六冲", "六合"}))
+                self.assertIs(x["notable"], expect, (on, x))
+
+    def test_a_clash_with_the_day_pillar_is_notable(self):
+        # the natal day pillar is 癸亥, and a 巳 day clashes 亥
+        row = self.day_row("巳")
+        self.assertIn("六冲", [r["relation"] for r in row["relations"]])
+        self.assertTrue(row["notable"])
+
+    def test_a_harm_alone_is_not_notable(self):
+        # 申 against the natal 亥 is 六害 and nothing else
+        row = self.day_row("申")
+        self.assertEqual([r["relation"] for r in row["relations"]], ["六害"])
+        self.assertFalse(row["notable"])
+
+    def test_the_year_and_hour_pillars_are_never_notable(self):
+        seen = False
+        for on in self.days():
+            for x in self.daily(on)["natal_relations"]:
+                if x["pillar"] in ("year", "hour"):
+                    seen = seen or bool(x["relations"])
+                    self.assertFalse(x["notable"], (on, x))
+        self.assertTrue(seen, "no year or hour relation in 60 days to test against")
+
+
 class TestSustainedLowMood(HomeCase):
     """Crisis has a protocol and an ordinary day has a card; the long middle had nothing.
     `trend` could say `declining` and no document used it, so two weeks of 3/10 still got a

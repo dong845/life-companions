@@ -2763,6 +2763,114 @@ class TestForgetPersonMeansThatPerson(HomeCase):
         self.assertIn("ANN-ENTRY", _home_text(self.home))
 
 
+class TestJournalRewritesAreExact(HomeCase):
+    """Deleting or editing journal entries had four ways to lose words nobody asked to
+    lose: text written by hand after the last entry went with it, a broken index line made
+    its entry part of the neighbour before it, `--nth 0` deleted entry #1, and a refusal
+    said "Nothing was changed" after other flags had already deleted things. A month file
+    removed by hand also blocked `forget --mood` altogether."""
+
+    def text_of(self, rel):
+        with open(os.path.join(self.home, rel), encoding="utf-8") as f:
+            return f.read()
+
+    def append(self, rel, extra):
+        with open(os.path.join(self.home, rel), "a", encoding="utf-8") as f:
+            f.write(extra)
+
+    def test_text_written_after_an_entry_survives_deleting_it(self):
+        run("companion.py", "add-entry", "--date", "2026-06-20", "--text", "六月二十 GONE",
+            home=self.home)
+        self.append("journal/2026-06.md", "\nHANDMARK plain note\n\n## 2026-06-28 手写\n\nHANDMARK-2\n")
+        r = jrun("companion.py", "forget", "--entry", "2026-06-20", home=self.home)
+        self.assertTrue(r["ok"], r)
+        text = _home_text(self.home)
+        self.assertNotIn("GONE", text)
+        for kept in ("HANDMARK plain note", "HANDMARK-2"):
+            self.assertIn(kept, text)
+
+    def test_an_old_entry_followed_by_unindexed_text_refuses(self):
+        # entries written before `length` was recorded end where the next indexed entry starts
+        run("companion.py", "add-entry", "--date", "2026-06-20", "--text", "六月二十", home=self.home)
+        rows = _index_rows(self.home)
+        rows[0].pop("length", None)
+        with open(os.path.join(self.home, "journal", "index.jsonl"), "w", encoding="utf-8") as f:
+            f.write("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows))
+        self.append("journal/2026-06.md", "\n## 2026-06-28 手写\n\nHANDMARK\n")
+        before = self.text_of("journal/2026-06.md")
+        code, out, _ = run("companion.py", "forget", "--entry", "2026-06-20", home=self.home)
+        self.assertEqual(code, 3, out)
+        self.assertEqual(self.text_of("journal/2026-06.md"), before)
+
+    def test_a_month_that_does_not_exist_is_a_usage_error(self):
+        code, out, _ = run("companion.py", "forget", "--month", "2026-13", home=self.home)
+        self.assertEqual(code, 2, out)
+
+    def test_nth_counts_from_one(self):
+        run("companion.py", "add-entry", "--date", "2026-08-01", "--text", "only one KEEP",
+            home=self.home)
+        code, out, _ = run("companion.py", "forget", "--entry", "2026-08-01", "--nth", "0",
+                           home=self.home)
+        self.assertEqual(code, 2, out)
+        self.assertIn("KEEP", _home_text(self.home))
+
+    def test_a_refusal_comes_before_any_other_flag_changes_anything(self):
+        run("companion.py", "consent", "--set", "birth=yes", home=self.home)
+        run("companion.py", "set-profile", "--merge-json",
+            json.dumps({"birth": {"date": "1993-04-12"}}), home=self.home)
+        run("companion.py", "add-entry", "--date", "2026-08-10", "--text", "x", home=self.home)
+        path = os.path.join(self.home, "journal", "2026-08.md")
+        body = self.text_of("journal/2026-08.md")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write("hand-edited preface\n" + body)
+        code, out, _ = run("companion.py", "forget", "--birth", "--entry", "2026-08-10",
+                           home=self.home)
+        self.assertEqual(code, 3, out)
+        self.assertIn("1993-04-12", _home_text(self.home), "--birth ran before the refusal")
+
+    def test_a_month_file_deleted_by_hand_does_not_block_forget_mood(self):
+        run("companion.py", "consent", "--set", "mood=yes", home=self.home)
+        run("companion.py", "add-entry", "--date", "2026-06-05", "--text", "六月", "--mood", "5",
+            home=self.home)
+        run("companion.py", "add-entry", "--date", "2026-07-05", "--text", "七月", "--mood", "6",
+            home=self.home)
+        os.remove(os.path.join(self.home, "journal", "2026-06.md"))
+        r = jrun("companion.py", "forget", "--mood", home=self.home)
+        self.assertTrue(r["ok"], r)
+        self.assertTrue(all(row["mood"] is None for row in _index_rows(self.home)))
+        self.assertIn("2026-06.md", json.dumps(r, ensure_ascii=False))
+
+    def test_an_unreadable_index_line_stops_forget_before_it_deletes_a_neighbour(self):
+        for day, text in (("2026-06-05", "FIRST"), ("2026-06-06", "SECOND"), ("2026-06-07", "THIRD")):
+            run("companion.py", "add-entry", "--date", day, "--text", text, home=self.home)
+        path = os.path.join(self.home, "journal", "index.jsonl")
+        lines = self.text_of("journal/index.jsonl").splitlines()
+        lines[1] = "x" + lines[1]
+        with open(path, "w", encoding="utf-8") as f:
+            f.write("\n".join(lines) + "\n")
+        for args in (["--entry", "2026-06-05"], ["--mood"]):
+            code, out, _ = run("companion.py", "forget", *args, home=self.home)
+            self.assertEqual(code, 3, (args, out))
+        self.assertIn("SECOND", _home_text(self.home))
+        self.assertIn("FIRST", _home_text(self.home))
+
+    def test_offsets_and_lengths_stay_true_through_rewrites(self):
+        run("companion.py", "consent", "--set", "mood=yes", home=self.home)
+        for day, text in (("2026-08-01", "一"), ("2026-08-02", "二\n## 下午\n还是二"), ("2026-08-03", "三")):
+            run("companion.py", "add-entry", "--date", day, "--text", text, "--mood", "4",
+                home=self.home)
+        self.assertTrue(jrun("companion.py", "forget", "--mood", home=self.home)["ok"])
+        self.assertTrue(jrun("companion.py", "forget", "--entry", "2026-08-01", home=self.home)["ok"])
+        content = self.text_of("journal/2026-08.md")
+        rows = _index_rows(self.home)
+        self.assertEqual([r["date"] for r in rows], ["2026-08-02", "2026-08-03"])
+        for r in rows:
+            entry = content[r["offset"]:r["offset"] + r["length"]]
+            self.assertTrue(entry.lstrip("\n").startswith(f"## {r['date']}"), (r, entry))
+            self.assertNotIn("mood", entry)
+        self.assertIn("还是二", content[rows[0]["offset"]:rows[0]["offset"] + rows[0]["length"]])
+
+
 class TestCareerScoringHasACommand(HomeCase):
     """Scoring a real person had no command. career.md told the model to import the module
     and pointed it at `score_person`, which ranks all 188 occupations even for an answer set

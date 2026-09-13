@@ -859,7 +859,8 @@ def cmd_add_entry(args):
         with open(month_path, encoding="utf-8") as f:
             existing = f.read()
     offset = len(existing)
-    _atomic_write(month_path, existing + ("\n" if existing and not existing.endswith("\n") else "") + "\n".join(block) + "\n")
+    entry_text = ("\n" if existing and not existing.endswith("\n") else "") + "\n".join(block) + "\n"
+    _atomic_write(month_path, existing + entry_text)
 
     # 2) append index line atomically (read-all, rewrite temp, replace)
     row = {
@@ -868,6 +869,8 @@ def cmd_add_entry(args):
         "module_touch": [args.module] if args.module else [],
         "people": people, "crisis_flag": crisis_flag,
         "file": os.path.relpath(month_path, home), "offset": offset,
+        # the entry's own extent, so text written by hand after it is never taken as part of it
+        "length": len(entry_text),
     }
     existing_index = ""
     if os.path.exists(p["index"]):
@@ -972,13 +975,39 @@ def _preview(home, row, width=30, rows=None):
     return body[:width]
 
 
-def _rewrite_journal(home, transform, files=None):
-    """Rewrite journal files entry by entry and keep every index offset true.
+_ENTRY_HEADER_LINE = re.compile(r"^## \d{4}-\d{2}-\d{2}\b", re.M)
 
-    `transform(row, block)` returns the entry's new text, or None to delete it. Every row
-    in a touched file is checked against that file BEFORE anything is written, and one
-    mismatch aborts the lot: a hand-edited file refuses loudly instead of deleting the
-    wrong words. Returns (rows_after, None) or (None, error)."""
+
+def _unreadable_index_lines(home):
+    """Line numbers of index rows that don't parse. trends._load skips them, and a skipped
+    row's entry then reads as part of the entry before it, which a delete takes along."""
+    path = _paths(home)["index"]
+    bad = []
+    if os.path.exists(path):
+        with open(path, encoding="utf-8") as f:
+            for i, line in enumerate(f, 1):
+                if not line.strip():
+                    continue
+                try:
+                    if not isinstance(json.loads(line), dict):
+                        bad.append(i)
+                except json.JSONDecodeError:
+                    bad.append(i)
+    return bad
+
+
+def _rewrite_journal(home, transform, files=None, notes=None):
+    """Rewrite journal files entry by entry and keep every index offset and length true.
+
+    `transform(row, text)` returns the entry's new text, or None to delete it. Every file is
+    planned in full before anything is written, and any doubt aborts the lot with nothing
+    changed: a row whose offset no longer lands on its own header (a hand-edited file), a
+    row whose recorded length runs into the next entry, or deleting an entry from before
+    lengths were recorded when a line that looks like another entry's header follows it
+    without being in the index (such an entry runs to the next indexed one, so that text
+    would go too). Text between an entry's end and the next entry, written by hand, is kept.
+    A file the index points at that no longer exists only has its index rows changed, noted
+    in `notes`. Returns (rows_after, None) or (None, error)."""
     p = _paths(home)
     rows = trends_mod._load(p["index"])
     by_file = {}
@@ -990,7 +1019,14 @@ def _rewrite_journal(home, transform, files=None):
             continue
         path = os.path.join(home, f or "")
         if not f or not os.path.exists(path):
-            return None, f"the index points at {f}, which is missing. Nothing was changed."
+            # its prose is already gone; the index rows are all that is left to change
+            for r in frs:
+                if transform(r, "") is None:
+                    after[id(r)] = None
+            if notes is not None:
+                notes.append(f"{f} is no longer in the journal folder, so only its index rows "
+                             "were changed")
+            continue
         with open(path, encoding="utf-8") as fh:
             content = fh.read()
         for r in frs:
@@ -1005,14 +1041,34 @@ def _rewrite_journal(home, transform, files=None):
         pieces = [content[:frs[0]["offset"]]]
         pos = len(pieces[0])
         for i, r in enumerate(frs):
-            end = frs[i + 1]["offset"] if i + 1 < len(frs) else len(content)
-            new = transform(r, content[r["offset"]:end])
+            off = r["offset"]
+            nxt = frs[i + 1]["offset"] if i + 1 < len(frs) else len(content)
+            length = r.get("length")
+            if length is not None and (not isinstance(length, int) or length < 0
+                                       or off + length > nxt):
+                return None, (f"the index no longer matches {f}: the entry for {r.get('date')} "
+                              "runs past where the next one starts. Nothing was changed. The file "
+                              "looks hand-edited; `forget --month` still removes the whole month, "
+                              "or fix the file by hand.")
+            end = nxt if length is None else off + length
+            text, gap = content[off:end], content[end:nxt]
+            new = transform(r, text)
             if new is None:
+                if length is None and _ENTRY_HEADER_LINE.search(text.lstrip("\n"), 1):
+                    return None, (f"text that is not in the index follows the entry for "
+                                  f"{r.get('date')} in {f} (a line starting \"## \" and a date), "
+                                  "and deleting the entry would take it too. Nothing was changed. "
+                                  "Move or remove that text by hand, or use `forget --month`.")
                 after[id(r)] = None
+                pieces.append(gap)
+                pos += len(gap)
                 continue
-            after[id(r)] = dict(r, offset=pos)
-            pieces.append(new)
-            pos += len(new)
+            row = dict(r, offset=pos)
+            if length is not None:
+                row["length"] = len(new)
+            after[id(r)] = row
+            pieces.append(new + gap)
+            pos += len(new) + len(gap)
         plans[path] = "".join(pieces)
     for path, text in plans.items():
         if text.strip():
@@ -1174,20 +1230,21 @@ def _forget_entry(home, date, nth):
                       "error": f"{len(day)} entries on {date}; say which one with --nth",
                       "candidates": [{"nth": i, "preview": _preview(home, r, rows=rows)}
                                      for i, r in enumerate(day, 1)]}
-    n = nth or 1
+    n = 1 if nth is None else nth
     if not 1 <= n <= len(day):
         return None, {"ok": False,
                       "error": f"--nth {n} is out of range: {date} has {len(day)} entr"
                                f"{'y' if len(day) == 1 else 'ies'}"}
     target = day[n - 1]
     key = (target.get("file"), target.get("offset"))
+    notes = []
     _, err = _rewrite_journal(
         home, lambda r, b: None if (r.get("file"), r.get("offset")) == key else b,
-        files={target.get("file")})
+        files={target.get("file")}, notes=notes)
     if err:
         return None, {"ok": False, "error": err}
     return [f"journal entry {date} #{n} deleted"
-            + (" (it carried a crisis flag)" if target.get("crisis_flag") else "")], None
+            + (" (it carried a crisis flag)" if target.get("crisis_flag") else "")] + notes, None
 
 
 _LATIN_NAME = re.compile(r"[A-Za-z][A-Za-z .'\-]*")
@@ -1250,13 +1307,15 @@ def _forget_person(home, name, with_entries):
             # The journal goes first: it is the step that can refuse, and a refusal has to
             # leave everything else as it was.
             keys = {(r.get("file"), r.get("offset")) for r in doomed}
+            notes = []
             _, err = _rewrite_journal(
                 home, lambda r, b: None if (r.get("file"), r.get("offset")) in keys else b,
-                files={r.get("file") for r in doomed})
+                files={r.get("file") for r in doomed}, notes=notes)
             if err:
                 return None, {"ok": False, "error": err}
             done.append(f"{len(doomed)} journal entr{'y' if len(doomed) == 1 else 'ies'} "
                         f"about {name} deleted")
+            done += notes
     elif in_prose:
         report["entries_still_mentioning"] = [
             {"date": r.get("date"), "nth": _nth_of_day(rows, r)} for r in rows if id(r) in in_prose]
@@ -1337,14 +1396,16 @@ def _forget_relationships(home):
 
 def _forget_mood(home):
     p = _paths(home)
-    rows, err = _rewrite_journal(home, lambda r, b: _MOOD_IN_HEADER.sub(r"\1", b, count=1))
+    notes = []
+    rows, err = _rewrite_journal(home, lambda r, b: _MOOD_IN_HEADER.sub(r"\1", b, count=1),
+                                 notes=notes)
     if err:
         return None, {"ok": False, "error": err}
     n = sum(1 for r in rows if r.get("mood") is not None)
     for r in rows:
         r["mood"] = None
     _write_index(home, rows)
-    done = [f"{n} mood value(s) removed from the journal"]
+    done = [f"{n} mood value(s) removed from the journal"] + notes
     cont = _load_yaml(p["continuity"], {})
     if cont.get("recent_moods"):
         cont["recent_moods"] = []
@@ -1397,7 +1458,7 @@ def cmd_forget(args):
         print(json.dumps(payload, ensure_ascii=False, indent=2))
         raise SystemExit(3)
 
-    if args.month and not re.fullmatch(r"\d{4}-\d{2}", args.month):
+    if args.month and not re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", args.month):
         usage(f"--month must be YYYY-MM (got {args.month!r})")
     if args.entry:
         try:
@@ -1406,37 +1467,59 @@ def cmd_forget(args):
             usage(f"--entry must be YYYY-MM-DD (got {args.entry!r})")
     if args.nth is not None and not args.entry:
         usage("--nth only makes sense with --entry")
+    if args.nth is not None and args.nth < 1:
+        usage(f"--nth counts from 1, the day's earliest entry (got {args.nth})")
     if args.with_entries and not args.person:
         usage("--with-entries only makes sense with --person NAME")
     if args.person is not None and not args.person.strip():
         usage("--person needs a name")
 
     done, extra = [], {}
-    if args.birth:
-        done += _forget_birth(home)
-    if args.month:
-        done += _forget_month(home, args.month)
+
+    def refuse_after(err):
+        # a refusal that follows steps already taken must not say nothing changed
+        if done:
+            err = dict(err, done_before_this_refusal=list(done))
+            err["error"] = str(err.get("error", "")).replace("Nothing was changed.",
+                                                             "Nothing more was changed.")
+        refuse(err)
+
+    bad = _unreadable_index_lines(home)
+    if bad and (args.month or args.entry or args.person or args.relationships or args.mood):
+        refuse({"ok": False,
+                "error": (f"journal/index.jsonl has {len(bad)} line(s) that can't be read "
+                          f"(line {', '.join(map(str, bad[:5]))}). Nothing was changed."),
+                "why": ("an entry whose index line can't be read counts as part of the entry "
+                        "before it, and a delete would take it along"),
+                "_next": ("Fix or remove those lines by hand (one JSON object per line), then "
+                          "run forget again.")})
+    # The journal steps run first. They are the ones that can refuse, so a refusal leaves
+    # the profile, the consent ledger and the caches as they were.
     if args.entry:
         d, err = _forget_entry(home, args.entry, args.nth)
         if err:
-            refuse(err)
+            refuse_after(err)
         done += d
     if args.person:
         rep, err = _forget_person(home, args.person.strip(), args.with_entries)
         if err:
-            refuse(err)
+            refuse_after(err)
         done += rep.pop("done")
         extra.update(rep)
+    if args.mood:
+        d, err = _forget_mood(home)
+        if err:
+            refuse_after(err)
+        done += d
+    if args.month:
+        done += _forget_month(home, args.month)
     if args.relationships:
         d, note = _forget_relationships(home)
         done += d
         if note:
             extra["_note"] = note
-    if args.mood:
-        d, err = _forget_mood(home)
-        if err:
-            refuse(err)
-        done += d
+    if args.birth:
+        done += _forget_birth(home)
     if not done:
         kept = [k for k in ("entries_still_mentioning", "still_mentioned_in") if k in extra]
         done = ["nothing was deleted; see " + " and ".join(kept)] if kept else ["nothing matched"]

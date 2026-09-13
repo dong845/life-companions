@@ -813,6 +813,13 @@ class TestBoundaryWarnings(unittest.TestCase):
         self.assertEqual(code, 0, err)
         self.assertIn("time_window", json.loads(out)["computed"])
 
+    def test_a_time_window_outside_its_range_is_refused(self):
+        # it is sampled every 10 minutes either side, so it must be 1 to MAX_TIME_WINDOW_MIN
+        for w in (0, -30, 241):
+            with self.assertRaises(ValueError, msg=w):
+                self.chart(date="1993-04-12", time="09:00", gender="m", tz="Asia/Shanghai",
+                           time_window=w)
+
     def test_ziwei_flags_a_shichen_boundary_too(self):
         import ziwei
         r = ziwei.compute("1993-04-12", "08:58", "m", tz="Asia/Shanghai")
@@ -2003,6 +2010,21 @@ class TestFindMatchesWhatPeopleSay(unittest.TestCase):
         self.assertFalse(any("Equipment" in h["title"] for h in hits),
                          [h["title"] for h in hits])
 
+    def test_a_latin_alias_inside_a_longer_query_word_is_not_used(self):
+        # "ux" sits inside "luxury", and "hr" inside "shrimp"
+        for q, title in (("luxury brand manager", "Web and Digital Interface Designers"),
+                         ("shrimp farmer", "Human Resources Managers")):
+            self.assertNotIn(title, [h["title"] for h in self.find(q)], q)
+
+    def test_a_latin_word_against_chinese_is_split_even_without_an_alias(self):
+        # a Latin run AFTER a Chinese one is the case prefix matching can't paper over:
+        # unsplit, 「资深data」 shares no word with "Data Scientists"
+        for q, title in (("Web设计师", "Web and Digital Interface Designers"),
+                         ("资深Data Scientist", "Data Scientists")):
+            hits = self.find(q)
+            self.assertEqual((hits[0]["title"], hits[0]["match"]), (title, "strong"),
+                             (q, hits[:3]))
+
     def test_latin_written_against_chinese_is_split(self):
         for q in ("MRI技师", "MRI 技师"):
             hits = self.find(q)
@@ -2609,6 +2631,16 @@ class TestForgetLeavesNoTrace(HomeCase):
         for keep in ("今天读书", "阿May", "读完那本书"):
             self.assertIn(keep, text)
 
+    def test_forget_person_names_the_files_that_still_mention_them(self):
+        # forget checks its own work: a mention it doesn't scrub has to be reported
+        self._people_setup()
+        run("companion.py", "cache", "--module", "career_intake", "--merge-json",
+            json.dumps({"note": "小李推荐的岗位"}), home=self.home)
+        r = jrun("companion.py", "forget", "--person", "小李", home=self.home)
+        blob = json.dumps(r, ensure_ascii=False)
+        self.assertIn("still_mentioned_in", blob, r)
+        self.assertIn("career_intake.yaml", blob, r)
+
     def test_forget_person_alone_lists_the_entries_that_still_mention_them(self):
         self._people_setup()
         r = jrun("companion.py", "forget", "--person", "小李", home=self.home)
@@ -2899,6 +2931,26 @@ class TestSustainedLowMood(HomeCase):
     def test_exactly_half_low_is_not_more_than_half(self):
         self._log([2, 3, 3, 7, 7, 7])
         self.assertNotIn("_wellbeing_check", jrun("companion.py", "brief", home=self.home))
+
+    def test_a_four_is_not_a_low_mood(self):
+        self._log([4, 4, 4, 2, 2, 2])
+        self.assertNotIn("_wellbeing_check", jrun("companion.py", "brief", home=self.home))
+
+    def test_low_moods_older_than_two_weeks_do_not_count(self):
+        import datetime
+        today = datetime.date.today()
+        for i in range(20, 26):
+            run("companion.py", "add-entry", "--date",
+                (today - datetime.timedelta(days=i)).isoformat(), "--text", "嗯",
+                "--mood", "2", home=self.home)
+        self.assertNotIn("_wellbeing_check", jrun("companion.py", "brief", home=self.home))
+
+    def test_a_recent_crisis_comes_before_the_check_in(self):
+        self._log([2, 3, 3, 6, 2, 3])
+        run("companion.py", "add-entry", "--text", "我真的撑不下去了", "--crisis", home=self.home)
+        brief = jrun("companion.py", "brief", home=self.home)
+        self.assertIn("_crisis_recent", brief)
+        self.assertNotIn("_wellbeing_check", brief)
 
     def test_it_asks_at_most_once_a_week(self):
         import datetime

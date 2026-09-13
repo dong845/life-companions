@@ -528,6 +528,13 @@ def cmd_doctor(args):
 def cmd_read_profile(args):
     home = home_dir(args.home)
     prof = _load_yaml(_paths(home)["profile"])
+    # Revoked birth consent withholds the birth fields here too, as brief does: SKILL.md still
+    # names this read, and a revoke that one command ignores isn't a revoke.
+    birth = prof.get("birth") if isinstance(prof.get("birth"), dict) else {}
+    if not _granted(home, "birth") and any(v is not None for k, v in birth.items() if k != "conventions"):
+        prof["birth"] = {k: (v if k == "conventions" else None) for k, v in birth.items()}
+        prof["birth"]["_withheld"] = ("consent.birth is not granted: `consent --set birth=yes` "
+                                      "restores these fields, `forget --birth` deletes them")
     if args.json:
         print(json.dumps(prof, ensure_ascii=False, indent=2))
     else:
@@ -703,6 +710,19 @@ def cmd_brief(args):
         recent.append(row)
 
     due = _due_followups(home, args.days)
+    open_threads = cont.get("open_threads") or []
+    if not ok["relationships"]:
+        # A withheld person must not come back as the day's suggested follow-up.
+        known = _known_names(home, rows)
+
+        def names_someone(item):
+            return any(_mentions(item, n, known) for n in known)
+        kept = [d for d in due if not names_someone(d)]
+        open_threads = [t for t in open_threads if not names_someone(t)]
+        if len(kept) != len(due):
+            consent_notes.append(f"{len(due) - len(kept)} follow-up thread(s) naming someone "
+                                 "are withheld along with the relationship records.")
+        due = kept
     out = {
         "initialized": True,
         "home": home,
@@ -711,7 +731,7 @@ def cmd_brief(args):
         "profile": prof,
         "continuity": {
             "rolling_summary": cont.get("rolling_summary"),
-            "open_threads": cont.get("open_threads") or [],
+            "open_threads": open_threads,
             "recent_moods": (cont.get("recent_moods") or []) if ok["mood"] else [],
             "updated": cont.get("updated"),
         },
@@ -905,8 +925,11 @@ def cmd_journal(args):
         rows = [r for r in rows if args.tag in (r.get("tags") or [])]
     rows = rows[-args.limit:] if args.limit else rows
     blocks = []
+    mood_ok = _granted(home, "mood")
     for r in rows:
         block = _entry_text(home, r, all_rows).strip()
+        if block and not mood_ok:
+            block = _MOOD_IN_HEADER.sub(r"\1", block, count=1)   # withheld, not deleted
         if block:
             blocks.append(block)
     print("\n\n".join(reversed(blocks)) if blocks else "(no matching journal entries)")
@@ -929,7 +952,19 @@ def cmd_search(args):
     if args.text:
         needle = args.text.lower()
         out = [r for r in out if needle in _entry_text(home, r, rows).lower()]
-    print(json.dumps({"matches": len(out), "entries": out}, ensure_ascii=False, indent=2))
+    withheld = [c for c in ("mood", "relationships") if not _granted(home, c)]
+    shown = []
+    for r in out:
+        r = dict(r)
+        if "mood" in withheld:
+            r["mood"] = None
+        if "relationships" in withheld:
+            r["people"] = []
+        shown.append(r)
+    payload = {"matches": len(shown), "entries": shown}
+    if withheld:
+        payload["withheld"] = withheld
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
 
 
 _MOOD_IN_HEADER = re.compile(r"^(## [^\n]*?) · mood \d+/10", re.M)
@@ -1124,6 +1159,7 @@ def _set_consent(home, category, granted):
 def _forget_birth(home):
     p = _paths(home)
     prof = _load_yaml(p["profile"])
+    old_date = str(((prof.get("birth") or {}) if isinstance(prof.get("birth"), dict) else {}).get("date") or "")
     prof["birth"] = {"date": None, "time": None, "time_known": None, "place": None,
                      "lat": None, "lon": None, "tz_at_birth": None,
                      "conventions": (prof.get("birth") or {}).get("conventions", {})}
@@ -1137,6 +1173,16 @@ def _forget_birth(home):
     # The onboarding form's result marker carried the birth date, and nothing deleted it.
     if _drop_form_marker(home, lambda m: m.get("form") == "onboarding" or m.get("birth_date")):
         done.append("onboarding form result marker removed")
+    if old_date:
+        cont = _load_yaml(p["continuity"], {})
+        if old_date in str(cont.get("rolling_summary") or ""):
+            cont["rolling_summary"] = ""
+            cont["updated"] = _today()
+            _save_yaml(p["continuity"], cont)
+            done.append("continuity rolling_summary cleared (it quoted the birth date; it rebuilds)")
+        left = _residue(home, old_date)
+        if left:
+            done.append("the birth date is still written in: " + ", ".join(left))
     return done
 
 
@@ -1151,62 +1197,7 @@ def _forget_month(home, month):
     _write_index(home, kept)
     done.append(f"journal {month} removed ({len(rows) - len(kept)} entries)")
 
-    # What the companion learned that month also sits in the relationship log, the working
-    # memory and the module caches. Deleting only the journal left it all in place.
-    rel = _relationships_path(home)
-    if os.path.exists(rel):
-        data = _load_yaml(rel)
-        people = data.get("people") or {}
-        gone, trimmed, n = [], [], 0
-        for name in list(people):
-            rec = people[name]
-            incs = rec.get("incidents") if isinstance(rec, dict) else None
-            if not isinstance(incs, list):
-                continue
-            keep = [i for i in incs
-                    if not (isinstance(i, dict) and str(i.get("date", "")).startswith(month))]
-            if len(keep) == len(incs):
-                continue
-            n += len(incs) - len(keep)
-            if keep:
-                rec["incidents"] = keep
-                trimmed.append(name)
-            else:
-                # known only from that month: their tendencies and patterns can only have
-                # come from it, so nothing about them survives
-                del people[name]
-                gone.append(name)
-        if n:
-            _save_yaml(rel, data)
-            done.append(f"{n} relationship incident(s) from {month} removed"
-                        + (f"; {len(gone)} person/people known only from {month} removed"
-                           if gone else ""))
-        if trimmed:
-            done.append("kept the rest of " + "、".join(trimmed) + "'s record: tendencies and "
-                        f"patterns may partly come from {month}; `forget --person NAME` "
-                        "removes a whole record")
-
-    cont = _load_yaml(p["continuity"], {})
-    if cont:
-        threads = cont.get("open_threads") or []
-        keep = [t for t in threads
-                if not (isinstance(t, dict) and str(t.get("opened", "")).startswith(month))]
-        changed = len(keep) != len(threads)
-        if changed:
-            cont["open_threads"] = keep
-            done.append(f"{len(threads) - len(keep)} follow-up thread(s) opened in {month} removed")
-        # The rolling summary and recent moods carry no dates. Written during or after that
-        # month, they may quote it and there is no way to tell, so they go; they rebuild.
-        updated = str(cont.get("updated") or "")
-        if not updated or updated >= f"{month}-01":
-            for key, empty in (("rolling_summary", ""), ("recent_moods", [])):
-                if cont.get(key):
-                    cont[key] = empty
-                    changed = True
-                    done.append(f"continuity {key} cleared (it may have drawn on {month})")
-        if changed:
-            cont["updated"] = _today()
-            _save_yaml(p["continuity"], cont)
+    done += _forget_dated_traces(home, month, f"{month}-01")
 
     intake = os.path.join(p["modules"], "career_intake.yaml")
     if os.path.exists(intake):
@@ -1217,6 +1208,73 @@ def _forget_month(home, month):
             done.append(f"career check submitted in {month} removed")
     if _drop_form_marker(home, lambda m: str(m.get("ts", "")).startswith(month)):
         done.append(f"form result marker from {month} removed")
+    return done
+
+
+def _forget_dated_traces(home, prefix, since, keep_dated=False):
+    """What the companion noted from a month or a day also sits outside the journal:
+    relationship incidents and follow-up threads dated in it, and the rolling summary and
+    recent moods, which carry no dates. Deleting only the journal left all of it in place.
+    `keep_dated` keeps the dated incidents and threads (another entry from that day stays,
+    and they can't be told apart); the summary and moods go either way, since they may
+    quote it and they rebuild."""
+    p = _paths(home)
+    done = []
+    rel = _relationships_path(home)
+    if os.path.exists(rel) and not keep_dated:
+        data = _load_yaml(rel)
+        people = data.get("people") if isinstance(data.get("people"), dict) else {}
+        gone, trimmed, n = [], [], 0
+        for name in list(people):
+            rec = people[name]
+            incs = rec.get("incidents") if isinstance(rec, dict) else None
+            if not isinstance(incs, list):
+                continue
+            keep = [i for i in incs
+                    if not (isinstance(i, dict) and str(i.get("date", "")).startswith(prefix))]
+            if len(keep) == len(incs):
+                continue
+            n += len(incs) - len(keep)
+            if keep:
+                rec["incidents"] = keep
+                trimmed.append(name)
+            else:
+                # known only from that period: their tendencies and patterns can only have
+                # come from it, so nothing about them survives
+                del people[name]
+                gone.append(name)
+        if n:
+            _save_yaml(rel, data)
+            done.append(f"{n} relationship incident(s) from {prefix} removed"
+                        + (f"; {len(gone)} person/people known only from {prefix} removed"
+                           if gone else ""))
+        if trimmed:
+            done.append("kept the rest of " + "、".join(trimmed) + "'s record: tendencies and "
+                        f"patterns may partly come from {prefix}; `forget --person NAME` "
+                        "removes a whole record")
+
+    cont = _load_yaml(p["continuity"], {})
+    if cont:
+        threads = cont.get("open_threads") or []
+        keep = threads if keep_dated else [
+            t for t in threads
+            if not (isinstance(t, dict) and str(t.get("opened", "")).startswith(prefix))]
+        changed = len(keep) != len(threads)
+        if changed:
+            cont["open_threads"] = keep
+            done.append(f"{len(threads) - len(keep)} follow-up thread(s) opened in {prefix} removed")
+        # Written during or after that period, the summary and recent moods may quote it and
+        # there is no way to tell, so they go; they rebuild.
+        updated = str(cont.get("updated") or "")
+        if not updated or updated >= since:
+            for key, empty in (("rolling_summary", ""), ("recent_moods", [])):
+                if cont.get(key):
+                    cont[key] = empty
+                    changed = True
+                    done.append(f"continuity {key} cleared (it may have drawn on {prefix})")
+        if changed:
+            cont["updated"] = _today()
+            _save_yaml(p["continuity"], cont)
     return done
 
 
@@ -1243,8 +1301,13 @@ def _forget_entry(home, date, nth):
         files={target.get("file")}, notes=notes)
     if err:
         return None, {"ok": False, "error": err}
-    return [f"journal entry {date} #{n} deleted"
-            + (" (it carried a crisis flag)" if target.get("crisis_flag") else "")] + notes, None
+    done = [f"journal entry {date} #{n} deleted"
+            + (" (it carried a crisis flag)" if target.get("crisis_flag") else "")] + notes
+    others = len(day) - 1
+    if others:
+        done.append(f"{others} other entr{'y' if others == 1 else 'ies'} from {date} kept, so "
+                    f"relationship incidents and follow-up threads dated {date} were kept too")
+    return done + _forget_dated_traces(home, date, date, keep_dated=bool(others)), None
 
 
 _LATIN_NAME = re.compile(r"[A-Za-z][A-Za-z .'\-]*")

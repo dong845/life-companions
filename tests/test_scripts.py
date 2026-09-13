@@ -2871,6 +2871,124 @@ class TestJournalRewritesAreExact(HomeCase):
         self.assertIn("还是二", content[rows[0]["offset"]:rows[0]["offset"] + rows[0]["length"]])
 
 
+class TestForgetEntryReachesEveryCopy(HomeCase):
+    """safety.md §4 says each forget cleans the journal, the index, the relationship log,
+    the working memory and the caches. `forget --entry` cleaned the first two: the crisis
+    entry safety.md promises can be deleted stayed quoted in the rolling summary and its
+    follow-up thread, and that day's incident stayed in the relationship log."""
+
+    def setUp(self):
+        super().setUp()
+        run("companion.py", "consent", "--set", "relationships=yes", home=self.home)
+
+    def test_the_summary_and_the_days_thread_go_with_the_entry(self):
+        run("companion.py", "add-entry", "--date", "2026-08-03", "--text", "CRISISMARK 撑不下去了",
+            "--crisis", home=self.home)
+        run("companion.py", "add-entry", "--date", "2026-08-04", "--text", "好一点了", home=self.home)
+        run("companion.py", "continuity", "--merge-json", json.dumps({
+            "rolling_summary": "8月3日她说撑不下去了 CRISISMARK",
+            "open_threads": [{"thread": "8/3 之后问候 CRISISMARK", "opened": "2026-08-03", "status": "open"},
+                             {"thread": "周末散步 KEEP-THREAD", "opened": "2026-08-04", "status": "open"}]}),
+            home=self.home)
+        r = jrun("companion.py", "forget", "--entry", "2026-08-03", home=self.home)
+        self.assertTrue(r["ok"], r)
+        text = _home_text(self.home)
+        self.assertNotIn("CRISISMARK", text)
+        for kept in ("好一点了", "KEEP-THREAD"):
+            self.assertIn(kept, text)
+
+    def test_that_days_incident_leaves_the_relationship_log(self):
+        run("companion.py", "add-entry", "--date", "2026-07-15", "--text", "加班到很晚", "--people", "小李",
+            home=self.home)
+        run("companion.py", "add-entry", "--date", "2026-07-20", "--text", "一起吃饭", "--people", "小李",
+            home=self.home)
+        run("companion.py", "cache", "--module", "relationships", "--merge-json", json.dumps(
+            {"people": {"小李": {"incidents": [
+                {"date": "2026-07-15", "gist": "加班 INCMARK", "lens": "criticism"},
+                {"date": "2026-07-20", "gist": "吃饭 KEEP-INC", "lens": "bid"}]}}}), home=self.home)
+        r = jrun("companion.py", "forget", "--entry", "2026-07-15", home=self.home)
+        self.assertTrue(r["ok"], r)
+        text = _home_text(self.home)
+        self.assertNotIn("INCMARK", text)
+        self.assertIn("KEEP-INC", text)
+
+    def test_with_another_entry_that_day_the_days_traces_stay_and_it_says_so(self):
+        for text in ("上午 FIRST", "晚上 SECOND"):
+            run("companion.py", "add-entry", "--date", "2026-07-15", "--text", text, "--people", "小李",
+                home=self.home)
+        run("companion.py", "cache", "--module", "relationships", "--merge-json", json.dumps(
+            {"people": {"小李": {"incidents": [{"date": "2026-07-15", "gist": "吵架 SAMEDAY", "lens": "criticism"}]}}}),
+            home=self.home)
+        r = jrun("companion.py", "forget", "--entry", "2026-07-15", "--nth", "1", home=self.home)
+        self.assertTrue(r["ok"], r)
+        self.assertIn("SAMEDAY", _home_text(self.home))
+        self.assertIn("kept", json.dumps(r, ensure_ascii=False))
+
+    def test_forget_birth_clears_a_summary_that_quotes_the_birth_date(self):
+        run("companion.py", "consent", "--set", "birth=yes", home=self.home)
+        run("companion.py", "set-profile", "--merge-json", json.dumps({"birth": {"date": "1993-04-12"}}),
+            home=self.home)
+        run("companion.py", "continuity", "--merge-json",
+            json.dumps({"rolling_summary": "1993-04-12 生，日主癸水"}), home=self.home)
+        self.assertTrue(jrun("companion.py", "forget", "--birth", home=self.home)["ok"])
+        self.assertNotIn("1993-04-12", _home_text(self.home))
+
+
+class TestRevokedConsentWithholdsEveryRead(HomeCase):
+    """Revoking a category stops every script from reading it (safety.md §4). brief,
+    trend, cache and relationship_patterns did stop; read-profile still printed the whole
+    birth block, journal printed "mood 3/10", search returned moods and names, and brief
+    still suggested following up with the person whose records it was withholding."""
+
+    def setUp(self):
+        super().setUp()
+        run("companion.py", "consent", "--set", "birth=yes", "mood=yes", "relationships=yes",
+            home=self.home)
+        run("companion.py", "set-profile", "--merge-json",
+            json.dumps({"birth": {"date": "1993-04-12", "time": "07:35"}}), home=self.home)
+        run("companion.py", "add-entry", "--date", "2026-09-01", "--text", "和小李吵架 PROSE-KEPT",
+            "--mood", "3", "--people", "小李", "--tags", "relationship", home=self.home)
+        run("companion.py", "continuity", "--merge-json", json.dumps({"open_threads": [
+            {"thread": "和小李谈谈", "opened": "2026-09-01", "status": "open"},
+            {"thread": "读完那本书", "opened": "2026-09-01", "status": "open"}]}), home=self.home)
+
+    def test_read_profile_withholds_birth(self):
+        run("companion.py", "consent", "--set", "birth=no", home=self.home)
+        for args in (["read-profile", "--json"], ["read-profile"]):
+            code, out, _ = run("companion.py", *args, home=self.home)
+            self.assertEqual(code, 0, out)
+            self.assertNotIn("1993-04-12", out, args)
+            self.assertNotIn("07:35", out, args)
+
+    def test_journal_withholds_mood(self):
+        run("companion.py", "consent", "--set", "mood=no", home=self.home)
+        _, out, _ = run("companion.py", "journal", home=self.home)
+        self.assertIn("PROSE-KEPT", out)
+        self.assertNotIn("3/10", out)
+
+    def test_search_withholds_moods_and_names(self):
+        run("companion.py", "consent", "--set", "mood=no", "relationships=no", home=self.home)
+        r = jrun("companion.py", "search", "--tag", "relationship", home=self.home)
+        self.assertEqual(r["matches"], 1)
+        self.assertEqual((r["entries"][0]["mood"], r["entries"][0]["people"]), (None, []))
+        self.assertEqual(sorted(r.get("withheld", [])), ["mood", "relationships"])
+
+    def test_brief_offers_no_follow_up_about_a_withheld_person(self):
+        run("companion.py", "consent", "--set", "relationships=no", home=self.home)
+        b = jrun("companion.py", "brief", home=self.home)
+        self.assertEqual([d["thread"] for d in b["followups_due"]], ["读完那本书"])
+        self.assertEqual([t["thread"] for t in b["continuity"]["open_threads"]], ["读完那本书"])
+
+    def test_granting_again_restores_every_read(self):
+        run("companion.py", "consent", "--set", "birth=no", "mood=no", "relationships=no", home=self.home)
+        run("companion.py", "consent", "--set", "birth=yes", "mood=yes", "relationships=yes", home=self.home)
+        self.assertIn("1993-04-12", run("companion.py", "read-profile", "--json", home=self.home)[1])
+        self.assertIn("3/10", run("companion.py", "journal", home=self.home)[1])
+        row = jrun("companion.py", "search", "--tag", "relationship", home=self.home)["entries"][0]
+        self.assertEqual((row["mood"], row["people"]), (3, ["小李"]))
+        self.assertEqual(len(jrun("companion.py", "brief", home=self.home)["followups_due"]), 2)
+
+
 class TestCareerScoringHasACommand(HomeCase):
     """Scoring a real person had no command. career.md told the model to import the module
     and pointed it at `score_person`, which ranks all 188 occupations even for an answer set

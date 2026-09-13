@@ -4133,6 +4133,52 @@ class TestGateReadsTaiwanAndCantoneseWording(unittest.TestCase):
             self.assertEqual(self.blockers(text, module), [], text)
 
 
+class TestTimezoneResolutionRanksTheCityOverItsCountry(HomeCase):
+    """A place written with its country scored the country's zone as high as the city's, and
+    dictionary order broke the tie: 中國香港 came back Asia/Shanghai and 澳洲珀斯 Sydney, two to
+    three hours off. English country words matched inside other words ("usa" in Busan, "uk"
+    in Fukuoka), and the form stored whatever ranked first, even a lone partial match:
+    "Victoria, BC" became Australia/Victoria and "Perth, Scotland" Australia/Perth. The zone
+    decides the daily chart and which country's crisis line is offered."""
+
+    @staticmethod
+    def zones(q):
+        import companion
+        return [c["timezone"] for c in companion.resolve_timezone(q)]
+
+    def test_the_city_outranks_the_country_it_is_written_with(self):
+        for q, want in (("中國香港", "Asia/Hong_Kong"), ("澳洲珀斯", "Australia/Perth"),
+                        ("澳洲布里斯班", "Australia/Brisbane"), ("Vancouver, Canada", "America/Vancouver"),
+                        ("Busan, South Korea", "Asia/Seoul")):
+            zones = self.zones(q)
+            self.assertEqual(zones[:1], [want], (q, zones))
+
+    def test_an_english_country_word_matches_only_as_a_whole_word(self):
+        for q in ("Busan, South Korea", "Fukuoka", "Fukushima", "Tsukuba", "Pukekohe"):
+            zones = self.zones(q)
+            self.assertNotIn("America/New_York", zones, q)
+            self.assertNotIn("Europe/London", zones, q)
+        self.assertNotIn("Australia/South", self.zones("Busan, South Korea"))
+
+    def _stored_zone(self, city):
+        import form_server
+        import yaml
+        form = {"name": ["X"], "locale": ["en"], "region": ["other"], "city": [city],
+                "tone": ["concise"]}
+        summary, _ = form_server.write_onboarding(self.home, form)
+        with open(os.path.join(self.home, "profile.yaml"), encoding="utf-8") as f:
+            return yaml.safe_load(f)["identity"]["timezone"], summary
+
+    def test_the_form_stores_only_a_single_clear_answer(self):
+        for city, want in (("中國香港", "Asia/Hong_Kong"), ("Busan, South Korea", "Asia/Seoul"),
+                           ("São Paulo", "America/Sao_Paulo")):
+            self.assertEqual(self._stored_zone(city)[0], want, city)
+        for city in ("Victoria, BC", "Perth, Scotland"):
+            zone, summary = self._stored_zone(city)
+            self.assertIsNone(zone, city)
+            self.assertTrue(any(city in t for t in summary["todo"]), (city, summary["todo"]))
+
+
 class TestDeps(unittest.TestCase):
     def test_doctor_reports_without_installing(self):
         rep = jrun("companion.py", "doctor")

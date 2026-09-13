@@ -328,10 +328,14 @@ def write_onboarding(home, form):
     tz_note = None
     if tz is None and city:
         cands = _resolve_tz(city)
-        if len(cands) == 1 or (cands and cands[0]["score"] >= 0.95):
+        # Only one clear answer is stored: alone at the top, and 0.95 or above. A lone partial
+        # match used to be stored as if certain ("Victoria, BC" became Australia/Victoria), and
+        # so did the first of a tie (中國香港 became Asia/Shanghai).
+        top = cands[0]["score"] if cands else 0
+        if top >= 0.95 and sum(c["score"] == top for c in cands) == 1:
             tz = cands[0]["timezone"]
         elif cands:
-            tz_note = ("多个时区都对得上「%s」：%s —— 跟本人确认一个再存。"
+            tz_note = ("「%s」对不上唯一一个时区（候选：%s）—— 跟本人确认一个再存。"
                        % (city, "、".join(c["timezone"] for c in cands[:3])))
         else:
             tz_note = ("没能从「%s」认出时区。问一个附近的大城市或国家再存 "

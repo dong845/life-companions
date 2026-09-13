@@ -407,6 +407,36 @@ _TZ_ALIASES = {
     "new zealand": "Pacific/Auckland",
 }
 
+# How much a country word says on its own. Where the whole country keeps one clock it is as
+# good as a city; where it spans several (the Canary Islands, Vancouver and Toronto, Perth and
+# Sydney) it is only a hint. Every other alias is a city, and a city outranks the country it
+# is written with: 中國香港 used to tie 中国 with 香港, and dictionary order made it Shanghai.
+_TZ_COUNTRY_ONE_CLOCK = {
+    "中国", "台湾", "日本", "韩国", "荷兰", "德国", "法国", "英国", "意大利", "瑞士", "新西兰",
+    "纽西兰", "马来西亚", "uk", "england", "britain", "ireland", "germany", "france", "italy",
+    "netherlands", "holland", "belgium", "switzerland", "sweden", "japan", "korea", "china",
+    "india", "taiwan", "malaysia", "new zealand",
+}
+_TZ_COUNTRY_SEVERAL_CLOCKS = {
+    "西班牙", "加拿大", "澳大利亚", "澳洲", "usa", "united states", "spain", "australia", "canada",
+    "brazil", "mexico",
+}
+assert (_TZ_COUNTRY_ONE_CLOCK | _TZ_COUNTRY_SEVERAL_CLOCKS) <= set(_TZ_ALIASES), \
+    "a country tier names a word that is not an alias"
+
+
+def _alias_score(key):
+    return (0.95 if key in _TZ_COUNTRY_ONE_CLOCK else
+            0.85 if key in _TZ_COUNTRY_SEVERAL_CLOCKS else 1.0)
+
+
+def _only_country_words(words):
+    """True when `words` is nothing but country names we know ("canada", "new zealand")."""
+    for w in sorted((k for k in _TZ_COUNTRY_ONE_CLOCK | _TZ_COUNTRY_SEVERAL_CLOCKS if k.isascii()),
+                    key=len, reverse=True):
+        words = re.sub(r"(?<![a-z0-9])" + re.escape(w) + r"(?![a-z0-9])", " ", words)
+    return not words.strip()
+
 
 def _fold(s):
     """lowercase + strip diacritics, so "São Paulo" reaches America/Sao_Paulo and
@@ -435,14 +465,22 @@ def resolve_timezone(text, limit=5):
     hits, seen = [], set()
 
     def add(zone, score, why):
-        if zone and zone not in seen:
-            seen.add(zone)
-            hits.append({"timezone": zone, "score": score, "matched_on": why})
+        if not zone:
+            return
+        if zone in seen:
+            for h in hits:            # the same zone reached two ways keeps its best reading
+                if h["timezone"] == zone and score > h["score"]:
+                    h.update(score=score, matched_on=why)
+            return
+        seen.add(zone)
+        hits.append({"timezone": zone, "score": score, "matched_on": why})
 
-    # 1. explicit alias (Chinese city names, country words)
+    # 1. explicit alias (Chinese city names, country words). An English word matches only as a
+    # whole word: "usa" sat inside "Busan" and "uk" inside "Fukuoka", and both won.
     for k, v in _TZ_ALIASES.items():
-        if k in low or k in raw or k in simp:
-            add(v, 1.0, f"alias:{k}")
+        if (re.search(r"(?<![a-z0-9])" + re.escape(k) + r"(?![a-z0-9])", low) if k.isascii()
+                else k in raw or k in simp):
+            add(v, _alias_score(k), f"alias:{k}")
 
     # 2. the text already IS a zone name
     try:
@@ -454,17 +492,23 @@ def resolve_timezone(text, limit=5):
         if z.lower() == low:
             add(z, 1.0, "exact zone name")
 
-    # 3. the last path segment is a city: America/New_York -> "new york"/"new_york"
+    # 3. the last path segment is a city: America/New_York -> "new york"/"new_york". Written
+    # with nothing but a country beside it ("Vancouver, Canada") it is as clear as the city on
+    # its own; with other words ("Victoria, BC", "Perth, Scotland") it is a partial match. Old
+    # link names that are a country or a compass word (Japan, Australia/South) are skipped:
+    # the country is an alias, and "South Korea" is not Adelaide.
     token = re.sub(r"[^a-z0-9\u4e00-\u9fff]+", " ", low).strip()
     for z in sorted(zones):
         city = z.rsplit("/", 1)[-1]
         city_words = re.sub(r"[^a-z0-9]+", " ", _fold(city)).strip()
-        if not city_words:
+        if (not city_words or city_words in ("north", "south", "east", "west", "central")
+                or _only_country_words(city_words)):
             continue
         if city_words == token:
             add(z, 0.95, f"city:{city}")
         elif token and (token.startswith(city_words + " ") or f" {city_words} " in f" {token} "):
-            add(z, 0.7, f"city:{city}")
+            rest = f" {token} ".replace(f" {city_words} ", " ", 1)
+            add(z, 0.95 if _only_country_words(rest) else 0.7, f"city:{city}")
     return sorted(hits, key=lambda h: -h["score"])[:limit]
 
 
@@ -477,7 +521,9 @@ def cmd_resolve_tz(args):
     hits = resolve_timezone(args.place)
     print(json.dumps({
         "query": args.place, "candidates": hits,
-        "_note": ("Confirm with the person if more than one is plausible, then store it: "
+        "_note": ("One candidate at 0.95 or above, alone at the top, is a clear answer. A tie, "
+                  "or a best score below 0.95 (a country with several clocks, or a partial match "
+                  "such as 'Victoria, BC'), means ask the person first. Then store it: "
                   "`set-profile --merge-json '{\"identity\":{\"timezone\":\"<zone>\"}}'`."
                   if hits else
                   "No match — ASK for a nearby major city or the country. Do NOT guess a "

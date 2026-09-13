@@ -82,5 +82,6 @@ checklists in `references/modules/` still apply.
 
 Everything personal lives in `COMPANION_HOME` (default `~/.companion`), outside this
 repo, `chmod 700`, never transmitted. Consent is per-category (`birth`, `relationships`,
-`mood`) and revocable; `companion.py forget …` really deletes. Never commit user data —
+`mood`) and revocable. `companion.py forget …` first shows what it would remove, and really
+deletes once it runs again with `--yes`. Never commit user data —
 `.gitignore` has a defensive backstop, but the real rule is that it belongs outside.

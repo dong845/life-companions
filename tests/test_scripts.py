@@ -1776,6 +1776,61 @@ class TestCrisisLinesForMoreRegions(unittest.TestCase):
                 self.assertIn(region, sec, f"{name} has no {region}")
 
 
+class TestHelplineGateAcrossFormats(unittest.TestCase):
+    """The crisis gate let an invented number through whenever it was written the way the
+    new table writes real lines: beside a service name it didn't count as helpline wording
+    (Samaritans of Singapore 1768), with a Unicode hyphen or a non-breaking space, after a
+    comma, or beside an emergency number that then counted as "a real resource" (so did
+    "111 天"). Real lines in everyday forms ("03-7627 2929", "+852 2389 2222", full-width
+    digits) were blocked instead, and ordinary replies were blocked for an O*NET code, a
+    dotted date, a step count or a price."""
+
+    def found(self, t, m="crisis"):
+        import selfcheck
+        return {x["code"] for x in selfcheck.check(t, m)["findings"]}
+
+    def test_invented_numbers_written_like_the_table_are_blocked(self):
+        for t in ["Samaritans of Singapore 1768 (24h). In an emergency, 995 for an ambulance.",
+                  "자살예방상담전화 108 (24시간). 긴급하면 119.",
+                  "情緒通 18112，緊急時報警 999",
+                  "#いのちSOS 0120\u2010061\u2010339 または 119",
+                  "よりそいホットライン 0120-27-9339、緊急は 119",
+                  "Call Lifeline on 13-11-15, or 000",
+                  "TelefonSeelsorge 0800\u00a0111\u00a00\u00a0333",
+                  "心理援助热线：12356,4001619996"]:
+            self.assertIn("unknown-helpline", self.found(t), t)
+
+    def test_a_count_is_not_a_crisis_resource(self):
+        for t in ["你已经坚持了 111 天，我在这儿陪你。", "Du hast mir schon 114 Nachrichten geschrieben."]:
+            self.assertIn("crisis-no-resource", self.found(t), t)
+
+    def test_real_lines_written_the_usual_ways_pass(self):
+        for t in ["Befrienders KL 03-7627 2929", "撒瑪利亞會 +852 2389 2222", "撒瑪利亞會 (852) 2389 2222",
+                  "#いのちSOS ０１２０－０６１－３３８", "Samaritans 116\u00a0123", "Samaritans 116\u2013123",
+                  "北京心理危机干预中心 010-82951332；希望24 400-161-9995",
+                  "撥打生命線 1995，起碼有人會接", "SAMU 15, police 17, pompiers 18."]:
+            c = self.found(t)
+            self.assertNotIn("unknown-helpline", c, t)
+            self.assertNotIn("crisis-no-resource", c, t)
+
+    def test_ordinary_replies_are_not_blocked(self):
+        for t, m in [("我按 O*NET 的 Data Scientists（15-2051.00）来算", "career"),
+                     ("你 1993.4.12 出生", "destiny"), ("12.04.1993 出生的人", "destiny"),
+                     ("2003-2012 年走丙寅大运", "destiny"), ("经度 116.4074", "destiny"),
+                     ("今天走了 6000-8000 步", "daily"), ("他 10.30 才回消息，你打给他", "relationships"),
+                     ("心理咨询每次 300-800 元", "none"), ("打折以后 299 元", "none"),
+                     ("连续打卡 100 天", "daily"), ("I recall 365 days of rain", "none"),
+                     ("In this context, about 250 words", "none"),
+                     ("calling a friend between 7.30 and 9.00", "daily")]:
+            self.assertNotIn("unknown-helpline", self.found(t, m), (t, m))
+
+    def test_a_long_run_of_list_markers_stays_fast(self):
+        import time
+        t0 = time.time()
+        self.found("热线 " + "1. " * 400 + "12356")
+        self.assertLess(time.time() - t0, 0.5)
+
+
 class TestGateHolesFoundByAudit(unittest.TestCase):
     def check(self, t, m):
         import selfcheck

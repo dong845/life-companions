@@ -69,18 +69,43 @@ PHONE_RE = re.compile(r"(?<![\d.\-])(?:\+?\d[\d\-. ]{2,16}\d)(?![\d\-])")
 # Crisis lines are frequently SHORT codes (988, 112, 12356, 116 123). A minimum digit
 # count therefore cannot be the test — "61120" is five digits and sailed through with
 # zero findings. Any number near helpline language is a candidate no matter how short.
+# Words that make a number a claim about where to call. Matched as words: 「打」 alone
+# fired on 打卡 and 打折, and "call" and "text" inside "recall" and "context", so a
+# price or a step count was blocked as an invented hotline.
 HELPLINE_CONTEXT = re.compile(
-    r"热线|专线|求助|拨打|打给?|致电|援助|干预中心|危机|自杀|心理|"
-    r"helpline|hotline|crisis line|lifeline|call|text|dial|reach", re.I)
+    r"热线|专线|求助|拨打|打给|打电话|致电|援助|干预中心|危机|自杀|"
+    r"\b(?:helpline|hotline|crisis line|lifeline|call(?:s|ed|ing)?|text(?:s|ed|ing)?|"
+    r"dial(?:s|led|ing)?|phone|reach)\b", re.I)
+# A short code (four digits or fewer) names a resource only beside words that say it is
+# one. Otherwise "你已经坚持了 111 天" named New Zealand's 111, "114 Nachrichten" France's
+# 114, and a crisis reply with no real line passed as having one.
+RESOURCE_CONTEXT = re.compile(
+    r"热线|专线|电话|拨打|打给|打电话|致电|报警|急救|救护|消防|求助|紧急|生命线|情绪通|"
+    r"相谈|自杀|预防|자살예방|상담|전화|긴급|いのち|よりそい|ダイヤル|救急|警察|"
+    r"\b(?:helpline|hotline|lifeline|mindline|samaritans|befrienders|telefonseelsorge|"
+    r"hilfetelefon|call(?:s|ed|ing)?|text(?:s|ed|ing)?|dial(?:s|led|ing)?|phone|sms|"
+    r"emergency|ambulance|police|appel(?:ez|er)?|numéro|urgence|notruf|polizei|talian|"
+    r"hubungi|suicide)\b", re.I)
 NUM_TOKEN_RE = re.compile(r"\+?\d[\d\-. ]*\d|\d")
 # A few services carry digits in their name. "Call 1800RESPECT on 1800 737 732" is one
-# real line, but its 1800 read as a four-digit number of its own. The names are blanked
-# out before the scan; the number beside them still has to be a known line.
-SERVICE_NAMES_WITH_DIGITS = re.compile(r"1800 ?RESPECT|0508 ?TAUTOKO|0800 ?REFUGE", re.I)
+# real line, but its 1800 read as a four-digit number of its own, and 「希望24 400-161-9995」
+# read as 24 400-161-9995. The names are blanked out first; the number beside them still
+# has to be a known line.
+SERVICE_NAMES_WITH_DIGITS = re.compile(r"1800 ?RESPECT|0508 ?TAUTOKO|0800 ?REFUGE|希望 ?24", re.I)
 # Dates look exactly like phone numbers to that regex — and a fact-check block is FULL
 # of them ("时效: as of 2026-08"). Excluding them matters more than it sounds: a gate
 # that cries wolf on its own required artifact is a gate nobody runs twice.
 DATEY_RE = re.compile(r"^\d{4}[-/]\d{1,2}(?:[-/]\d{1,2})?$|^\d{1,2}[-/]\d{1,2}(?:[-/]\d{2,4})?$")
+# Only a real calendar date is stripped: the old pattern also ate 「0120-27-93」 out of an
+# invented Japanese number and let the rest through.
+DATE_TIME_RE = re.compile(r"(?<!\d)(?:19|20)\d{2}-(?:0?[1-9]|1[0-2])-(?:0?[1-9]|[12]\d|3[01])"
+                          r"(?:[ T]\d{1,2}(?::\d{2}){0,2})?(?!\d)")
+# Country codes of the places in the crisis table, and the ones dialled at home with a 0,
+# so "+852 2389 2222" and the domestic 「03-7627 2929」 (+603-7627 2929) are the real lines
+# they are.
+_COUNTRY_CODES = ("1", "31", "33", "44", "49", "60", "61", "64", "65", "81", "82", "86",
+                  "353", "852", "853", "886")
+_TRUNK_ZERO = ("31", "33", "44", "49", "60", "61", "64", "81", "82", "86", "353", "886")
 
 
 def _digits(s):
@@ -90,9 +115,40 @@ def _digits(s):
 _KNOWN_DIGITS = {_digits(h) for h in KNOWN_HELPLINES}
 
 
-def _looks_like_a_phone(raw, near_helpline=False):
+def _is_known_digits(d, international=False):
+    if d in _KNOWN_DIGITS:
+        return True
+    if international:
+        d = d[2:] if d.startswith("00") else d
+        for cc in _COUNTRY_CODES:
+            rest = d[len(cc):]
+            if d.startswith(cc) and len(rest) >= 3 and (
+                    rest in _KNOWN_DIGITS or (cc in _TRUNK_ZERO and "0" + rest in _KNOWN_DIGITS)):
+                return True
+    elif d.startswith("0") and len(d) >= 8:
+        return any(cc + d[1:] in _KNOWN_DIGITS for cc in _TRUNK_ZERO)
+    return False
+
+
+_DASHES = dict.fromkeys(map(ord, "‐‑‒–—−﹣－"), "-")
+
+
+def _number_view(text):
+    """The text as a phone number reads: full-width digits and punctuation made ASCII (NFKC),
+    every Unicode dash a '-', every non-breaking or thin space a ' ', and "(852) " as
+    "+852 ". Written with U+2010 hyphens, an invented number fell apart into short groups
+    and passed; a real one in full-width digits wasn't recognised."""
+    import unicodedata
+    view = unicodedata.normalize("NFKC", text).translate(_DASHES)
+    return re.sub(r"\((\d{1,3})\)\s*(?=\d)",
+                  lambda m: f"+{m.group(1)} " if m.group(1) in _COUNTRY_CODES else m.group(0), view)
+
+
+def _looks_like_a_phone(raw, near_helpline=False, crisis=False):
     norm = raw.replace(" ", "")
-    if DATEY_RE.match(norm):
+    # In a crisis reply only a date with a four-digit year is let off: 「13-11-15」 is a
+    # made-up Lifeline number there far more often than it is a date.
+    if DATEY_RE.match(norm) and not (crisis and not re.match(r"\d{4}", norm)):
         return False
     d = _digits(norm)
     if not d:
@@ -110,23 +166,40 @@ _LIST_MARKER = re.compile(r"^\d{1,2}[.)]$")
 _SMALL_COUNT = re.compile(r"^\d{1,2}$")
 
 
-def _is_known_line(raw):
+def _known_part(raw):
+    """The digits of the known line inside a token, or None. Linear in the token: a phone
+    number is at most six groups, and a long run of list markers used to take seconds."""
     groups = raw.split()
-    for i in range(len(groups)):
-        if not all(_LIST_MARKER.match(g) for g in groups[:i]):
+    n = len(groups)
+    small_from = [True] * (n + 1)
+    for k in range(n - 1, -1, -1):
+        small_from[k] = small_from[k + 1] and bool(_SMALL_COUNT.match(groups[k]))
+    international = raw.lstrip().startswith(("+", "00"))
+    for i in range(n):
+        if i and not _LIST_MARKER.match(groups[i - 1]):
             break
-        for j in range(len(groups), i, -1):
-            if (_digits("".join(groups[i:j])) in _KNOWN_DIGITS
-                    and all(_SMALL_COUNT.match(g) for g in groups[j:])):
-                return True
-    return False
+        for j in range(min(n, i + 6), i, -1):
+            d = _digits("".join(groups[i:j]))
+            if small_from[j] and _is_known_digits(d, international and i == 0):
+                return d
+    return None
+
+
+def _is_known_line(raw):
+    return _known_part(raw) is not None
 
 
 def _in_a_grouped_figure(s, m):
-    """`12,345` splits at the comma into 12 and 345. Neither half is a phone number, and
-    once 000 is a real line, the 000 of `1,000` must not count as one."""
-    return bool(re.search(r"\d,$", s[max(0, m.start() - 2):m.start()])
-                or re.match(r",\d{3}(?!\d)", s[m.end():m.end() + 5]))
+    """`12,345` splits at the comma into 12 and 345; neither half is a phone number, and the
+    000 of `1,000` isn't Australia's 000. Only a real grouped figure counts, though:
+    「12356,4001619996」 is two numbers, and the second still has to be checked."""
+    a, b = m.start(), m.end()
+    while a > 0 and (s[a - 1].isdigit() or s[a - 1] == ","):
+        a -= 1
+    while b < len(s) and (s[b].isdigit() or s[b] == ","):
+        b += 1
+    run = s[a:b].strip(",")
+    return "," in run and re.fullmatch(r"\d{1,3}(?:,\d{3})+", run) is not None
 
 
 _YEAR_BEFORE = re.compile(r"(?:\b(?:since|in|from|as of|until|by)|于|从|自)\s*$", re.I)
@@ -134,24 +207,59 @@ _YEAR_BEFORE = re.compile(r"(?:\b(?:since|in|from|as of|until|by)|于|从|自)\s
 
 def _is_a_year(s, m):
     """`2025 起全国统一` is a year, not a four-digit shortcode. So is the 1995 of `1995 年`,
-    even though 1995 is also Taiwan's 生命線."""
+    even though 1995 is also Taiwan's 生命線; but not the 1995 of 「1995，起码有人接」."""
     if not re.fullmatch(r"(?:19|20)\d{2}", m.group(0)):
         return False
-    return (s[m.end():m.end() + 3].lstrip()[:1] in ("年", "起")
+    after = s[m.end():m.end() + 4].lstrip()
+    return (after[:1] == "年" or (after[:1] == "起" and after[1:2] not in ("码", "碼"))
             or bool(_YEAR_BEFORE.search(s[max(0, m.start() - 10):m.start()])))
+
+
+_SOC_CODE = re.compile(r"\d{2}-\d{4}\.\d{2}")
+_DOTTED_DATE = re.compile(r"(?:19|20)\d{2}\.\d{1,2}\.\d{1,2}|\d{1,2}\.\d{1,2}\.(?:19|20)\d{2}")
+_CLOCK = re.compile(r"(?:[01]?\d|2[0-4])[.:][0-5]\d")
+_DECIMAL = re.compile(r"\d{1,3}\.\d+")
+_RANGE = re.compile(r"([1-9]\d{2,4})-([1-9]\d{2,4})")
+_MONEY_AFTER = re.compile(r"\s*(?:元|块|円|원|美元|港币|港元|日元|欧元|RMB|CNY|HKD|USD|EUR|€|\$)")
+_MONEY_BEFORE = re.compile(r"(?:\$|€|¥|￥|HK\$|RM)\s*$")
+
+
+def _ordinary_figure(raw, s, m, crisis, near_helpline):
+    """Shapes that are not phone numbers: an O*NET code (15-2051.00), a dotted date, a clock
+    time (10.30), a decimal (116.4074), an amount of money, and, outside a crisis reply and
+    away from helpline words, a range (6000-8000 步)."""
+    # read the token as written: with its spaces taken out, 「1. 12357」 became the decimal
+    # 1.12357 and an invented number walked through; a decimal is also no excuse in a crisis
+    tok = raw.strip()
+    if (_SOC_CODE.fullmatch(tok) or _DOTTED_DATE.fullmatch(tok) or _CLOCK.fullmatch(tok)
+            or (not crisis and _DECIMAL.fullmatch(tok))):
+        return True
+    if _MONEY_AFTER.match(s, m.end()) or _MONEY_BEFORE.search(s[max(0, m.start() - 4):m.start()]):
+        return True
+    r = _RANGE.fullmatch(tok)
+    return bool(r and not crisis and not near_helpline and int(r.group(1)) < int(r.group(2)))
+
+
+_FRENCH_SHORT = re.compile(r"\b(?:SAMU|Police Secours|police|pompiers|sapeurs-pompiers)"
+                           r"\s*\**\s*(?:15|17|18)\b", re.I)
 
 
 def _names_a_real_resource(text):
     """Does this reply actually point at a REAL crisis resource?
 
     Substring matching was the bug: "61120" contains "112", so an invented shortcode
-    satisfied this check. Compare whole number tokens instead.
+    satisfied this check. Compare whole number tokens instead, and let a short code count
+    only beside words that make it a line to call.
     """
-    if "findahelpline" in text.lower():
+    if "findahelpline" in text.lower() or _FRENCH_SHORT.search(text):
         return True
-    for m in NUM_TOKEN_RE.finditer(text):
-        if (_is_known_line(m.group(0)) and not _in_a_grouped_figure(text, m)
-                and not _is_a_year(text, m)):
+    view = _number_view(text)
+    view = SERVICE_NAMES_WITH_DIGITS.sub(lambda m: " " * len(m.group(0)), view)
+    for m in NUM_TOKEN_RE.finditer(view):
+        part = _known_part(m.group(0))
+        if part is None or _in_a_grouped_figure(view, m) or _is_a_year(view, m):
+            continue
+        if len(part) >= 5 or RESOURCE_CONTEXT.search(view[max(0, m.start() - 24):m.end() + 24]):
             return True
     return False
 
@@ -757,7 +865,12 @@ def _check(text, module="none", locale=None):
     # 12-digit string with hyphens. Left in, this rule would fire on every chart
     # reading the skill produces — the fastest way to make its most important check
     # get ignored.
-    phone_scan = re.sub(r"\d{4}-\d{1,2}-\d{1,2}(?:[ T]\d{1,2}(?::\d{2}){0,2})?", " ", text)
+    # In a crisis reply every number of three digits or more is a claim about where to
+    # call, whatever words stand beside it: the table's own service names (Samaritans of
+    # Singapore, 情緒通, 자살예방상담전화) weren't helpline wording to this check, so a
+    # made-up line one digit off the real one passed.
+    crisis = module == "crisis"
+    phone_scan = DATE_TIME_RE.sub(" ", _number_view(text))
     phone_scan = SERVICE_NAMES_WITH_DIGITS.sub(lambda m: " " * len(m.group(0)), phone_scan)
     for m in NUM_TOKEN_RE.finditer(phone_scan):
         raw = m.group(0).strip()
@@ -766,7 +879,10 @@ def _check(text, module="none", locale=None):
                 or _is_a_year(phone_scan, m)):
             continue
         window = phone_scan[max(0, m.start() - 40):m.end() + 20]
-        if not _looks_like_a_phone(raw, near_helpline=bool(HELPLINE_CONTEXT.search(window))):
+        near = bool(HELPLINE_CONTEXT.search(window))
+        if _ordinary_figure(raw, phone_scan, m, crisis, near):
+            continue
+        if not _looks_like_a_phone(raw, near_helpline=near or crisis, crisis=crisis):
             continue
         if norm.replace("-", "") in {h.replace("-", "") for h in KNOWN_HELPLINES}:
             continue

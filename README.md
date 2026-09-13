@@ -104,9 +104,9 @@ star ratings. It logs the day for you if you want.
 **Career fit**
 A transparent 21-item interest check grounded in Holland/RIASEC, scored against **188
 real O\*NET occupations** (CC BY 4.0). You get a **Low / Moderate / Strong** band and a
-confidence note. Never a fake percentage. **68** of those occupations carry real
-numeric O\*NET interest scores and **62** also carry Work Values, so adding a values
-ranking makes the match genuinely data-weighted. `--find` maps what you *call* a job
+confidence note. Never a fake percentage. All 188 carry O\*NET 31.0 interest ratings
+and **173** also carry Work Values, so adding a values ranking makes the match genuinely
+data-weighted. `--find` maps what you *call* a job
 ("产品经理", "MRI reconstruction") to an actual occupation code, and returns nothing
 rather than guessing when the role isn't in the dataset. For CVs and cover letters it
 hands off to the `job-hunt` skill.

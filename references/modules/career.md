@@ -7,13 +7,14 @@ frameworks, scored honestly with **coarse bands, never fabricated precision**.
 **v1 status — shipped.** The scoring engine is live:
 `scripts/career_match.py` scores the person against the shipped O\*NET occupation
 data (`data/career/occupations.json`, **188 real occupations, CC BY 4.0**) using the
-interest-check items in `data/career/assessment_items.json`. **68 of the 188 now
-carry real numeric O\*NET Occupational-Interest scores** (1–7, DB 30.3), **62 of
-those also carry Work Values** (ipsative rank, DB 30.2) — so the values blend is
-now a live, data-backed component, not a hypothetical. The set is densely weighted
-toward the user's data-science / ML / research / computing / medical-imaging field,
-then spread across all six RIASEC areas. The remaining 120 stay high-point-code-only
-(lower confidence). See the **Data reality** note below before you describe a result.
+interest-check items in `data/career/assessment_items.json`. **All 188 carry numeric
+O\*NET Occupational-Interest ratings** (1–7, O\*NET 31.0 Database) and **173 also carry
+Work Values** (ipsative rank, O\*NET 30.2, the last release to publish them), so the
+values blend is a live, data-backed component, not a hypothetical. The set is densely
+weighted toward the user's data-science / ML / research / computing / medical-imaging
+field, then spread across all six RIASEC areas; common jobs such as preschool teachers,
+patrol officers and couriers are not in it. See the **Data reality** note below before
+you describe a result.
 
 ## Computed vs interpretive (the skill's one rule, applied here)
 - **Computed (facts).** The RIASEC-6 vector from the person's answers, the
@@ -131,12 +132,14 @@ a **band** (thresholds 0.55 / 0.75, disclosed as tunable) plus a **confidence
 note** that shrinks on short/partial assessments and on code-only occupations.
 Raw floats stay internal; the person-facing layer emits **bands + language only**.
 
-**The result comes back as TWO lists, and they are not comparable.** Use
-`score_person_grouped()`, which returns `numeric_interests` (68) and `code_only` (120)
-ranked and banded separately. For one and the same person the numeric set came out 63%
-"Strong" and the code-only set 20% — a shared threshold on differently-shaped
-distributions made "Strong" look like one claim when it was two. **Never merge them
-into one table, and never say a code-only occupation fits better than a numeric one.**
+**The result comes back as two lists, and they are not comparable.** Use
+`score_person_grouped()`, which returns `numeric_interests` and `code_only`, ranked and
+banded separately. Since the O\*NET 31.0 rebuild all 188 occupations are in
+`numeric_interests` and `code_only` is empty. It stays because the two kinds score on
+differently-shaped distributions: when 120 occupations were code-only, one person's
+numeric set came out 63% "Strong" and the code-only set 20%. **If a code-only occupation
+ever appears, never merge the lists into one table, and never say a code-only
+occupation fits better than a numeric one.**
 
 **An answer set with no shape is refused, not scored.** Cosine ignores magnitude, so
 answering the same value to all 21 items produced the vector [k,k,k,k,k,k] — identical
@@ -146,22 +149,20 @@ occupation sits nearest the uniform direction. `score_person_grouped` now return
 **"can't measure"**, not "low match". Offer to redo the check, or drop the instrument
 and talk about what they've actually done and when they were most absorbed.
 
-**Data reality (be honest about which read you gave):** coverage is now mixed, so
-say which kind of match the person actually got:
-- **Numeric-interest occupations (68).** Real 1–7 O\*NET interest scores → a genuine
-  shape match, `moderate`+ confidence even before values. These cluster in the
-  data/computing/health/research space.
-- **Work-Values occupations (62 of those 68).** If the person supplied a Work-Values
-  ranking, the **values blend engages** (Interests 0.60 / Values 0.40) and lifts
-  confidence to `higher`. Naming it is honest — *"this one's scored on both your
-  interests and your values"*. The **6 without a Work-Values rating stay
-  interest-only** (`work_values:null`, never fabricated) — say so if one lands high;
-  don't imply its values were checked.
-- **Code-only occupations (120).** Interest signal reconstructed from the 3-letter
-  high-point code via the 3-2-1 expansion → **lower confidence, interests only**. The
-  values/traits weights can't engage here even if the person supplied them. Call it
-  an interest-fit sketch, and push the Work-Values ranking as the real sharpener —
-  especially for a single-peaked profile where many roles tie at one band.
+**Data reality (be honest about which read you gave):** say which kind of match the
+person actually got:
+- **Interest ratings (all 188).** O\*NET's 1–7 interest ratings → a genuine shape match,
+  `moderate`+ confidence even before values. O\*NET marks them as model estimates
+  (Machine Learning/Expert), so present them as O\*NET's estimates, not survey results.
+- **Work Values (173 of the 188).** If the person supplied a Work-Values ranking, the
+  **values blend engages** (Interests 0.60 / Values 0.40) and lifts confidence to
+  `higher`. Naming it is honest — *"this one's scored on both your interests and your
+  values"*. The **15 without a Work-Values rating stay interest-only**
+  (`work_values:null`, never fabricated) — say so if one lands high; don't imply its
+  values were checked.
+- **Code-only occupations (none today).** `career_match.py` still accepts an occupation
+  with only a 3-letter high-point code, expands it 3-2-1, and scores it in `code_only` at
+  **lower confidence, interests only**. Call such a result an interest-fit sketch.
 
 Never describe a result as values-weighted when the occupation carried no
 `work_values`; the payload's `components_used` / `weights_applied` tell you exactly

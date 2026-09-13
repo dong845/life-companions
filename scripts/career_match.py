@@ -14,7 +14,7 @@ Design honesty rules baked in:
     the O*NET Interest Profiler or any validated instrument (see assessment_items.json).
   * Occupations whose interest signal comes only from a 3-letter high-point code
     (riasec == null) are expanded with a coarse 3-2-1 rule and flagged
-    lower-confidence.
+    lower-confidence. Since the O*NET 31.0 rebuild the shipped data has none.
   * All magic numbers (weights, band thresholds, the 3-2-1 expansion) are the
     disclosed constants below — auditable and tunable.
 
@@ -380,12 +380,12 @@ def score_person(responses, scoring_key, occupations,
 def score_person_grouped(responses, scoring_key, occupations, **kw):
     """The honest shape of this result: TWO lists, not one.
 
-    68 occupations carry real numeric O*NET interest ratings; 120 carry only a
-    3-letter high-point code reconstructed 3-2-1. Those produce differently-shaped
-    score distributions, so one shared band threshold does not mean the same thing in
-    each: for the same person the numeric set came out 63% "Strong" and the code-only
-    set 20%. Merging them into one ranked table made "Strong" look comparable when it
-    was not. Rank and band each group on its own, and say so.
+    Numeric O*NET interest ratings and a 3-letter high-point code reconstructed 3-2-1
+    produce differently-shaped score distributions, so one shared band threshold does
+    not mean the same thing in each: when 120 of the 188 occupations were code-only, one
+    person's numeric set came out 63% "Strong" and the code-only set 20%. Since the
+    O*NET 31.0 rebuild every shipped occupation is numeric and `code_only` is empty. It
+    stays, so a code-only occupation can never be merged into the numeric ranking.
 
     Returns {"refused": …} | {"numeric_interests": [...], "code_only": [...], "_note": …}
     """
@@ -401,14 +401,16 @@ def score_person_grouped(responses, scoring_key, occupations, **kw):
             "discrimination": round(disc, 3),
         }
     ranked = score_person(responses, scoring_key, occupations, **kw)
+    code_only = [p for p in ranked if p.get("data_quality") == "code-only"]
     return {
         "numeric_interests": [p for p in ranked if p.get("data_quality") == "numeric-interests"],
-        "code_only": [p for p in ranked if p.get("data_quality") == "code-only"],
+        "code_only": code_only,
         "discrimination": round(disc, 3),
-        "_note": ("两组分别排名。numeric_interests 有真实 O*NET 兴趣分；code_only 的兴趣"
-                  "信号是从三字母高点码 3-2-1 反推的，置信度更低。**两组的档位不可互相"
-                  "比较** —— 不要把它们并成一张表，也不要说某个 code_only 职业比某个 "
-                  "numeric 职业更契合。"),
+        "_note": ("两组分别排名。numeric_interests 用 O*NET 的数值兴趣分（O*NET 标注为模型估算）。"
+                  + ("code_only 为空：现在每个职业都有数值兴趣分。" if not code_only else
+                     "code_only 的兴趣信号是从三字母高点码 3-2-1 反推的，置信度更低。")
+                  + "**两组的档位不可互相比较** —— 不要把它们并成一张表，也不要说某个 "
+                  "code_only 职业比某个 numeric 职业更契合。"),
     }
 
 

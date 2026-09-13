@@ -1,42 +1,37 @@
 {
  "dataset": "onet_occupations_career_fit",
- "version": "1.0.0+onet30.3-numeric",
- "compiled": "2026-07-17",
+ "version": "1.0.0+onet31.0",
+ "compiled": "2026-09-13",
  "license": "CC BY 4.0",
- "attribution": "This page includes information from O*NET Resource Center by the U.S. Department of Labor, Employment and Training Administration (USDOL/ETA). Used under the CC BY 4.0 license. O*NET® is a trademark of USDOL/ETA. Data were subset and reformatted (RIASEC scores and Work Values extracted per occupation) by the developer; USDOL/ETA has not approved or endorsed these modifications.",
+ "attribution": "This page includes information from the O*NET 31.0 Database and the O*NET 30.2 Database by the U.S. Department of Labor, Employment and Training Administration (USDOL/ETA). Used under the CC BY 4.0 license. O*NET® is a trademark of USDOL/ETA. The developer of the life-companion skill has modified all or some of this information. USDOL/ETA has not approved, endorsed, or tested these modifications.",
  "fetched_from": [
+  "https://www.onetcenter.org/dl_files/database/db_31_0_text.zip",
+  "https://www.onetcenter.org/dl_files/database/db_30_2_text.zip",
+  "https://www.onetcenter.org/license_db.html",
   "https://www.onetonline.org/explore/interests/Realistic/",
   "https://www.onetonline.org/explore/interests/Investigative/",
   "https://www.onetonline.org/explore/interests/Artistic/",
   "https://www.onetonline.org/explore/interests/Social/",
   "https://www.onetonline.org/explore/interests/Enterprising/",
-  "https://www.onetonline.org/explore/interests/Conventional/",
-  "https://www.onetcenter.org/database.html",
-  "https://www.onetcenter.org/dl_files/database/db_30_3_csv/career_interest_types.csv",
-  "https://www.onetcenter.org/dl_files/database/db_30_3_csv/content_model_reference.csv",
-  "https://www.onetcenter.org/dl_files/database/db_30_3_csv/scales_reference.csv",
-  "https://www.onetcenter.org/dl_files/database/db_30_3_csv/occupation_data.csv",
-  "https://www.onetcenter.org/dl_files/database/db_30_2_excel/Work%20Values.xlsx",
-  "https://www.onetcenter.org/license.html"
+  "https://www.onetonline.org/explore/interests/Conventional/"
  ],
  "schema": {
   "soc_code": "O*NET-SOC 8-digit occupation code (string)",
-  "title": "O*NET occupation title",
-  "riasec": "[R,I,A,S,E,C] numeric interest scores 1-7, or null if code-only",
-  "high_point_code": "verified 1-3 letter Holland high-point interest code (interest signal used by career_match.py when riasec is null)",
-  "job_zone": "O*NET Job Zone (int 3/4/5); '1-2' string for the grouped low-prep tier",
-  "source_url": "O*NET OnLine Browse-by-Interests page where the code was observed",
-  "work_values": "{value_name: rank 1-6} ipsative ranking (1=most important) over the six O*NET Work Values, or null",
-  "work_values_extent_1_7": "raw 1-7 Extent scores the ranking was derived from (audit)",
-  "work_values_db": "O*NET DB release Work Values came from"
+  "title": "O*NET occupation title (O*NET 31.0 Occupation Data)",
+  "riasec": "[R,I,A,S,E,C] O*NET Occupational Interest ratings, 1-7 (O*NET 31.0 Career Interest Types, scale OI). Every occupation here carries them; career_match.py still accepts null for a code-only occupation",
+  "high_point_code": "O*NET's own First/Second/Third Interest High-Point as 1-3 Holland letters (O*NET 31.0, scale IH)",
+  "job_zone": "O*NET Job Zone, integer 1-5 (O*NET 31.0 Job Zones)",
+  "source_url": "O*NET OnLine page where the occupation was first observed (a Browse-by-Interests list or the occupation's summary page); the numbers come from the database files in fetched_from",
+  "work_values": "{value_name: rank 1-6} ipsative ranking (1=most important) over the six O*NET Work Values, or null when O*NET 30.2 does not rate the occupation",
+  "work_values_extent_1_7": "the six 1-7 Extent scores the ranking was derived from (O*NET 30.2 Work Values, scale EX), or null",
+  "work_values_db": "O*NET Database release the Work Values came from (\"30.2\"), or null"
  },
  "notes": {
-  "riasec_null": "Numeric 1-7 RIASEC scores are not exposed on O*NET OnLine's public occupation/browse pages (they live in the downloadable O*NET Interests DB). Every occupation therefore carries riasec:null and its VERIFIED high_point_code carries the interest signal. No score was invented.",
-  "job_zone_mixed_type": "job_zone is an integer for Zones 3/4/5; O*NET groups the lowest-prep tier as 'Job Zone 1-2', so those entries use the string '1-2' rather than a fabricated single number.",
+  "build": "Rebuilt 2026-09-13 from the O*NET 31.0 text database (Occupation Data.txt, Career Interest Types.txt, Job Zones.txt) and, for Work Values, the O*NET 30.2 text database (Work Values.txt). The 188 SOC codes are the ones the previous release shipped, and every title is unchanged in 31.0. The 68 interest vectors and 62 Work Values rankings that release carried are reproduced exactly. Nothing is estimated: a value O*NET does not publish is null.",
+  "interest_source": "O*NET marks the Domain Source of these interest ratings as Machine Learning/Expert for 1116 of the 1128 ratings here and Machine Learning for the other 12: they are O*NET's model estimates, and should be described that way.",
+  "work_values_ranks": "work_values ranks the six Extent scores from highest to lowest and breaks ties alphabetically by value name, the order of career_match.WORK_VALUES. That rule reproduces every ranking the previous release shipped.",
   "mapped_terms": "Terms with no dedicated O*NET-SOC code were mapped to the nearest real code and disclosed, not fabricated: 'medical physicist'/'MRI physicist' -> Physicists 19-2012.00; 'machine learning / AI engineer' -> Data Scientists 15-2051.00 and Computer and Information Research Scientists 15-1221.00.",
-  "omitted": "Generic trades (electricians, plumbers, carpenters, welders, machinists) whose codes were not returned in the fetched page listings were OMITTED rather than guessed.",
-  "numeric_riasec_upgrade": "51 occupations now carry REAL numeric O*NET Occupational-Interest scores (1-7, element 1.B.1, DB 30.3 career_interest_types.csv, 02/2026); the remaining 137 stay high-point-code-only (riasec:null, scored via the disclosed 3-2-1 expansion, lower confidence). Nothing invented.",
-  "work_values": "46 occupations carry Work Values as an ipsative rank (1=most important) derived from the six 1-7 Extent scores (element 1.B.2, DB 30.2 - last release to publish Work Values; discontinued in 30.3). work_values_extent_1_7 keeps the raw scores for audit. Occupations O*NET does not rate carry work_values:null, NOT estimated."
+  "not_rated_for_work_values": "15 occupations have no Work Values in O*NET 30.2 and carry work_values: null: Data Scientists 15-2051.00; Software Developers 15-1252.00; Penetration Testers 15-1299.04; Digital Forensics Analysts 15-1299.06; Medical Dosimetrists 29-2036.00; Web and Digital Interface Designers 15-1255.00; Cardiologists 29-1212.00; Health Information Technologists and Medical Registrars 29-9021.00; Medical Records Specialists 29-2072.00; Blockchain Engineers 15-1299.07; Financial and Investment Analysts 13-2051.00; Emergency Medical Technicians 29-2042.00; Paramedics 29-2043.00; Project Management Specialists 13-1082.00; Sales Representatives of Services, Except Advertising, Insurance, Financial Services, and Travel 41-3091.00."
  },
  "count": 188,
  "occupations": [
@@ -54,7 +49,9 @@
    "high_point_code": "IC",
    "job_zone": 4,
    "source_url": "https://www.onetonline.org/explore/interests/Investigative/",
-   "work_values": null
+   "work_values": null,
+   "work_values_extent_1_7": null,
+   "work_values_db": null
   },
   {
    "soc_code": "15-1252.00",
@@ -70,7 +67,9 @@
    "high_point_code": "IC",
    "job_zone": 4,
    "source_url": "https://www.onetonline.org/explore/interests/Investigative/",
-   "work_values": null
+   "work_values": null,
+   "work_values_extent_1_7": null,
+   "work_values_db": null
   },
   {
    "soc_code": "15-1221.00",
@@ -88,11 +87,11 @@
    "source_url": "https://www.onetonline.org/explore/interests/Investigative/",
    "work_values": {
     "Achievement": 1,
+    "Working Conditions": 2,
     "Independence": 3,
     "Recognition": 4,
-    "Relationships": 6,
     "Support": 5,
-    "Working Conditions": 2
+    "Relationships": 6
    },
    "work_values_extent_1_7": {
     "Achievement": 5.67,
@@ -119,12 +118,12 @@
    "job_zone": 5,
    "source_url": "https://www.onetonline.org/explore/interests/Investigative/",
    "work_values": {
-    "Achievement": 2,
     "Independence": 1,
+    "Achievement": 2,
     "Recognition": 3,
     "Relationships": 4,
-    "Support": 6,
-    "Working Conditions": 5
+    "Working Conditions": 5,
+    "Support": 6
    },
    "work_values_extent_1_7": {
     "Achievement": 5.33,
@@ -154,9 +153,9 @@
     "Achievement": 1,
     "Independence": 2,
     "Recognition": 3,
+    "Working Conditions": 4,
     "Relationships": 5,
-    "Support": 6,
-    "Working Conditions": 4
+    "Support": 6
    },
    "work_values_extent_1_7": {
     "Achievement": 5.67,
@@ -185,10 +184,10 @@
    "work_values": {
     "Achievement": 1,
     "Independence": 2,
+    "Working Conditions": 3,
     "Recognition": 4,
-    "Relationships": 6,
     "Support": 5,
-    "Working Conditions": 3
+    "Relationships": 6
    },
    "work_values_extent_1_7": {
     "Achievement": 6.0,
@@ -203,10 +202,34 @@
   {
    "soc_code": "15-2021.00",
    "title": "Mathematicians",
-   "riasec": null,
+   "riasec": [
+    3.22,
+    7.0,
+    3.23,
+    1.95,
+    1.11,
+    5.03
+   ],
    "high_point_code": "IC",
    "job_zone": 5,
-   "source_url": "https://www.onetonline.org/explore/interests/Investigative/"
+   "source_url": "https://www.onetonline.org/explore/interests/Investigative/",
+   "work_values": {
+    "Achievement": 1,
+    "Recognition": 2,
+    "Independence": 3,
+    "Working Conditions": 4,
+    "Support": 5,
+    "Relationships": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 6.0,
+    "Independence": 5.33,
+    "Recognition": 5.67,
+    "Relationships": 2.0,
+    "Support": 2.33,
+    "Working Conditions": 5.33
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "15-1211.00",
@@ -223,12 +246,12 @@
    "job_zone": 4,
    "source_url": "https://www.onetonline.org/explore/interests/Investigative/",
    "work_values": {
+    "Working Conditions": 1,
     "Achievement": 2,
     "Independence": 3,
     "Recognition": 4,
-    "Relationships": 6,
     "Support": 5,
-    "Working Conditions": 1
+    "Relationships": 6
    },
    "work_values_extent_1_7": {
     "Achievement": 5.0,
@@ -243,10 +266,34 @@
   {
    "soc_code": "15-1241.00",
    "title": "Computer Network Architects",
-   "riasec": null,
+   "riasec": [
+    4.04,
+    5.28,
+    2.25,
+    2.17,
+    3.2,
+    5.06
+   ],
    "high_point_code": "ICR",
    "job_zone": 4,
-   "source_url": "https://www.onetonline.org/explore/interests/Investigative/"
+   "source_url": "https://www.onetonline.org/explore/interests/Investigative/",
+   "work_values": {
+    "Achievement": 1,
+    "Independence": 2,
+    "Working Conditions": 3,
+    "Recognition": 4,
+    "Support": 5,
+    "Relationships": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 6.0,
+    "Independence": 5.33,
+    "Recognition": 4.33,
+    "Relationships": 2.67,
+    "Support": 4.33,
+    "Working Conditions": 5.33
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "15-1253.00",
@@ -265,10 +312,10 @@
    "work_values": {
     "Achievement": 1,
     "Independence": 2,
-    "Recognition": 5,
-    "Relationships": 6,
     "Support": 3,
-    "Working Conditions": 4
+    "Working Conditions": 4,
+    "Recognition": 5,
+    "Relationships": 6
    },
    "work_values_extent_1_7": {
     "Achievement": 5.0,
@@ -283,18 +330,38 @@
   {
    "soc_code": "15-1299.04",
    "title": "Penetration Testers",
-   "riasec": null,
+   "riasec": [
+    3.91,
+    5.19,
+    1.31,
+    1.99,
+    2.1,
+    5.18
+   ],
    "high_point_code": "ICR",
    "job_zone": 4,
-   "source_url": "https://www.onetonline.org/explore/interests/Investigative/"
+   "source_url": "https://www.onetonline.org/explore/interests/Investigative/",
+   "work_values": null,
+   "work_values_extent_1_7": null,
+   "work_values_db": null
   },
   {
    "soc_code": "15-1299.06",
    "title": "Digital Forensics Analysts",
-   "riasec": null,
+   "riasec": [
+    3.2,
+    6.11,
+    1.69,
+    1.65,
+    2.71,
+    6.03
+   ],
    "high_point_code": "IC",
    "job_zone": 4,
-   "source_url": "https://www.onetonline.org/explore/interests/Investigative/"
+   "source_url": "https://www.onetonline.org/explore/interests/Investigative/",
+   "work_values": null,
+   "work_values_extent_1_7": null,
+   "work_values_db": null
   },
   {
    "soc_code": "15-2099.01",
@@ -311,12 +378,12 @@
    "job_zone": 4,
    "source_url": "https://www.onetonline.org/explore/interests/Investigative/",
    "work_values": {
-    "Achievement": 4,
     "Independence": 1,
-    "Recognition": 5,
-    "Relationships": 6,
     "Support": 2,
-    "Working Conditions": 3
+    "Working Conditions": 3,
+    "Achievement": 4,
+    "Recognition": 5,
+    "Relationships": 6
    },
    "work_values_extent_1_7": {
     "Achievement": 4.67,
@@ -343,12 +410,12 @@
    "job_zone": 5,
    "source_url": "https://www.onetonline.org/explore/interests/Investigative/",
    "work_values": {
-    "Achievement": 2,
     "Independence": 1,
+    "Achievement": 2,
     "Recognition": 3,
-    "Relationships": 6,
+    "Working Conditions": 4,
     "Support": 5,
-    "Working Conditions": 4
+    "Relationships": 6
    },
    "work_values_extent_1_7": {
     "Achievement": 5.0,
@@ -375,12 +442,12 @@
    "job_zone": 5,
    "source_url": "https://www.onetonline.org/explore/interests/Investigative/",
    "work_values": {
+    "Recognition": 1,
+    "Working Conditions": 2,
     "Achievement": 3,
     "Independence": 4,
-    "Recognition": 1,
-    "Relationships": 6,
     "Support": 5,
-    "Working Conditions": 2
+    "Relationships": 6
    },
    "work_values_extent_1_7": {
     "Achievement": 6.0,
@@ -410,9 +477,9 @@
     "Achievement": 1,
     "Independence": 2,
     "Recognition": 3,
+    "Working Conditions": 4,
     "Relationships": 5,
-    "Support": 6,
-    "Working Conditions": 4
+    "Support": 6
    },
    "work_values_extent_1_7": {
     "Achievement": 6.0,
@@ -439,12 +506,12 @@
    "job_zone": 5,
    "source_url": "https://www.onetonline.org/explore/interests/Investigative/",
    "work_values": {
-    "Achievement": 2,
-    "Independence": 4,
     "Recognition": 1,
+    "Achievement": 2,
+    "Working Conditions": 3,
+    "Independence": 4,
     "Relationships": 5,
-    "Support": 6,
-    "Working Conditions": 3
+    "Support": 6
    },
    "work_values_extent_1_7": {
     "Achievement": 5.67,
@@ -474,9 +541,9 @@
     "Achievement": 1,
     "Independence": 2,
     "Recognition": 3,
+    "Working Conditions": 4,
     "Relationships": 5,
-    "Support": 6,
-    "Working Conditions": 4
+    "Support": 6
    },
    "work_values_extent_1_7": {
     "Achievement": 5.67,
@@ -503,12 +570,12 @@
    "job_zone": 4,
    "source_url": "https://www.onetonline.org/explore/interests/Investigative/",
    "work_values": {
-    "Achievement": 2,
     "Independence": 1,
+    "Achievement": 2,
+    "Working Conditions": 3,
     "Recognition": 4,
     "Relationships": 5,
-    "Support": 6,
-    "Working Conditions": 3
+    "Support": 6
    },
    "work_values_extent_1_7": {
     "Achievement": 5.33,
@@ -538,8 +605,8 @@
     "Achievement": 1,
     "Independence": 2,
     "Recognition": 3,
-    "Relationships": 5,
     "Support": 4,
+    "Relationships": 5,
     "Working Conditions": 6
    },
    "work_values_extent_1_7": {
@@ -555,42 +622,148 @@
   {
    "soc_code": "29-2036.00",
    "title": "Medical Dosimetrists",
-   "riasec": null,
+   "riasec": [
+    4.57,
+    5.3,
+    1.32,
+    3.57,
+    2.21,
+    5.0
+   ],
    "high_point_code": "ICR",
    "job_zone": 4,
-   "source_url": "https://www.onetonline.org/explore/interests/Investigative/"
+   "source_url": "https://www.onetonline.org/explore/interests/Investigative/",
+   "work_values": null,
+   "work_values_extent_1_7": null,
+   "work_values_db": null
   },
   {
    "soc_code": "29-2011.00",
    "title": "Medical and Clinical Laboratory Technologists",
-   "riasec": null,
+   "riasec": [
+    5.81,
+    6.15,
+    1.13,
+    2.77,
+    1.51,
+    4.99
+   ],
    "high_point_code": "IRC",
    "job_zone": 4,
-   "source_url": "https://www.onetonline.org/explore/interests/Investigative/"
+   "source_url": "https://www.onetonline.org/explore/interests/Investigative/",
+   "work_values": {
+    "Support": 1,
+    "Independence": 2,
+    "Achievement": 3,
+    "Relationships": 4,
+    "Working Conditions": 5,
+    "Recognition": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 4.33,
+    "Independence": 4.67,
+    "Recognition": 3.67,
+    "Relationships": 4.33,
+    "Support": 5.67,
+    "Working Conditions": 3.83
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "19-1041.00",
    "title": "Epidemiologists",
-   "riasec": null,
+   "riasec": [
+    2.82,
+    7.0,
+    2.19,
+    4.11,
+    2.37,
+    3.63
+   ],
    "high_point_code": "IS",
    "job_zone": 5,
-   "source_url": "https://www.onetonline.org/explore/interests/Investigative/"
+   "source_url": "https://www.onetonline.org/explore/interests/Investigative/",
+   "work_values": {
+    "Achievement": 1,
+    "Independence": 2,
+    "Recognition": 3,
+    "Relationships": 4,
+    "Working Conditions": 5,
+    "Support": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 5.67,
+    "Independence": 5.33,
+    "Recognition": 5.33,
+    "Relationships": 5.0,
+    "Support": 4.33,
+    "Working Conditions": 4.5
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "13-2099.01",
    "title": "Financial Quantitative Analysts",
-   "riasec": null,
+   "riasec": [
+    1.63,
+    6.67,
+    1.85,
+    1.58,
+    3.45,
+    5.79
+   ],
    "high_point_code": "IC",
    "job_zone": 5,
-   "source_url": "https://www.onetonline.org/explore/interests/Investigative/"
+   "source_url": "https://www.onetonline.org/explore/interests/Investigative/",
+   "work_values": {
+    "Independence": 1,
+    "Achievement": 2,
+    "Recognition": 3,
+    "Working Conditions": 4,
+    "Relationships": 5,
+    "Support": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 5.0,
+    "Independence": 5.33,
+    "Recognition": 5.0,
+    "Relationships": 4.33,
+    "Support": 4.33,
+    "Working Conditions": 5.0
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "19-3011.00",
    "title": "Economists",
-   "riasec": null,
+   "riasec": [
+    1.35,
+    7.0,
+    2.43,
+    2.4,
+    3.93,
+    4.53
+   ],
    "high_point_code": "ICE",
    "job_zone": 5,
-   "source_url": "https://www.onetonline.org/explore/interests/Investigative/"
+   "source_url": "https://www.onetonline.org/explore/interests/Investigative/",
+   "work_values": {
+    "Working Conditions": 1,
+    "Independence": 2,
+    "Achievement": 3,
+    "Recognition": 4,
+    "Support": 5,
+    "Relationships": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 5.0,
+    "Independence": 5.33,
+    "Recognition": 5.0,
+    "Relationships": 2.33,
+    "Support": 3.33,
+    "Working Conditions": 5.67
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "15-1255.00",
@@ -606,7 +779,9 @@
    "high_point_code": "IAC",
    "job_zone": 4,
    "source_url": "https://www.onetonline.org/explore/interests/Investigative/",
-   "work_values": null
+   "work_values": null,
+   "work_values_extent_1_7": null,
+   "work_values_db": null
   },
   {
    "soc_code": "19-2031.00",
@@ -625,10 +800,10 @@
    "work_values": {
     "Achievement": 1,
     "Independence": 2,
+    "Working Conditions": 3,
     "Recognition": 4,
-    "Relationships": 6,
     "Support": 5,
-    "Working Conditions": 3
+    "Relationships": 6
    },
    "work_values_extent_1_7": {
     "Achievement": 5.67,
@@ -643,90 +818,340 @@
   {
    "soc_code": "19-2041.00",
    "title": "Environmental Scientists and Specialists, Including Health",
-   "riasec": null,
+   "riasec": [
+    4.76,
+    7.0,
+    1.87,
+    2.75,
+    2.56,
+    4.32
+   ],
    "high_point_code": "IRC",
    "job_zone": 4,
-   "source_url": "https://www.onetonline.org/explore/interests/Investigative/"
+   "source_url": "https://www.onetonline.org/explore/interests/Investigative/",
+   "work_values": {
+    "Achievement": 1,
+    "Independence": 2,
+    "Recognition": 3,
+    "Working Conditions": 4,
+    "Relationships": 5,
+    "Support": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 5.0,
+    "Independence": 5.0,
+    "Recognition": 5.0,
+    "Relationships": 4.0,
+    "Support": 3.67,
+    "Working Conditions": 4.67
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "19-1022.00",
    "title": "Microbiologists",
-   "riasec": null,
+   "riasec": [
+    5.29,
+    7.0,
+    1.92,
+    1.98,
+    1.07,
+    3.85
+   ],
    "high_point_code": "IRC",
    "job_zone": 4,
-   "source_url": "https://www.onetonline.org/explore/interests/Investigative/"
+   "source_url": "https://www.onetonline.org/explore/interests/Investigative/",
+   "work_values": {
+    "Recognition": 1,
+    "Achievement": 2,
+    "Independence": 3,
+    "Working Conditions": 4,
+    "Relationships": 5,
+    "Support": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 5.0,
+    "Independence": 5.0,
+    "Recognition": 5.33,
+    "Relationships": 4.33,
+    "Support": 4.0,
+    "Working Conditions": 4.67
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "19-1023.00",
    "title": "Zoologists and Wildlife Biologists",
-   "riasec": null,
+   "riasec": [
+    5.43,
+    6.99,
+    2.31,
+    2.55,
+    2.33,
+    3.7
+   ],
    "high_point_code": "IR",
    "job_zone": 4,
-   "source_url": "https://www.onetonline.org/explore/interests/Investigative/"
+   "source_url": "https://www.onetonline.org/explore/interests/Investigative/",
+   "work_values": {
+    "Achievement": 1,
+    "Recognition": 2,
+    "Working Conditions": 3,
+    "Independence": 4,
+    "Relationships": 5,
+    "Support": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 5.33,
+    "Independence": 3.67,
+    "Recognition": 5.0,
+    "Relationships": 3.0,
+    "Support": 3.0,
+    "Working Conditions": 4.83
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "19-2042.00",
    "title": "Geoscientists, Except Hydrologists and Geographers",
-   "riasec": null,
+   "riasec": [
+    5.59,
+    7.0,
+    2.72,
+    2.24,
+    1.65,
+    4.16
+   ],
    "high_point_code": "IRC",
-   "job_zone": 5,
-   "source_url": "https://www.onetonline.org/explore/interests/Investigative/"
+   "job_zone": 4,
+   "source_url": "https://www.onetonline.org/explore/interests/Investigative/",
+   "work_values": {
+    "Independence": 1,
+    "Achievement": 2,
+    "Recognition": 3,
+    "Working Conditions": 4,
+    "Relationships": 5,
+    "Support": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 5.33,
+    "Independence": 5.67,
+    "Recognition": 5.33,
+    "Relationships": 3.33,
+    "Support": 2.33,
+    "Working Conditions": 5.33
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "19-3091.00",
    "title": "Anthropologists and Archeologists",
-   "riasec": null,
+   "riasec": [
+    3.99,
+    6.84,
+    4.21,
+    3.67,
+    1.63,
+    3.19
+   ],
    "high_point_code": "IA",
    "job_zone": 5,
-   "source_url": "https://www.onetonline.org/explore/interests/Investigative/"
+   "source_url": "https://www.onetonline.org/explore/interests/Investigative/",
+   "work_values": {
+    "Achievement": 1,
+    "Independence": 2,
+    "Recognition": 3,
+    "Working Conditions": 4,
+    "Relationships": 5,
+    "Support": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 5.83,
+    "Independence": 5.5,
+    "Recognition": 5.17,
+    "Relationships": 4.67,
+    "Support": 3.0,
+    "Working Conditions": 5.17
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "19-3094.00",
    "title": "Political Scientists",
-   "riasec": null,
+   "riasec": [
+    1.0,
+    6.71,
+    3.87,
+    3.42,
+    3.61,
+    3.52
+   ],
    "high_point_code": "IA",
    "job_zone": 5,
-   "source_url": "https://www.onetonline.org/explore/interests/Investigative/"
+   "source_url": "https://www.onetonline.org/explore/interests/Investigative/",
+   "work_values": {
+    "Achievement": 1,
+    "Working Conditions": 2,
+    "Recognition": 3,
+    "Independence": 4,
+    "Relationships": 5,
+    "Support": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 5.67,
+    "Independence": 5.0,
+    "Recognition": 5.33,
+    "Relationships": 3.33,
+    "Support": 2.33,
+    "Working Conditions": 5.67
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "19-3041.00",
    "title": "Sociologists",
-   "riasec": null,
+   "riasec": [
+    1.56,
+    6.5,
+    3.99,
+    4.36,
+    3.08,
+    3.6
+   ],
    "high_point_code": "ISA",
    "job_zone": 5,
-   "source_url": "https://www.onetonline.org/explore/interests/Investigative/"
+   "source_url": "https://www.onetonline.org/explore/interests/Investigative/",
+   "work_values": {
+    "Achievement": 1,
+    "Independence": 2,
+    "Recognition": 3,
+    "Working Conditions": 4,
+    "Relationships": 5,
+    "Support": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 5.67,
+    "Independence": 5.67,
+    "Recognition": 5.33,
+    "Relationships": 3.33,
+    "Support": 2.67,
+    "Working Conditions": 5.17
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "17-2161.00",
    "title": "Nuclear Engineers",
-   "riasec": null,
+   "riasec": [
+    4.92,
+    6.44,
+    2.05,
+    1.89,
+    2.53,
+    4.48
+   ],
    "high_point_code": "IRC",
    "job_zone": 4,
-   "source_url": "https://www.onetonline.org/explore/interests/Investigative/"
+   "source_url": "https://www.onetonline.org/explore/interests/Investigative/",
+   "work_values": {
+    "Achievement": 1,
+    "Recognition": 2,
+    "Support": 3,
+    "Working Conditions": 4,
+    "Independence": 5,
+    "Relationships": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 5.67,
+    "Independence": 5.0,
+    "Recognition": 5.67,
+    "Relationships": 2.33,
+    "Support": 5.33,
+    "Working Conditions": 5.17
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "17-2112.01",
    "title": "Human Factors Engineers and Ergonomists",
-   "riasec": null,
+   "riasec": [
+    4.54,
+    6.21,
+    2.65,
+    2.15,
+    2.59,
+    4.4
+   ],
    "high_point_code": "IRC",
    "job_zone": 5,
-   "source_url": "https://www.onetonline.org/explore/interests/Investigative/"
+   "source_url": "https://www.onetonline.org/explore/interests/Investigative/",
+   "work_values": {
+    "Achievement": 1,
+    "Working Conditions": 2,
+    "Independence": 3,
+    "Recognition": 4,
+    "Relationships": 5,
+    "Support": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 6.33,
+    "Independence": 5.67,
+    "Recognition": 5.0,
+    "Relationships": 4.33,
+    "Support": 3.33,
+    "Working Conditions": 6.0
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "29-1211.00",
    "title": "Anesthesiologists",
-   "riasec": null,
+   "riasec": [
+    5.18,
+    5.73,
+    1.17,
+    5.25,
+    2.5,
+    3.69
+   ],
    "high_point_code": "ISR",
    "job_zone": 5,
-   "source_url": "https://www.onetonline.org/explore/interests/Investigative/"
+   "source_url": "https://www.onetonline.org/explore/interests/Investigative/",
+   "work_values": {
+    "Achievement": 1,
+    "Independence": 2,
+    "Relationships": 3,
+    "Recognition": 4,
+    "Support": 5,
+    "Working Conditions": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 6.0,
+    "Independence": 6.0,
+    "Recognition": 5.67,
+    "Relationships": 6.0,
+    "Support": 5.67,
+    "Working Conditions": 5.5
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "29-1212.00",
    "title": "Cardiologists",
-   "riasec": null,
+   "riasec": [
+    4.96,
+    6.87,
+    1.15,
+    4.73,
+    2.28,
+    4.0
+   ],
    "high_point_code": "IRS",
    "job_zone": 5,
-   "source_url": "https://www.onetonline.org/explore/interests/Investigative/"
+   "source_url": "https://www.onetonline.org/explore/interests/Investigative/",
+   "work_values": null,
+   "work_values_extent_1_7": null,
+   "work_values_db": null
   },
   {
    "soc_code": "29-1051.00",
@@ -743,11 +1168,11 @@
    "job_zone": 5,
    "source_url": "https://www.onetonline.org/explore/interests/Investigative/",
    "work_values": {
+    "Recognition": 1,
+    "Support": 2,
+    "Relationships": 3,
     "Achievement": 4,
     "Independence": 5,
-    "Recognition": 1,
-    "Relationships": 3,
-    "Support": 2,
     "Working Conditions": 6
    },
    "work_values_extent_1_7": {
@@ -763,18 +1188,66 @@
   {
    "soc_code": "29-1131.00",
    "title": "Veterinarians",
-   "riasec": null,
+   "riasec": [
+    5.98,
+    5.98,
+    1.0,
+    3.45,
+    1.7,
+    3.47
+   ],
    "high_point_code": "IR",
    "job_zone": 5,
-   "source_url": "https://www.onetonline.org/explore/interests/Investigative/"
+   "source_url": "https://www.onetonline.org/explore/interests/Investigative/",
+   "work_values": {
+    "Achievement": 1,
+    "Independence": 2,
+    "Recognition": 3,
+    "Relationships": 4,
+    "Working Conditions": 5,
+    "Support": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 7.0,
+    "Independence": 6.33,
+    "Recognition": 6.0,
+    "Relationships": 6.0,
+    "Support": 4.67,
+    "Working Conditions": 5.83
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "29-1021.00",
    "title": "Dentists, General",
-   "riasec": null,
+   "riasec": [
+    5.23,
+    5.48,
+    1.17,
+    4.41,
+    2.0,
+    3.71
+   ],
    "high_point_code": "IRS",
    "job_zone": 5,
-   "source_url": "https://www.onetonline.org/explore/interests/Investigative/"
+   "source_url": "https://www.onetonline.org/explore/interests/Investigative/",
+   "work_values": {
+    "Independence": 1,
+    "Achievement": 2,
+    "Relationships": 3,
+    "Working Conditions": 4,
+    "Recognition": 5,
+    "Support": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 6.0,
+    "Independence": 6.67,
+    "Recognition": 5.67,
+    "Relationships": 6.0,
+    "Support": 3.33,
+    "Working Conditions": 5.83
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "29-1171.00",
@@ -791,12 +1264,12 @@
    "job_zone": 5,
    "source_url": "https://www.onetonline.org/explore/interests/Investigative/",
    "work_values": {
+    "Relationships": 1,
     "Achievement": 2,
     "Independence": 3,
-    "Recognition": 6,
-    "Relationships": 1,
     "Support": 4,
-    "Working Conditions": 5
+    "Working Conditions": 5,
+    "Recognition": 6
    },
    "work_values_extent_1_7": {
     "Achievement": 5.67,
@@ -823,12 +1296,12 @@
    "job_zone": 5,
    "source_url": "https://www.onetonline.org/explore/interests/Investigative/",
    "work_values": {
-    "Achievement": 3,
     "Independence": 1,
-    "Recognition": 5,
-    "Relationships": 6,
+    "Working Conditions": 2,
+    "Achievement": 3,
     "Support": 4,
-    "Working Conditions": 2
+    "Recognition": 5,
+    "Relationships": 6
    },
    "work_values_extent_1_7": {
     "Achievement": 5.33,
@@ -843,26 +1316,98 @@
   {
    "soc_code": "33-3021.00",
    "title": "Detectives and Criminal Investigators",
-   "riasec": null,
+   "riasec": [
+    4.18,
+    4.9,
+    1.2,
+    2.73,
+    4.04,
+    4.83
+   ],
    "high_point_code": "ICR",
    "job_zone": 3,
-   "source_url": "https://www.onetonline.org/explore/interests/Investigative/"
+   "source_url": "https://www.onetonline.org/explore/interests/Investigative/",
+   "work_values": {
+    "Achievement": 1,
+    "Working Conditions": 2,
+    "Independence": 3,
+    "Recognition": 4,
+    "Support": 5,
+    "Relationships": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 5.17,
+    "Independence": 5.0,
+    "Recognition": 4.83,
+    "Relationships": 4.33,
+    "Support": 4.83,
+    "Working Conditions": 5.17
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "19-4092.00",
    "title": "Forensic Science Technicians",
-   "riasec": null,
+   "riasec": [
+    5.18,
+    5.94,
+    1.77,
+    1.5,
+    1.59,
+    4.98
+   ],
    "high_point_code": "IRC",
    "job_zone": 3,
-   "source_url": "https://www.onetonline.org/explore/interests/Investigative/"
+   "source_url": "https://www.onetonline.org/explore/interests/Investigative/",
+   "work_values": {
+    "Support": 1,
+    "Recognition": 2,
+    "Achievement": 3,
+    "Independence": 4,
+    "Working Conditions": 5,
+    "Relationships": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 4.0,
+    "Independence": 4.0,
+    "Recognition": 4.33,
+    "Relationships": 3.0,
+    "Support": 5.33,
+    "Working Conditions": 3.83
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "19-4031.00",
    "title": "Chemical Technicians",
-   "riasec": null,
+   "riasec": [
+    5.45,
+    5.8,
+    1.51,
+    1.64,
+    1.13,
+    5.25
+   ],
    "high_point_code": "IRC",
    "job_zone": 3,
-   "source_url": "https://www.onetonline.org/explore/interests/Investigative/"
+   "source_url": "https://www.onetonline.org/explore/interests/Investigative/",
+   "work_values": {
+    "Support": 1,
+    "Relationships": 2,
+    "Independence": 3,
+    "Working Conditions": 4,
+    "Achievement": 5,
+    "Recognition": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 3.33,
+    "Independence": 3.67,
+    "Recognition": 3.0,
+    "Relationships": 4.33,
+    "Support": 5.33,
+    "Working Conditions": 3.67
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "15-1211.01",
@@ -881,9 +1426,9 @@
    "work_values": {
     "Achievement": 1,
     "Independence": 2,
+    "Support": 3,
     "Recognition": 4,
     "Relationships": 5,
-    "Support": 3,
     "Working Conditions": 6
    },
    "work_values_extent_1_7": {
@@ -899,58 +1444,226 @@
   {
    "soc_code": "49-9092.00",
    "title": "Commercial Divers",
-   "riasec": null,
+   "riasec": [
+    7.0,
+    3.6,
+    1.35,
+    1.1,
+    1.66,
+    3.1
+   ],
    "high_point_code": "RIC",
    "job_zone": 3,
-   "source_url": "https://www.onetonline.org/explore/interests/Investigative/"
+   "source_url": "https://www.onetonline.org/explore/interests/Investigative/",
+   "work_values": {
+    "Support": 1,
+    "Independence": 2,
+    "Working Conditions": 3,
+    "Relationships": 4,
+    "Achievement": 5,
+    "Recognition": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 3.0,
+    "Independence": 5.0,
+    "Recognition": 2.67,
+    "Relationships": 3.33,
+    "Support": 5.33,
+    "Working Conditions": 4.33
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "47-2073.00",
    "title": "Operating Engineers and Other Construction Equipment Operators",
-   "riasec": null,
+   "riasec": [
+    7.0,
+    2.93,
+    1.0,
+    1.14,
+    1.26,
+    3.88
+   ],
    "high_point_code": "RCI",
-   "job_zone": "1-2",
-   "source_url": "https://www.onetonline.org/explore/interests/Investigative/"
+   "job_zone": 2,
+   "source_url": "https://www.onetonline.org/explore/interests/Investigative/",
+   "work_values": {
+    "Support": 1,
+    "Relationships": 2,
+    "Working Conditions": 3,
+    "Achievement": 4,
+    "Independence": 5,
+    "Recognition": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 3.33,
+    "Independence": 3.0,
+    "Recognition": 2.67,
+    "Relationships": 4.0,
+    "Support": 5.0,
+    "Working Conditions": 3.67
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "51-2022.00",
    "title": "Electrical and Electronic Equipment Assemblers",
-   "riasec": null,
+   "riasec": [
+    7.0,
+    3.26,
+    1.7,
+    1.21,
+    1.0,
+    3.96
+   ],
    "high_point_code": "RCI",
-   "job_zone": "1-2",
-   "source_url": "https://www.onetonline.org/explore/interests/Investigative/"
+   "job_zone": 2,
+   "source_url": "https://www.onetonline.org/explore/interests/Investigative/",
+   "work_values": {
+    "Support": 1,
+    "Relationships": 2,
+    "Independence": 3,
+    "Working Conditions": 4,
+    "Achievement": 5,
+    "Recognition": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 2.0,
+    "Independence": 2.67,
+    "Recognition": 2.0,
+    "Relationships": 4.67,
+    "Support": 5.67,
+    "Working Conditions": 2.5
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "47-5023.00",
    "title": "Earth Drillers, Except Oil and Gas",
-   "riasec": null,
+   "riasec": [
+    7.0,
+    3.65,
+    1.14,
+    1.22,
+    1.7,
+    3.67
+   ],
    "high_point_code": "RCI",
-   "job_zone": "1-2",
-   "source_url": "https://www.onetonline.org/explore/interests/Investigative/"
+   "job_zone": 2,
+   "source_url": "https://www.onetonline.org/explore/interests/Investigative/",
+   "work_values": {
+    "Support": 1,
+    "Independence": 2,
+    "Working Conditions": 3,
+    "Achievement": 4,
+    "Relationships": 5,
+    "Recognition": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 3.0,
+    "Independence": 4.0,
+    "Recognition": 2.33,
+    "Relationships": 3.0,
+    "Support": 5.0,
+    "Working Conditions": 3.17
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "51-9061.00",
    "title": "Inspectors, Testers, Sorters, Samplers, and Weighers",
-   "riasec": null,
+   "riasec": [
+    5.73,
+    3.42,
+    1.0,
+    1.0,
+    1.38,
+    5.36
+   ],
    "high_point_code": "RCI",
-   "job_zone": "1-2",
-   "source_url": "https://www.onetonline.org/explore/interests/Investigative/"
+   "job_zone": 2,
+   "source_url": "https://www.onetonline.org/explore/interests/Investigative/",
+   "work_values": {
+    "Support": 1,
+    "Relationships": 2,
+    "Working Conditions": 3,
+    "Achievement": 4,
+    "Independence": 5,
+    "Recognition": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 2.33,
+    "Independence": 2.33,
+    "Recognition": 1.67,
+    "Relationships": 3.0,
+    "Support": 4.33,
+    "Working Conditions": 2.83
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "53-4011.00",
    "title": "Locomotive Engineers",
-   "riasec": null,
+   "riasec": [
+    7.0,
+    3.49,
+    1.0,
+    1.85,
+    1.89,
+    4.65
+   ],
    "high_point_code": "RCI",
-   "job_zone": "1-2",
-   "source_url": "https://www.onetonline.org/explore/interests/Investigative/"
+   "job_zone": 2,
+   "source_url": "https://www.onetonline.org/explore/interests/Investigative/",
+   "work_values": {
+    "Support": 1,
+    "Relationships": 2,
+    "Working Conditions": 3,
+    "Independence": 4,
+    "Recognition": 5,
+    "Achievement": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 2.67,
+    "Independence": 3.67,
+    "Recognition": 3.33,
+    "Relationships": 4.33,
+    "Support": 6.0,
+    "Working Conditions": 4.33
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "29-2035.00",
    "title": "Magnetic Resonance Imaging Technologists",
-   "riasec": null,
+   "riasec": [
+    5.46,
+    4.79,
+    1.0,
+    3.51,
+    1.27,
+    4.93
+   ],
    "high_point_code": "RCI",
    "job_zone": 3,
-   "source_url": "https://www.onetonline.org/explore/interests/Realistic/"
+   "source_url": "https://www.onetonline.org/explore/interests/Realistic/",
+   "work_values": {
+    "Achievement": 1,
+    "Working Conditions": 2,
+    "Support": 3,
+    "Relationships": 4,
+    "Recognition": 5,
+    "Independence": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 4.67,
+    "Independence": 3.0,
+    "Recognition": 3.33,
+    "Relationships": 3.67,
+    "Support": 4.33,
+    "Working Conditions": 4.5
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "29-2034.00",
@@ -967,12 +1680,12 @@
    "job_zone": 3,
    "source_url": "https://www.onetonline.org/explore/interests/Realistic/",
    "work_values": {
-    "Achievement": 5,
-    "Independence": 3,
-    "Recognition": 6,
     "Relationships": 1,
     "Support": 2,
-    "Working Conditions": 4
+    "Independence": 3,
+    "Working Conditions": 4,
+    "Achievement": 5,
+    "Recognition": 6
    },
    "work_values_extent_1_7": {
     "Achievement": 4.17,
@@ -987,154 +1700,596 @@
   {
    "soc_code": "29-2033.00",
    "title": "Nuclear Medicine Technologists",
-   "riasec": null,
+   "riasec": [
+    5.99,
+    5.57,
+    1.0,
+    3.08,
+    1.31,
+    5.2
+   ],
    "high_point_code": "RIC",
    "job_zone": 3,
-   "source_url": "https://www.onetonline.org/explore/interests/Realistic/"
+   "source_url": "https://www.onetonline.org/explore/interests/Realistic/",
+   "work_values": {
+    "Relationships": 1,
+    "Support": 2,
+    "Achievement": 3,
+    "Working Conditions": 4,
+    "Independence": 5,
+    "Recognition": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 5.33,
+    "Independence": 5.0,
+    "Recognition": 4.33,
+    "Relationships": 6.33,
+    "Support": 5.67,
+    "Working Conditions": 5.33
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "29-2032.00",
    "title": "Diagnostic Medical Sonographers",
-   "riasec": null,
-   "high_point_code": "RIC",
+   "riasec": [
+    5.87,
+    4.75,
+    1.32,
+    4.1,
+    1.51,
+    5.05
+   ],
+   "high_point_code": "RCI",
    "job_zone": 3,
-   "source_url": "https://www.onetonline.org/explore/interests/Realistic/"
+   "source_url": "https://www.onetonline.org/explore/interests/Realistic/",
+   "work_values": {
+    "Relationships": 1,
+    "Support": 2,
+    "Achievement": 3,
+    "Working Conditions": 4,
+    "Independence": 5,
+    "Recognition": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 5.0,
+    "Independence": 4.67,
+    "Recognition": 4.33,
+    "Relationships": 5.67,
+    "Support": 5.67,
+    "Working Conditions": 5.0
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "29-2031.00",
    "title": "Cardiovascular Technologists and Technicians",
-   "riasec": null,
+   "riasec": [
+    5.61,
+    5.31,
+    1.0,
+    4.25,
+    1.3,
+    4.7
+   ],
    "high_point_code": "RIC",
    "job_zone": 3,
-   "source_url": "https://www.onetonline.org/explore/interests/Realistic/"
+   "source_url": "https://www.onetonline.org/explore/interests/Realistic/",
+   "work_values": {
+    "Relationships": 1,
+    "Support": 2,
+    "Independence": 3,
+    "Achievement": 4,
+    "Working Conditions": 5,
+    "Recognition": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 4.33,
+    "Independence": 5.0,
+    "Recognition": 4.0,
+    "Relationships": 6.0,
+    "Support": 6.0,
+    "Working Conditions": 4.33
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "29-2055.00",
    "title": "Surgical Technologists",
-   "riasec": null,
+   "riasec": [
+    6.26,
+    3.22,
+    1.0,
+    3.82,
+    1.61,
+    4.85
+   ],
    "high_point_code": "RCS",
    "job_zone": 3,
-   "source_url": "https://www.onetonline.org/explore/interests/Realistic/"
+   "source_url": "https://www.onetonline.org/explore/interests/Realistic/",
+   "work_values": {
+    "Relationships": 1,
+    "Support": 2,
+    "Achievement": 3,
+    "Working Conditions": 4,
+    "Recognition": 5,
+    "Independence": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 4.67,
+    "Independence": 3.67,
+    "Recognition": 4.0,
+    "Relationships": 6.0,
+    "Support": 6.0,
+    "Working Conditions": 4.33
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "31-9099.02",
    "title": "Endoscopy Technicians",
-   "riasec": null,
+   "riasec": [
+    6.46,
+    4.09,
+    1.0,
+    3.0,
+    1.07,
+    5.14
+   ],
    "high_point_code": "RCI",
-   "job_zone": "1-2",
-   "source_url": "https://www.onetonline.org/explore/interests/Realistic/"
+   "job_zone": 2,
+   "source_url": "https://www.onetonline.org/explore/interests/Realistic/",
+   "work_values": {
+    "Support": 1,
+    "Relationships": 2,
+    "Achievement": 3,
+    "Recognition": 4,
+    "Working Conditions": 5,
+    "Independence": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 3.67,
+    "Independence": 3.0,
+    "Recognition": 3.67,
+    "Relationships": 4.67,
+    "Support": 5.67,
+    "Working Conditions": 3.5
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "17-2141.00",
    "title": "Mechanical Engineers",
-   "riasec": null,
+   "riasec": [
+    6.39,
+    5.12,
+    2.02,
+    1.22,
+    1.97,
+    4.83
+   ],
    "high_point_code": "RIC",
    "job_zone": 4,
-   "source_url": "https://www.onetonline.org/explore/interests/Realistic/"
+   "source_url": "https://www.onetonline.org/explore/interests/Realistic/",
+   "work_values": {
+    "Recognition": 1,
+    "Achievement": 2,
+    "Independence": 3,
+    "Working Conditions": 4,
+    "Relationships": 5,
+    "Support": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 5.33,
+    "Independence": 5.33,
+    "Recognition": 5.67,
+    "Relationships": 4.67,
+    "Support": 4.67,
+    "Working Conditions": 5.17
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "17-2071.00",
    "title": "Electrical Engineers",
-   "riasec": null,
+   "riasec": [
+    6.02,
+    5.45,
+    2.12,
+    1.72,
+    2.44,
+    4.43
+   ],
    "high_point_code": "RIC",
    "job_zone": 4,
-   "source_url": "https://www.onetonline.org/explore/interests/Realistic/"
+   "source_url": "https://www.onetonline.org/explore/interests/Realistic/",
+   "work_values": {
+    "Achievement": 1,
+    "Working Conditions": 2,
+    "Independence": 3,
+    "Recognition": 4,
+    "Relationships": 5,
+    "Support": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 5.67,
+    "Independence": 5.33,
+    "Recognition": 5.33,
+    "Relationships": 4.33,
+    "Support": 4.33,
+    "Working Conditions": 5.5
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "17-2061.00",
    "title": "Computer Hardware Engineers",
-   "riasec": null,
+   "riasec": [
+    5.69,
+    5.56,
+    1.83,
+    1.82,
+    1.98,
+    5.37
+   ],
    "high_point_code": "RIC",
    "job_zone": 4,
-   "source_url": "https://www.onetonline.org/explore/interests/Realistic/"
+   "source_url": "https://www.onetonline.org/explore/interests/Realistic/",
+   "work_values": {
+    "Working Conditions": 1,
+    "Achievement": 2,
+    "Independence": 3,
+    "Recognition": 4,
+    "Support": 5,
+    "Relationships": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 5.33,
+    "Independence": 5.0,
+    "Recognition": 5.0,
+    "Relationships": 4.0,
+    "Support": 5.0,
+    "Working Conditions": 6.0
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "17-2041.00",
    "title": "Chemical Engineers",
-   "riasec": null,
+   "riasec": [
+    6.27,
+    5.75,
+    1.8,
+    1.02,
+    1.85,
+    4.54
+   ],
    "high_point_code": "RIC",
    "job_zone": 4,
-   "source_url": "https://www.onetonline.org/explore/interests/Realistic/"
+   "source_url": "https://www.onetonline.org/explore/interests/Realistic/",
+   "work_values": {
+    "Recognition": 1,
+    "Achievement": 2,
+    "Independence": 3,
+    "Working Conditions": 4,
+    "Relationships": 5,
+    "Support": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 5.33,
+    "Independence": 5.33,
+    "Recognition": 5.67,
+    "Relationships": 4.0,
+    "Support": 4.0,
+    "Working Conditions": 5.33
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "17-2051.00",
    "title": "Civil Engineers",
-   "riasec": null,
+   "riasec": [
+    6.43,
+    5.15,
+    2.21,
+    1.69,
+    2.66,
+    4.61
+   ],
    "high_point_code": "RIC",
    "job_zone": 4,
-   "source_url": "https://www.onetonline.org/explore/interests/Realistic/"
+   "source_url": "https://www.onetonline.org/explore/interests/Realistic/",
+   "work_values": {
+    "Independence": 1,
+    "Working Conditions": 2,
+    "Achievement": 3,
+    "Recognition": 4,
+    "Support": 5,
+    "Relationships": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 5.33,
+    "Independence": 6.0,
+    "Recognition": 5.33,
+    "Relationships": 4.0,
+    "Support": 4.67,
+    "Working Conditions": 5.5
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "17-2131.00",
    "title": "Materials Engineers",
-   "riasec": null,
+   "riasec": [
+    5.88,
+    5.82,
+    2.54,
+    1.38,
+    2.06,
+    4.11
+   ],
    "high_point_code": "RIC",
    "job_zone": 4,
-   "source_url": "https://www.onetonline.org/explore/interests/Realistic/"
+   "source_url": "https://www.onetonline.org/explore/interests/Realistic/",
+   "work_values": {
+    "Support": 1,
+    "Independence": 2,
+    "Working Conditions": 3,
+    "Achievement": 4,
+    "Recognition": 5,
+    "Relationships": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 5.0,
+    "Independence": 5.33,
+    "Recognition": 4.67,
+    "Relationships": 3.0,
+    "Support": 5.67,
+    "Working Conditions": 5.33
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "17-2199.08",
    "title": "Robotics Engineers",
-   "riasec": null,
+   "riasec": [
+    6.18,
+    5.61,
+    1.79,
+    1.49,
+    1.79,
+    4.48
+   ],
    "high_point_code": "RIC",
    "job_zone": 4,
-   "source_url": "https://www.onetonline.org/explore/interests/Realistic/"
+   "source_url": "https://www.onetonline.org/explore/interests/Realistic/",
+   "work_values": {
+    "Independence": 1,
+    "Working Conditions": 2,
+    "Achievement": 3,
+    "Recognition": 4,
+    "Support": 5,
+    "Relationships": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 5.33,
+    "Independence": 5.67,
+    "Recognition": 5.0,
+    "Relationships": 3.33,
+    "Support": 5.0,
+    "Working Conditions": 5.67
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "17-2141.02",
    "title": "Automotive Engineers",
-   "riasec": null,
+   "riasec": [
+    6.17,
+    5.67,
+    2.55,
+    1.37,
+    2.13,
+    4.06
+   ],
    "high_point_code": "RIC",
    "job_zone": 4,
-   "source_url": "https://www.onetonline.org/explore/interests/Realistic/"
+   "source_url": "https://www.onetonline.org/explore/interests/Realistic/",
+   "work_values": {
+    "Achievement": 1,
+    "Working Conditions": 2,
+    "Recognition": 3,
+    "Independence": 4,
+    "Support": 5,
+    "Relationships": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 6.33,
+    "Independence": 5.33,
+    "Recognition": 5.67,
+    "Relationships": 2.67,
+    "Support": 3.33,
+    "Working Conditions": 5.83
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "17-2121.00",
    "title": "Marine Engineers and Naval Architects",
-   "riasec": null,
+   "riasec": [
+    5.74,
+    5.71,
+    2.62,
+    1.27,
+    3.26,
+    4.31
+   ],
    "high_point_code": "RIC",
    "job_zone": 4,
-   "source_url": "https://www.onetonline.org/explore/interests/Realistic/"
+   "source_url": "https://www.onetonline.org/explore/interests/Realistic/",
+   "work_values": {
+    "Independence": 1,
+    "Achievement": 2,
+    "Recognition": 3,
+    "Working Conditions": 4,
+    "Support": 5,
+    "Relationships": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 5.5,
+    "Independence": 5.67,
+    "Recognition": 5.5,
+    "Relationships": 4.33,
+    "Support": 4.83,
+    "Working Conditions": 5.17
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "17-1011.00",
    "title": "Architects, Except Landscape and Naval",
-   "riasec": null,
+   "riasec": [
+    4.92,
+    3.88,
+    4.13,
+    2.53,
+    3.65,
+    4.44
+   ],
    "high_point_code": "RCA",
    "job_zone": 5,
-   "source_url": "https://www.onetonline.org/explore/interests/Realistic/"
+   "source_url": "https://www.onetonline.org/explore/interests/Realistic/",
+   "work_values": {
+    "Independence": 1,
+    "Achievement": 2,
+    "Recognition": 3,
+    "Working Conditions": 4,
+    "Support": 5,
+    "Relationships": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 5.67,
+    "Independence": 6.0,
+    "Recognition": 5.67,
+    "Relationships": 3.67,
+    "Support": 4.33,
+    "Working Conditions": 5.5
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "17-1022.00",
    "title": "Surveyors",
-   "riasec": null,
+   "riasec": [
+    5.25,
+    4.73,
+    2.12,
+    1.63,
+    1.88,
+    5.29
+   ],
    "high_point_code": "CRI",
    "job_zone": 4,
-   "source_url": "https://www.onetonline.org/explore/interests/Conventional/"
+   "source_url": "https://www.onetonline.org/explore/interests/Conventional/",
+   "work_values": {
+    "Relationships": 1,
+    "Independence": 2,
+    "Achievement": 3,
+    "Support": 4,
+    "Working Conditions": 5,
+    "Recognition": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 4.0,
+    "Independence": 5.0,
+    "Recognition": 3.67,
+    "Relationships": 5.33,
+    "Support": 4.0,
+    "Working Conditions": 4.0
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "17-1021.00",
    "title": "Cartographers and Photogrammetrists",
-   "riasec": null,
+   "riasec": [
+    4.62,
+    5.18,
+    3.55,
+    1.78,
+    1.64,
+    5.34
+   ],
    "high_point_code": "CIR",
    "job_zone": 4,
-   "source_url": "https://www.onetonline.org/explore/interests/Conventional/"
+   "source_url": "https://www.onetonline.org/explore/interests/Conventional/",
+   "work_values": {
+    "Achievement": 1,
+    "Independence": 2,
+    "Working Conditions": 3,
+    "Support": 4,
+    "Recognition": 5,
+    "Relationships": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 5.0,
+    "Independence": 4.67,
+    "Recognition": 3.67,
+    "Relationships": 3.33,
+    "Support": 4.0,
+    "Working Conditions": 4.67
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "17-2112.00",
    "title": "Industrial Engineers",
-   "riasec": null,
+   "riasec": [
+    4.96,
+    4.99,
+    1.58,
+    1.37,
+    3.29,
+    5.35
+   ],
    "high_point_code": "CIR",
    "job_zone": 4,
-   "source_url": "https://www.onetonline.org/explore/interests/Conventional/"
+   "source_url": "https://www.onetonline.org/explore/interests/Conventional/",
+   "work_values": {
+    "Independence": 1,
+    "Recognition": 2,
+    "Achievement": 3,
+    "Working Conditions": 4,
+    "Support": 5,
+    "Relationships": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 5.33,
+    "Independence": 5.67,
+    "Recognition": 5.67,
+    "Relationships": 3.67,
+    "Support": 5.0,
+    "Working Conditions": 5.33
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "29-9021.00",
    "title": "Health Information Technologists and Medical Registrars",
-   "riasec": null,
+   "riasec": [
+    2.58,
+    5.17,
+    1.18,
+    3.83,
+    2.2,
+    5.95
+   ],
    "high_point_code": "CIS",
    "job_zone": 3,
-   "source_url": "https://www.onetonline.org/explore/interests/Conventional/"
+   "source_url": "https://www.onetonline.org/explore/interests/Conventional/",
+   "work_values": null,
+   "work_values_extent_1_7": null,
+   "work_values_db": null
   },
   {
    "soc_code": "15-2051.02",
@@ -1152,11 +2307,11 @@
    "source_url": "https://www.onetonline.org/explore/interests/Conventional/",
    "work_values": {
     "Achievement": 1,
+    "Support": 2,
     "Independence": 3,
     "Recognition": 4,
-    "Relationships": 6,
-    "Support": 2,
-    "Working Conditions": 5
+    "Working Conditions": 5,
+    "Relationships": 6
    },
    "work_values_extent_1_7": {
     "Achievement": 4.33,
@@ -1171,10 +2326,20 @@
   {
    "soc_code": "29-2072.00",
    "title": "Medical Records Specialists",
-   "riasec": null,
+   "riasec": [
+    2.86,
+    4.33,
+    1.0,
+    3.41,
+    1.88,
+    6.95
+   ],
    "high_point_code": "CI",
    "job_zone": 3,
-   "source_url": "https://www.onetonline.org/explore/interests/Conventional/"
+   "source_url": "https://www.onetonline.org/explore/interests/Conventional/",
+   "work_values": null,
+   "work_values_extent_1_7": null,
+   "work_values_db": null
   },
   {
    "soc_code": "15-1251.00",
@@ -1192,11 +2357,11 @@
    "source_url": "https://www.onetonline.org/explore/interests/Conventional/",
    "work_values": {
     "Achievement": 1,
+    "Working Conditions": 2,
     "Independence": 3,
-    "Recognition": 5,
-    "Relationships": 6,
     "Support": 4,
-    "Working Conditions": 2
+    "Recognition": 5,
+    "Relationships": 6
    },
    "work_values_extent_1_7": {
     "Achievement": 5.67,
@@ -1211,10 +2376,34 @@
   {
    "soc_code": "15-1242.00",
    "title": "Database Administrators",
-   "riasec": null,
+   "riasec": [
+    2.83,
+    4.83,
+    1.2,
+    2.29,
+    2.94,
+    6.61
+   ],
    "high_point_code": "CI",
    "job_zone": 4,
-   "source_url": "https://www.onetonline.org/explore/interests/Conventional/"
+   "source_url": "https://www.onetonline.org/explore/interests/Conventional/",
+   "work_values": {
+    "Support": 1,
+    "Working Conditions": 2,
+    "Achievement": 3,
+    "Recognition": 4,
+    "Relationships": 5,
+    "Independence": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 4.67,
+    "Independence": 3.33,
+    "Recognition": 4.33,
+    "Relationships": 3.67,
+    "Support": 5.0,
+    "Working Conditions": 5.0
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "15-1243.00",
@@ -1233,10 +2422,10 @@
    "work_values": {
     "Achievement": 1,
     "Independence": 2,
+    "Working Conditions": 3,
     "Recognition": 4,
-    "Relationships": 6,
     "Support": 5,
-    "Working Conditions": 3
+    "Relationships": 6
    },
    "work_values_extent_1_7": {
     "Achievement": 6.0,
@@ -1251,10 +2440,34 @@
   {
    "soc_code": "15-1243.01",
    "title": "Data Warehousing Specialists",
-   "riasec": null,
+   "riasec": [
+    2.93,
+    4.79,
+    1.62,
+    2.03,
+    3.05,
+    6.38
+   ],
    "high_point_code": "CI",
    "job_zone": 4,
-   "source_url": "https://www.onetonline.org/explore/interests/Conventional/"
+   "source_url": "https://www.onetonline.org/explore/interests/Conventional/",
+   "work_values": {
+    "Achievement": 1,
+    "Working Conditions": 2,
+    "Independence": 3,
+    "Recognition": 4,
+    "Support": 5,
+    "Relationships": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 6.0,
+    "Independence": 5.0,
+    "Recognition": 4.0,
+    "Relationships": 2.67,
+    "Support": 4.0,
+    "Working Conditions": 5.33
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "15-1212.00",
@@ -1271,12 +2484,12 @@
    "job_zone": 4,
    "source_url": "https://www.onetonline.org/explore/interests/Conventional/",
    "work_values": {
-    "Achievement": 4,
+    "Working Conditions": 1,
     "Independence": 2,
-    "Recognition": 5,
-    "Relationships": 6,
     "Support": 3,
-    "Working Conditions": 1
+    "Achievement": 4,
+    "Recognition": 5,
+    "Relationships": 6
    },
    "work_values_extent_1_7": {
     "Achievement": 4.67,
@@ -1299,16 +2512,16 @@
     3.46,
     6.18
    ],
-   "high_point_code": "CIR",
-   "job_zone": 4,
+   "high_point_code": "CRI",
+   "job_zone": 3,
    "source_url": "https://www.onetonline.org/explore/interests/Conventional/",
    "work_values": {
-    "Achievement": 3,
-    "Independence": 5,
-    "Recognition": 4,
-    "Relationships": 6,
+    "Working Conditions": 1,
     "Support": 2,
-    "Working Conditions": 1
+    "Achievement": 3,
+    "Recognition": 4,
+    "Independence": 5,
+    "Relationships": 6
    },
    "work_values_extent_1_7": {
     "Achievement": 4.67,
@@ -1323,18 +2536,66 @@
   {
    "soc_code": "15-1232.00",
    "title": "Computer User Support Specialists",
-   "riasec": null,
+   "riasec": [
+    4.13,
+    3.77,
+    1.0,
+    3.31,
+    2.36,
+    6.02
+   ],
    "high_point_code": "CRI",
    "job_zone": 3,
-   "source_url": "https://www.onetonline.org/explore/interests/Conventional/"
+   "source_url": "https://www.onetonline.org/explore/interests/Conventional/",
+   "work_values": {
+    "Relationships": 1,
+    "Working Conditions": 2,
+    "Achievement": 3,
+    "Independence": 4,
+    "Support": 5,
+    "Recognition": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 5.0,
+    "Independence": 5.0,
+    "Recognition": 4.33,
+    "Relationships": 5.33,
+    "Support": 5.0,
+    "Working Conditions": 5.17
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "15-1254.00",
    "title": "Web Developers",
-   "riasec": null,
+   "riasec": [
+    2.98,
+    5.01,
+    3.13,
+    2.22,
+    2.96,
+    5.03
+   ],
    "high_point_code": "CI",
    "job_zone": 3,
-   "source_url": "https://www.onetonline.org/explore/interests/Conventional/"
+   "source_url": "https://www.onetonline.org/explore/interests/Conventional/",
+   "work_values": {
+    "Independence": 1,
+    "Working Conditions": 2,
+    "Achievement": 3,
+    "Recognition": 4,
+    "Support": 5,
+    "Relationships": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 5.0,
+    "Independence": 5.67,
+    "Recognition": 5.0,
+    "Relationships": 4.0,
+    "Support": 4.33,
+    "Working Conditions": 5.33
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "15-2051.01",
@@ -1352,11 +2613,11 @@
    "source_url": "https://www.onetonline.org/explore/interests/Conventional/",
    "work_values": {
     "Achievement": 1,
-    "Independence": 4,
+    "Working Conditions": 2,
     "Recognition": 3,
-    "Relationships": 6,
+    "Independence": 4,
     "Support": 5,
-    "Working Conditions": 2
+    "Relationships": 6
    },
    "work_values_extent_1_7": {
     "Achievement": 5.67,
@@ -1383,12 +2644,12 @@
    "job_zone": 4,
    "source_url": "https://www.onetonline.org/explore/interests/Conventional/",
    "work_values": {
-    "Achievement": 3,
-    "Independence": 5,
-    "Recognition": 4,
-    "Relationships": 6,
+    "Working Conditions": 1,
     "Support": 2,
-    "Working Conditions": 1
+    "Achievement": 3,
+    "Recognition": 4,
+    "Independence": 5,
+    "Relationships": 6
    },
    "work_values_extent_1_7": {
     "Achievement": 5.33,
@@ -1403,10 +2664,20 @@
   {
    "soc_code": "15-1299.07",
    "title": "Blockchain Engineers",
-   "riasec": null,
+   "riasec": [
+    3.4,
+    5.28,
+    2.07,
+    1.57,
+    3.39,
+    5.69
+   ],
    "high_point_code": "CI",
    "job_zone": 4,
-   "source_url": "https://www.onetonline.org/explore/interests/Conventional/"
+   "source_url": "https://www.onetonline.org/explore/interests/Conventional/",
+   "work_values": null,
+   "work_values_extent_1_7": null,
+   "work_values_db": null
   },
   {
    "soc_code": "13-2011.00",
@@ -1443,10 +2714,34 @@
   {
    "soc_code": "15-2011.00",
    "title": "Actuaries",
-   "riasec": null,
+   "riasec": [
+    1.78,
+    4.45,
+    1.13,
+    2.49,
+    3.33,
+    6.29
+   ],
    "high_point_code": "CIE",
    "job_zone": 4,
-   "source_url": "https://www.onetonline.org/explore/interests/Conventional/"
+   "source_url": "https://www.onetonline.org/explore/interests/Conventional/",
+   "work_values": {
+    "Working Conditions": 1,
+    "Achievement": 2,
+    "Independence": 3,
+    "Recognition": 4,
+    "Support": 5,
+    "Relationships": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 4.67,
+    "Independence": 4.67,
+    "Recognition": 4.33,
+    "Relationships": 3.67,
+    "Support": 4.33,
+    "Working Conditions": 5.0
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "13-2051.00",
@@ -1462,7 +2757,9 @@
    "high_point_code": "CEI",
    "job_zone": 4,
    "source_url": "https://www.onetonline.org/explore/interests/Conventional/",
-   "work_values": null
+   "work_values": null,
+   "work_values_extent_1_7": null,
+   "work_values_db": null
   },
   {
    "soc_code": "13-1111.00",
@@ -1479,12 +2776,12 @@
    "job_zone": 4,
    "source_url": "https://www.onetonline.org/explore/interests/Conventional/",
    "work_values": {
+    "Relationships": 1,
     "Achievement": 2,
     "Independence": 3,
+    "Working Conditions": 4,
     "Recognition": 5,
-    "Relationships": 1,
-    "Support": 6,
-    "Working Conditions": 4
+    "Support": 6
    },
    "work_values_extent_1_7": {
     "Achievement": 5.33,
@@ -1499,10 +2796,34 @@
   {
    "soc_code": "13-1081.00",
    "title": "Logisticians",
-   "riasec": null,
+   "riasec": [
+    2.35,
+    3.81,
+    1.1,
+    2.33,
+    5.02,
+    5.44
+   ],
    "high_point_code": "CEI",
    "job_zone": 4,
-   "source_url": "https://www.onetonline.org/explore/interests/Conventional/"
+   "source_url": "https://www.onetonline.org/explore/interests/Conventional/",
+   "work_values": {
+    "Independence": 1,
+    "Achievement": 2,
+    "Recognition": 3,
+    "Relationships": 4,
+    "Working Conditions": 5,
+    "Support": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 5.33,
+    "Independence": 5.67,
+    "Recognition": 5.0,
+    "Relationships": 5.0,
+    "Support": 4.33,
+    "Working Conditions": 4.83
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "43-3031.00",
@@ -1519,12 +2840,12 @@
    "job_zone": 3,
    "source_url": "https://www.onetonline.org/explore/interests/Conventional/",
    "work_values": {
+    "Support": 1,
+    "Relationships": 2,
     "Achievement": 3,
     "Independence": 4,
-    "Recognition": 6,
-    "Relationships": 2,
-    "Support": 1,
-    "Working Conditions": 5
+    "Working Conditions": 5,
+    "Recognition": 6
    },
    "work_values_extent_1_7": {
     "Achievement": 3.67,
@@ -1539,10 +2860,34 @@
   {
    "soc_code": "43-6014.00",
    "title": "Secretaries and Administrative Assistants, Except Legal, Medical, and Executive",
-   "riasec": null,
+   "riasec": [
+    1.98,
+    1.37,
+    1.0,
+    3.61,
+    4.18,
+    6.95
+   ],
    "high_point_code": "CES",
-   "job_zone": "1-2",
-   "source_url": "https://www.onetonline.org/explore/interests/Conventional/"
+   "job_zone": 2,
+   "source_url": "https://www.onetonline.org/explore/interests/Conventional/",
+   "work_values": {
+    "Support": 1,
+    "Relationships": 2,
+    "Working Conditions": 3,
+    "Achievement": 4,
+    "Independence": 5,
+    "Recognition": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 3.33,
+    "Independence": 2.67,
+    "Recognition": 2.67,
+    "Relationships": 4.67,
+    "Support": 5.0,
+    "Working Conditions": 3.83
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "43-4051.00",
@@ -1556,14 +2901,14 @@
     6.32
    ],
    "high_point_code": "CES",
-   "job_zone": "1-2",
+   "job_zone": 2,
    "source_url": "https://www.onetonline.org/explore/interests/Conventional/",
    "work_values": {
-    "Achievement": 4,
-    "Independence": 3,
-    "Recognition": 5,
     "Relationships": 1,
     "Support": 2,
+    "Independence": 3,
+    "Achievement": 4,
+    "Recognition": 5,
     "Working Conditions": 6
    },
    "work_values_extent_1_7": {
@@ -1579,82 +2924,322 @@
   {
    "soc_code": "41-2011.00",
    "title": "Cashiers",
-   "riasec": null,
+   "riasec": [
+    2.9,
+    1.0,
+    1.0,
+    2.59,
+    3.62,
+    6.21
+   ],
    "high_point_code": "CE",
-   "job_zone": "1-2",
-   "source_url": "https://www.onetonline.org/explore/interests/Conventional/"
+   "job_zone": 2,
+   "source_url": "https://www.onetonline.org/explore/interests/Conventional/",
+   "work_values": {
+    "Relationships": 1,
+    "Support": 2,
+    "Achievement": 3,
+    "Independence": 4,
+    "Working Conditions": 5,
+    "Recognition": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 2.67,
+    "Independence": 2.67,
+    "Recognition": 2.0,
+    "Relationships": 4.67,
+    "Support": 3.67,
+    "Working Conditions": 2.17
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "43-9061.00",
    "title": "Office Clerks, General",
-   "riasec": null,
+   "riasec": [
+    2.92,
+    1.85,
+    1.0,
+    3.06,
+    3.2,
+    6.84
+   ],
    "high_point_code": "C",
-   "job_zone": "1-2",
-   "source_url": "https://www.onetonline.org/explore/interests/Conventional/"
+   "job_zone": 2,
+   "source_url": "https://www.onetonline.org/explore/interests/Conventional/",
+   "work_values": {
+    "Relationships": 1,
+    "Support": 2,
+    "Independence": 3,
+    "Working Conditions": 4,
+    "Achievement": 5,
+    "Recognition": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 2.33,
+    "Independence": 2.67,
+    "Recognition": 2.33,
+    "Relationships": 5.67,
+    "Support": 4.33,
+    "Working Conditions": 2.5
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "43-4171.00",
    "title": "Receptionists and Information Clerks",
-   "riasec": null,
+   "riasec": [
+    1.95,
+    1.79,
+    1.1,
+    3.57,
+    4.26,
+    6.3
+   ],
    "high_point_code": "CES",
-   "job_zone": "1-2",
-   "source_url": "https://www.onetonline.org/explore/interests/Conventional/"
+   "job_zone": 2,
+   "source_url": "https://www.onetonline.org/explore/interests/Conventional/",
+   "work_values": {
+    "Relationships": 1,
+    "Support": 2,
+    "Achievement": 3,
+    "Independence": 4,
+    "Working Conditions": 5,
+    "Recognition": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 3.0,
+    "Independence": 3.0,
+    "Recognition": 2.33,
+    "Relationships": 5.67,
+    "Support": 4.0,
+    "Working Conditions": 2.67
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "29-2052.00",
    "title": "Pharmacy Technicians",
-   "riasec": null,
+   "riasec": [
+    4.21,
+    2.99,
+    1.0,
+    3.32,
+    2.52,
+    7.0
+   ],
    "high_point_code": "CR",
    "job_zone": 3,
-   "source_url": "https://www.onetonline.org/explore/interests/Conventional/"
+   "source_url": "https://www.onetonline.org/explore/interests/Conventional/",
+   "work_values": {
+    "Relationships": 1,
+    "Support": 2,
+    "Achievement": 3,
+    "Independence": 4,
+    "Recognition": 5,
+    "Working Conditions": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 3.0,
+    "Independence": 3.0,
+    "Recognition": 3.0,
+    "Relationships": 5.33,
+    "Support": 5.0,
+    "Working Conditions": 2.83
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "33-9021.00",
    "title": "Private Detectives and Investigators",
-   "riasec": null,
+   "riasec": [
+    2.39,
+    3.9,
+    1.42,
+    2.87,
+    4.07,
+    5.45
+   ],
    "high_point_code": "CEI",
    "job_zone": 3,
-   "source_url": "https://www.onetonline.org/explore/interests/Conventional/"
+   "source_url": "https://www.onetonline.org/explore/interests/Conventional/",
+   "work_values": {
+    "Achievement": 1,
+    "Independence": 2,
+    "Recognition": 3,
+    "Working Conditions": 4,
+    "Relationships": 5,
+    "Support": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 5.33,
+    "Independence": 5.33,
+    "Recognition": 4.33,
+    "Relationships": 3.33,
+    "Support": 2.67,
+    "Working Conditions": 3.83
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "27-3091.00",
    "title": "Interpreters and Translators",
-   "riasec": null,
+   "riasec": [
+    1.89,
+    3.19,
+    4.28,
+    3.48,
+    1.9,
+    4.79
+   ],
    "high_point_code": "CAS",
    "job_zone": 4,
-   "source_url": "https://www.onetonline.org/explore/interests/Conventional/"
+   "source_url": "https://www.onetonline.org/explore/interests/Conventional/",
+   "work_values": {
+    "Relationships": 1,
+    "Working Conditions": 2,
+    "Recognition": 3,
+    "Achievement": 4,
+    "Independence": 5,
+    "Support": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 3.67,
+    "Independence": 3.67,
+    "Recognition": 4.0,
+    "Relationships": 5.33,
+    "Support": 3.67,
+    "Working Conditions": 4.17
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "27-3042.00",
    "title": "Technical Writers",
-   "riasec": null,
+   "riasec": [
+    2.78,
+    3.69,
+    4.23,
+    2.01,
+    1.97,
+    5.32
+   ],
    "high_point_code": "CAI",
    "job_zone": 4,
-   "source_url": "https://www.onetonline.org/explore/interests/Conventional/"
+   "source_url": "https://www.onetonline.org/explore/interests/Conventional/",
+   "work_values": {
+    "Independence": 1,
+    "Working Conditions": 2,
+    "Achievement": 3,
+    "Support": 4,
+    "Recognition": 5,
+    "Relationships": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 4.33,
+    "Independence": 4.67,
+    "Recognition": 3.33,
+    "Relationships": 3.0,
+    "Support": 3.67,
+    "Working Conditions": 4.67
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "25-4022.00",
    "title": "Librarians and Media Collections Specialists",
-   "riasec": null,
+   "riasec": [
+    2.32,
+    3.63,
+    2.65,
+    4.04,
+    2.75,
+    5.83
+   ],
    "high_point_code": "CSI",
    "job_zone": 5,
-   "source_url": "https://www.onetonline.org/explore/interests/Conventional/"
+   "source_url": "https://www.onetonline.org/explore/interests/Conventional/",
+   "work_values": {
+    "Relationships": 1,
+    "Working Conditions": 2,
+    "Independence": 3,
+    "Achievement": 4,
+    "Support": 5,
+    "Recognition": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 4.67,
+    "Independence": 5.17,
+    "Recognition": 3.67,
+    "Relationships": 5.83,
+    "Support": 4.17,
+    "Working Conditions": 5.42
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "53-2012.00",
    "title": "Commercial Pilots",
-   "riasec": null,
+   "riasec": [
+    4.79,
+    2.55,
+    1.1,
+    2.57,
+    3.92,
+    4.82
+   ],
    "high_point_code": "CRE",
    "job_zone": 3,
-   "source_url": "https://www.onetonline.org/explore/interests/Conventional/"
+   "source_url": "https://www.onetonline.org/explore/interests/Conventional/",
+   "work_values": {
+    "Support": 1,
+    "Independence": 2,
+    "Recognition": 3,
+    "Achievement": 4,
+    "Relationships": 5,
+    "Working Conditions": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 5.67,
+    "Independence": 6.33,
+    "Recognition": 6.0,
+    "Relationships": 4.67,
+    "Support": 6.67,
+    "Working Conditions": 4.67
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "53-2021.00",
    "title": "Air Traffic Controllers",
-   "riasec": null,
+   "riasec": [
+    4.55,
+    2.45,
+    1.0,
+    2.68,
+    4.29,
+    4.99
+   ],
    "high_point_code": "CRE",
    "job_zone": 3,
-   "source_url": "https://www.onetonline.org/explore/interests/Conventional/"
+   "source_url": "https://www.onetonline.org/explore/interests/Conventional/",
+   "work_values": {
+    "Support": 1,
+    "Independence": 2,
+    "Working Conditions": 3,
+    "Achievement": 4,
+    "Recognition": 5,
+    "Relationships": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 5.0,
+    "Independence": 5.33,
+    "Recognition": 5.0,
+    "Relationships": 3.33,
+    "Support": 6.0,
+    "Working Conditions": 5.33
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "29-1141.00",
@@ -1671,12 +3256,12 @@
    "job_zone": 4,
    "source_url": "https://www.onetonline.org/explore/interests/Social/",
    "work_values": {
-    "Achievement": 3,
-    "Independence": 4,
-    "Recognition": 6,
     "Relationships": 1,
     "Support": 2,
-    "Working Conditions": 5
+    "Achievement": 3,
+    "Independence": 4,
+    "Working Conditions": 5,
+    "Recognition": 6
    },
    "work_values_extent_1_7": {
     "Achievement": 5.33,
@@ -1691,82 +3276,294 @@
   {
    "soc_code": "29-1123.00",
    "title": "Physical Therapists",
-   "riasec": null,
+   "riasec": [
+    4.33,
+    4.87,
+    2.17,
+    5.91,
+    2.49,
+    3.07
+   ],
    "high_point_code": "SIR",
    "job_zone": 5,
-   "source_url": "https://www.onetonline.org/explore/interests/Social/"
+   "source_url": "https://www.onetonline.org/explore/interests/Social/",
+   "work_values": {
+    "Relationships": 1,
+    "Achievement": 2,
+    "Recognition": 3,
+    "Independence": 4,
+    "Working Conditions": 5,
+    "Support": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 5.67,
+    "Independence": 5.33,
+    "Recognition": 5.67,
+    "Relationships": 6.67,
+    "Support": 4.67,
+    "Working Conditions": 5.33
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "29-1122.00",
    "title": "Occupational Therapists",
-   "riasec": null,
+   "riasec": [
+    3.57,
+    4.23,
+    3.07,
+    6.08,
+    1.83,
+    3.12
+   ],
    "high_point_code": "SI",
    "job_zone": 5,
-   "source_url": "https://www.onetonline.org/explore/interests/Social/"
+   "source_url": "https://www.onetonline.org/explore/interests/Social/",
+   "work_values": {
+    "Relationships": 1,
+    "Achievement": 2,
+    "Working Conditions": 3,
+    "Independence": 4,
+    "Support": 5,
+    "Recognition": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 6.0,
+    "Independence": 5.67,
+    "Recognition": 4.33,
+    "Relationships": 7.0,
+    "Support": 5.0,
+    "Working Conditions": 5.83
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "29-1127.00",
    "title": "Speech-Language Pathologists",
-   "riasec": null,
+   "riasec": [
+    2.62,
+    5.57,
+    3.0,
+    6.09,
+    1.44,
+    4.03
+   ],
    "high_point_code": "SIC",
    "job_zone": 5,
-   "source_url": "https://www.onetonline.org/explore/interests/Social/"
+   "source_url": "https://www.onetonline.org/explore/interests/Social/",
+   "work_values": {
+    "Relationships": 1,
+    "Achievement": 2,
+    "Independence": 3,
+    "Working Conditions": 4,
+    "Recognition": 5,
+    "Support": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 5.67,
+    "Independence": 5.33,
+    "Recognition": 4.67,
+    "Relationships": 6.67,
+    "Support": 4.0,
+    "Working Conditions": 5.17
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "29-1031.00",
    "title": "Dietitians and Nutritionists",
-   "riasec": null,
+   "riasec": [
+    3.03,
+    4.8,
+    2.4,
+    5.5,
+    3.42,
+    3.35
+   ],
    "high_point_code": "SI",
    "job_zone": 5,
-   "source_url": "https://www.onetonline.org/explore/interests/Social/"
+   "source_url": "https://www.onetonline.org/explore/interests/Social/",
+   "work_values": {
+    "Relationships": 1,
+    "Independence": 2,
+    "Achievement": 3,
+    "Recognition": 4,
+    "Working Conditions": 5,
+    "Support": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 5.0,
+    "Independence": 5.67,
+    "Recognition": 5.0,
+    "Relationships": 6.0,
+    "Support": 4.0,
+    "Working Conditions": 4.67
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "29-2042.00",
    "title": "Emergency Medical Technicians",
-   "riasec": null,
+   "riasec": [
+    5.46,
+    4.57,
+    1.0,
+    5.56,
+    1.56,
+    3.76
+   ],
    "high_point_code": "SRI",
    "job_zone": 3,
-   "source_url": "https://www.onetonline.org/explore/interests/Social/"
+   "source_url": "https://www.onetonline.org/explore/interests/Social/",
+   "work_values": null,
+   "work_values_extent_1_7": null,
+   "work_values_db": null
   },
   {
    "soc_code": "29-2043.00",
    "title": "Paramedics",
-   "riasec": null,
-   "high_point_code": "SRC",
+   "riasec": [
+    5.2,
+    5.03,
+    1.0,
+    5.49,
+    1.91,
+    3.42
+   ],
+   "high_point_code": "SRI",
    "job_zone": 3,
-   "source_url": "https://www.onetonline.org/explore/interests/Social/"
+   "source_url": "https://www.onetonline.org/explore/interests/Social/",
+   "work_values": null,
+   "work_values_extent_1_7": null,
+   "work_values_db": null
   },
   {
    "soc_code": "29-1292.00",
    "title": "Dental Hygienists",
-   "riasec": null,
+   "riasec": [
+    5.27,
+    4.52,
+    1.12,
+    5.35,
+    1.73,
+    4.31
+   ],
    "high_point_code": "SRI",
    "job_zone": 3,
-   "source_url": "https://www.onetonline.org/explore/interests/Social/"
+   "source_url": "https://www.onetonline.org/explore/interests/Social/",
+   "work_values": {
+    "Relationships": 1,
+    "Support": 2,
+    "Independence": 3,
+    "Working Conditions": 4,
+    "Achievement": 5,
+    "Recognition": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 4.33,
+    "Independence": 4.67,
+    "Recognition": 3.67,
+    "Relationships": 6.67,
+    "Support": 5.0,
+    "Working Conditions": 4.5
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "31-1131.00",
    "title": "Nursing Assistants",
-   "riasec": null,
+   "riasec": [
+    4.58,
+    2.72,
+    1.0,
+    5.7,
+    1.77,
+    4.24
+   ],
    "high_point_code": "SRC",
    "job_zone": 3,
-   "source_url": "https://www.onetonline.org/explore/interests/Social/"
+   "source_url": "https://www.onetonline.org/explore/interests/Social/",
+   "work_values": {
+    "Relationships": 1,
+    "Support": 2,
+    "Working Conditions": 3,
+    "Achievement": 4,
+    "Independence": 5,
+    "Recognition": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 3.0,
+    "Independence": 2.33,
+    "Recognition": 2.33,
+    "Relationships": 5.67,
+    "Support": 4.67,
+    "Working Conditions": 3.17
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "31-1121.00",
    "title": "Home Health Aides",
-   "riasec": null,
+   "riasec": [
+    4.23,
+    3.18,
+    1.48,
+    6.33,
+    1.77,
+    3.51
+   ],
    "high_point_code": "SRC",
-   "job_zone": "1-2",
-   "source_url": "https://www.onetonline.org/explore/interests/Social/"
+   "job_zone": 2,
+   "source_url": "https://www.onetonline.org/explore/interests/Social/",
+   "work_values": {
+    "Relationships": 1,
+    "Support": 2,
+    "Independence": 3,
+    "Working Conditions": 4,
+    "Achievement": 5,
+    "Recognition": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 2.33,
+    "Independence": 2.67,
+    "Recognition": 2.0,
+    "Relationships": 4.33,
+    "Support": 4.0,
+    "Working Conditions": 2.5
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "31-1122.00",
    "title": "Personal Care Aides",
-   "riasec": null,
+   "riasec": [
+    3.51,
+    1.8,
+    1.79,
+    6.19,
+    2.55,
+    3.92
+   ],
    "high_point_code": "SCR",
-   "job_zone": "1-2",
-   "source_url": "https://www.onetonline.org/explore/interests/Social/"
+   "job_zone": 2,
+   "source_url": "https://www.onetonline.org/explore/interests/Social/",
+   "work_values": {
+    "Relationships": 1,
+    "Achievement": 2,
+    "Support": 3,
+    "Independence": 4,
+    "Working Conditions": 5,
+    "Recognition": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 4.0,
+    "Independence": 3.33,
+    "Recognition": 2.67,
+    "Relationships": 5.67,
+    "Support": 4.0,
+    "Working Conditions": 3.0
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "29-1215.00",
@@ -1783,12 +3580,12 @@
    "job_zone": 5,
    "source_url": "https://www.onetonline.org/explore/interests/Social/",
    "work_values": {
+    "Relationships": 1,
     "Achievement": 2,
     "Independence": 3,
     "Recognition": 4,
-    "Relationships": 1,
-    "Support": 6,
-    "Working Conditions": 5
+    "Working Conditions": 5,
+    "Support": 6
    },
    "work_values_extent_1_7": {
     "Achievement": 6.33,
@@ -1803,10 +3600,34 @@
   {
    "soc_code": "29-1221.00",
    "title": "Pediatricians, General",
-   "riasec": null,
+   "riasec": [
+    3.64,
+    6.18,
+    1.88,
+    6.64,
+    2.54,
+    3.58
+   ],
    "high_point_code": "SI",
    "job_zone": 5,
-   "source_url": "https://www.onetonline.org/explore/interests/Social/"
+   "source_url": "https://www.onetonline.org/explore/interests/Social/",
+   "work_values": {
+    "Achievement": 1,
+    "Recognition": 2,
+    "Relationships": 3,
+    "Independence": 4,
+    "Working Conditions": 5,
+    "Support": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 6.67,
+    "Independence": 6.33,
+    "Recognition": 6.67,
+    "Relationships": 6.67,
+    "Support": 4.67,
+    "Working Conditions": 6.0
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "19-3033.00",
@@ -1823,12 +3644,12 @@
    "job_zone": 5,
    "source_url": "https://www.onetonline.org/explore/interests/Social/",
    "work_values": {
-    "Achievement": 3,
-    "Independence": 2,
-    "Recognition": 5,
     "Relationships": 1,
-    "Support": 6,
-    "Working Conditions": 4
+    "Independence": 2,
+    "Achievement": 3,
+    "Working Conditions": 4,
+    "Recognition": 5,
+    "Support": 6
    },
    "work_values_extent_1_7": {
     "Achievement": 5.83,
@@ -1855,12 +3676,12 @@
    "job_zone": 5,
    "source_url": "https://www.onetonline.org/explore/interests/Social/",
    "work_values": {
+    "Relationships": 1,
     "Achievement": 2,
     "Independence": 3,
     "Recognition": 4,
-    "Relationships": 1,
-    "Support": 6,
-    "Working Conditions": 5
+    "Working Conditions": 5,
+    "Support": 6
    },
    "work_values_extent_1_7": {
     "Achievement": 5.33,
@@ -1875,42 +3696,162 @@
   {
    "soc_code": "21-1013.00",
    "title": "Marriage and Family Therapists",
-   "riasec": null,
+   "riasec": [
+    1.49,
+    5.32,
+    3.58,
+    6.22,
+    1.78,
+    2.9
+   ],
    "high_point_code": "SI",
    "job_zone": 5,
-   "source_url": "https://www.onetonline.org/explore/interests/Social/"
+   "source_url": "https://www.onetonline.org/explore/interests/Social/",
+   "work_values": {
+    "Relationships": 1,
+    "Independence": 2,
+    "Achievement": 3,
+    "Working Conditions": 4,
+    "Recognition": 5,
+    "Support": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 5.67,
+    "Independence": 6.0,
+    "Recognition": 5.0,
+    "Relationships": 7.0,
+    "Support": 2.67,
+    "Working Conditions": 5.33
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "21-1011.00",
    "title": "Substance Abuse and Behavioral Disorder Counselors",
-   "riasec": null,
+   "riasec": [
+    1.59,
+    3.81,
+    2.59,
+    6.66,
+    2.71,
+    3.16
+   ],
    "high_point_code": "SI",
    "job_zone": 5,
-   "source_url": "https://www.onetonline.org/explore/interests/Social/"
+   "source_url": "https://www.onetonline.org/explore/interests/Social/",
+   "work_values": {
+    "Relationships": 1,
+    "Achievement": 2,
+    "Independence": 3,
+    "Recognition": 4,
+    "Working Conditions": 5,
+    "Support": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 5.33,
+    "Independence": 5.0,
+    "Recognition": 5.0,
+    "Relationships": 6.67,
+    "Support": 4.0,
+    "Working Conditions": 4.33
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "21-1021.00",
    "title": "Child, Family, and School Social Workers",
-   "riasec": null,
+   "riasec": [
+    1.7,
+    3.32,
+    2.9,
+    6.85,
+    2.94,
+    3.57
+   ],
    "high_point_code": "S",
    "job_zone": 4,
-   "source_url": "https://www.onetonline.org/explore/interests/Social/"
+   "source_url": "https://www.onetonline.org/explore/interests/Social/",
+   "work_values": {
+    "Relationships": 1,
+    "Achievement": 2,
+    "Independence": 3,
+    "Working Conditions": 4,
+    "Support": 5,
+    "Recognition": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 6.0,
+    "Independence": 5.33,
+    "Recognition": 3.67,
+    "Relationships": 6.67,
+    "Support": 4.67,
+    "Working Conditions": 5.0
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "21-1094.00",
    "title": "Community Health Workers",
-   "riasec": null,
+   "riasec": [
+    2.0,
+    3.49,
+    2.22,
+    6.58,
+    3.53,
+    3.38
+   ],
    "high_point_code": "S",
    "job_zone": 4,
-   "source_url": "https://www.onetonline.org/explore/interests/Social/"
+   "source_url": "https://www.onetonline.org/explore/interests/Social/",
+   "work_values": {
+    "Relationships": 1,
+    "Achievement": 2,
+    "Independence": 3,
+    "Working Conditions": 4,
+    "Recognition": 5,
+    "Support": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 6.0,
+    "Independence": 6.0,
+    "Recognition": 4.33,
+    "Relationships": 7.0,
+    "Support": 4.33,
+    "Working Conditions": 4.5
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "13-1151.00",
    "title": "Training and Development Specialists",
-   "riasec": null,
+   "riasec": [
+    2.03,
+    4.03,
+    3.19,
+    5.64,
+    3.68,
+    3.76
+   ],
    "high_point_code": "SI",
    "job_zone": 4,
-   "source_url": "https://www.onetonline.org/explore/interests/Social/"
+   "source_url": "https://www.onetonline.org/explore/interests/Social/",
+   "work_values": {
+    "Relationships": 1,
+    "Achievement": 2,
+    "Independence": 3,
+    "Working Conditions": 4,
+    "Recognition": 5,
+    "Support": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 5.33,
+    "Independence": 5.33,
+    "Recognition": 4.67,
+    "Relationships": 6.33,
+    "Support": 4.67,
+    "Working Conditions": 4.83
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "25-2021.00",
@@ -1927,12 +3868,12 @@
    "job_zone": 4,
    "source_url": "https://www.onetonline.org/explore/interests/Social/",
    "work_values": {
+    "Relationships": 1,
     "Achievement": 2,
     "Independence": 3,
-    "Recognition": 6,
-    "Relationships": 1,
     "Support": 4,
-    "Working Conditions": 5
+    "Working Conditions": 5,
+    "Recognition": 6
    },
    "work_values_extent_1_7": {
     "Achievement": 5.67,
@@ -1947,66 +3888,258 @@
   {
    "soc_code": "25-2031.00",
    "title": "Secondary School Teachers, Except Special and Career/Technical Education",
-   "riasec": null,
+   "riasec": [
+    2.73,
+    3.19,
+    3.77,
+    7.0,
+    2.9,
+    3.61
+   ],
    "high_point_code": "S",
    "job_zone": 4,
-   "source_url": "https://www.onetonline.org/explore/interests/Social/"
+   "source_url": "https://www.onetonline.org/explore/interests/Social/",
+   "work_values": {
+    "Relationships": 1,
+    "Achievement": 2,
+    "Working Conditions": 3,
+    "Independence": 4,
+    "Support": 5,
+    "Recognition": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 5.67,
+    "Independence": 5.0,
+    "Recognition": 4.0,
+    "Relationships": 7.0,
+    "Support": 4.67,
+    "Working Conditions": 5.33
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "25-1054.00",
    "title": "Physics Teachers, Postsecondary",
-   "riasec": null,
+   "riasec": [
+    3.77,
+    5.98,
+    3.28,
+    6.06,
+    2.35,
+    3.64
+   ],
    "high_point_code": "SI",
    "job_zone": 5,
-   "source_url": "https://www.onetonline.org/explore/interests/Social/"
+   "source_url": "https://www.onetonline.org/explore/interests/Social/",
+   "work_values": {
+    "Achievement": 1,
+    "Recognition": 2,
+    "Working Conditions": 3,
+    "Independence": 4,
+    "Relationships": 5,
+    "Support": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 5.67,
+    "Independence": 5.33,
+    "Recognition": 5.67,
+    "Relationships": 4.67,
+    "Support": 3.67,
+    "Working Conditions": 5.67
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "25-1021.00",
    "title": "Computer Science Teachers, Postsecondary",
-   "riasec": null,
+   "riasec": [
+    3.09,
+    5.69,
+    3.32,
+    5.88,
+    2.26,
+    3.97
+   ],
    "high_point_code": "SI",
    "job_zone": 5,
-   "source_url": "https://www.onetonline.org/explore/interests/Social/"
+   "source_url": "https://www.onetonline.org/explore/interests/Social/",
+   "work_values": {
+    "Achievement": 1,
+    "Independence": 2,
+    "Working Conditions": 3,
+    "Recognition": 4,
+    "Relationships": 5,
+    "Support": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 5.33,
+    "Independence": 5.33,
+    "Recognition": 5.0,
+    "Relationships": 4.67,
+    "Support": 3.33,
+    "Working Conditions": 5.17
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "25-1032.00",
    "title": "Engineering Teachers, Postsecondary",
-   "riasec": null,
+   "riasec": [
+    4.84,
+    5.39,
+    3.16,
+    5.77,
+    2.01,
+    3.44
+   ],
    "high_point_code": "SIR",
    "job_zone": 5,
-   "source_url": "https://www.onetonline.org/explore/interests/Social/"
+   "source_url": "https://www.onetonline.org/explore/interests/Social/",
+   "work_values": {
+    "Achievement": 1,
+    "Independence": 2,
+    "Recognition": 3,
+    "Working Conditions": 4,
+    "Relationships": 5,
+    "Support": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 5.67,
+    "Independence": 5.67,
+    "Recognition": 5.67,
+    "Relationships": 4.33,
+    "Support": 2.33,
+    "Working Conditions": 5.17
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "25-1022.00",
    "title": "Mathematical Science Teachers, Postsecondary",
-   "riasec": null,
+   "riasec": [
+    2.81,
+    5.86,
+    3.2,
+    6.19,
+    1.94,
+    4.38
+   ],
    "high_point_code": "SIC",
    "job_zone": 5,
-   "source_url": "https://www.onetonline.org/explore/interests/Social/"
+   "source_url": "https://www.onetonline.org/explore/interests/Social/",
+   "work_values": {
+    "Achievement": 1,
+    "Independence": 2,
+    "Recognition": 3,
+    "Working Conditions": 4,
+    "Relationships": 5,
+    "Support": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 6.0,
+    "Independence": 5.67,
+    "Recognition": 5.33,
+    "Relationships": 4.67,
+    "Support": 2.67,
+    "Working Conditions": 4.83
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "25-1071.00",
    "title": "Health Specialties Teachers, Postsecondary",
-   "riasec": null,
+   "riasec": [
+    3.27,
+    5.43,
+    3.0,
+    7.0,
+    1.99,
+    3.52
+   ],
    "high_point_code": "SI",
    "job_zone": 5,
-   "source_url": "https://www.onetonline.org/explore/interests/Social/"
+   "source_url": "https://www.onetonline.org/explore/interests/Social/",
+   "work_values": {
+    "Working Conditions": 1,
+    "Achievement": 2,
+    "Independence": 3,
+    "Recognition": 4,
+    "Relationships": 5,
+    "Support": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 5.67,
+    "Independence": 5.67,
+    "Recognition": 5.67,
+    "Relationships": 5.0,
+    "Support": 3.33,
+    "Working Conditions": 6.0
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "25-1042.00",
    "title": "Biological Science Teachers, Postsecondary",
-   "riasec": null,
+   "riasec": [
+    3.96,
+    5.88,
+    3.3,
+    6.25,
+    2.04,
+    3.65
+   ],
    "high_point_code": "SI",
    "job_zone": 5,
-   "source_url": "https://www.onetonline.org/explore/interests/Social/"
+   "source_url": "https://www.onetonline.org/explore/interests/Social/",
+   "work_values": {
+    "Working Conditions": 1,
+    "Achievement": 2,
+    "Independence": 3,
+    "Recognition": 4,
+    "Relationships": 5,
+    "Support": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 5.67,
+    "Independence": 5.67,
+    "Recognition": 5.67,
+    "Relationships": 5.0,
+    "Support": 3.67,
+    "Working Conditions": 5.83
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "21-2011.00",
    "title": "Clergy",
-   "riasec": null,
+   "riasec": [
+    2.1,
+    2.11,
+    3.44,
+    5.91,
+    4.17,
+    2.89
+   ],
    "high_point_code": "SE",
    "job_zone": 5,
-   "source_url": "https://www.onetonline.org/explore/interests/Social/"
+   "source_url": "https://www.onetonline.org/explore/interests/Social/",
+   "work_values": {
+    "Achievement": 1,
+    "Independence": 2,
+    "Relationships": 3,
+    "Recognition": 4,
+    "Working Conditions": 5,
+    "Support": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 6.67,
+    "Independence": 6.33,
+    "Recognition": 5.33,
+    "Relationships": 6.33,
+    "Support": 3.33,
+    "Working Conditions": 5.0
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "11-1011.00",
@@ -2023,12 +4156,12 @@
    "job_zone": 5,
    "source_url": "https://www.onetonline.org/explore/interests/Enterprising/",
    "work_values": {
-    "Achievement": 3,
     "Independence": 1,
     "Recognition": 2,
-    "Relationships": 6,
+    "Achievement": 3,
+    "Working Conditions": 4,
     "Support": 5,
-    "Working Conditions": 4
+    "Relationships": 6
    },
    "work_values_extent_1_7": {
     "Achievement": 6.33,
@@ -2043,10 +4176,34 @@
   {
    "soc_code": "11-1021.00",
    "title": "General and Operations Managers",
-   "riasec": null,
+   "riasec": [
+    2.2,
+    2.37,
+    1.29,
+    3.38,
+    7.0,
+    5.34
+   ],
    "high_point_code": "EC",
    "job_zone": 4,
-   "source_url": "https://www.onetonline.org/explore/interests/Enterprising/"
+   "source_url": "https://www.onetonline.org/explore/interests/Enterprising/",
+   "work_values": {
+    "Relationships": 1,
+    "Independence": 2,
+    "Working Conditions": 3,
+    "Recognition": 4,
+    "Achievement": 5,
+    "Support": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 5.33,
+    "Independence": 6.0,
+    "Recognition": 5.67,
+    "Relationships": 6.33,
+    "Support": 4.67,
+    "Working Conditions": 6.0
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "11-2021.00",
@@ -2063,12 +4220,12 @@
    "job_zone": 4,
    "source_url": "https://www.onetonline.org/explore/interests/Enterprising/",
    "work_values": {
+    "Working Conditions": 1,
     "Achievement": 2,
     "Independence": 3,
-    "Recognition": 5,
     "Relationships": 4,
-    "Support": 6,
-    "Working Conditions": 1
+    "Recognition": 5,
+    "Support": 6
    },
    "work_values_extent_1_7": {
     "Achievement": 6.0,
@@ -2083,34 +4240,130 @@
   {
    "soc_code": "11-3121.00",
    "title": "Human Resources Managers",
-   "riasec": null,
+   "riasec": [
+    1.26,
+    2.31,
+    1.5,
+    3.88,
+    7.0,
+    5.54
+   ],
    "high_point_code": "ECS",
    "job_zone": 4,
-   "source_url": "https://www.onetonline.org/explore/interests/Enterprising/"
+   "source_url": "https://www.onetonline.org/explore/interests/Enterprising/",
+   "work_values": {
+    "Relationships": 1,
+    "Recognition": 2,
+    "Achievement": 3,
+    "Working Conditions": 4,
+    "Independence": 5,
+    "Support": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 5.33,
+    "Independence": 5.0,
+    "Recognition": 5.67,
+    "Relationships": 6.0,
+    "Support": 4.33,
+    "Working Conditions": 5.33
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "11-3031.00",
    "title": "Financial Managers",
-   "riasec": null,
+   "riasec": [
+    1.36,
+    2.46,
+    1.59,
+    3.04,
+    7.0,
+    5.56
+   ],
    "high_point_code": "EC",
    "job_zone": 4,
-   "source_url": "https://www.onetonline.org/explore/interests/Enterprising/"
+   "source_url": "https://www.onetonline.org/explore/interests/Enterprising/",
+   "work_values": {
+    "Independence": 1,
+    "Working Conditions": 2,
+    "Recognition": 3,
+    "Achievement": 4,
+    "Relationships": 5,
+    "Support": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 5.33,
+    "Independence": 6.0,
+    "Recognition": 5.67,
+    "Relationships": 5.0,
+    "Support": 5.0,
+    "Working Conditions": 6.0
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "11-9111.00",
    "title": "Medical and Health Services Managers",
-   "riasec": null,
+   "riasec": [
+    2.05,
+    3.75,
+    1.45,
+    4.4,
+    5.95,
+    5.17
+   ],
    "high_point_code": "ECS",
    "job_zone": 4,
-   "source_url": "https://www.onetonline.org/explore/interests/Enterprising/"
+   "source_url": "https://www.onetonline.org/explore/interests/Enterprising/",
+   "work_values": {
+    "Independence": 1,
+    "Relationships": 2,
+    "Working Conditions": 3,
+    "Support": 4,
+    "Achievement": 5,
+    "Recognition": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 5.0,
+    "Independence": 6.0,
+    "Recognition": 4.67,
+    "Relationships": 6.0,
+    "Support": 5.67,
+    "Working Conditions": 6.0
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "13-2052.00",
    "title": "Personal Financial Advisors",
-   "riasec": null,
+   "riasec": [
+    1.0,
+    3.27,
+    1.69,
+    4.07,
+    5.85,
+    5.61
+   ],
    "high_point_code": "ECS",
    "job_zone": 4,
-   "source_url": "https://www.onetonline.org/explore/interests/Enterprising/"
+   "source_url": "https://www.onetonline.org/explore/interests/Enterprising/",
+   "work_values": {
+    "Independence": 1,
+    "Achievement": 2,
+    "Recognition": 3,
+    "Working Conditions": 4,
+    "Relationships": 5,
+    "Support": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 5.0,
+    "Independence": 5.33,
+    "Recognition": 4.67,
+    "Relationships": 4.33,
+    "Support": 3.67,
+    "Working Conditions": 4.67
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "11-2022.00",
@@ -2127,12 +4380,12 @@
    "job_zone": 4,
    "source_url": "https://www.onetonline.org/explore/interests/Enterprising/",
    "work_values": {
-    "Achievement": 3,
     "Independence": 1,
-    "Recognition": 5,
-    "Relationships": 6,
+    "Working Conditions": 2,
+    "Achievement": 3,
     "Support": 4,
-    "Working Conditions": 2
+    "Recognition": 5,
+    "Relationships": 6
    },
    "work_values_extent_1_7": {
     "Achievement": 5.33,
@@ -2147,10 +4400,34 @@
   {
    "soc_code": "13-1161.00",
    "title": "Market Research Analysts and Marketing Specialists",
-   "riasec": null,
+   "riasec": [
+    1.08,
+    4.6,
+    2.56,
+    2.47,
+    5.52,
+    4.62
+   ],
    "high_point_code": "ECI",
    "job_zone": 4,
-   "source_url": "https://www.onetonline.org/explore/interests/Enterprising/"
+   "source_url": "https://www.onetonline.org/explore/interests/Enterprising/",
+   "work_values": {
+    "Achievement": 1,
+    "Support": 2,
+    "Working Conditions": 3,
+    "Independence": 4,
+    "Recognition": 5,
+    "Relationships": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 4.67,
+    "Independence": 4.0,
+    "Recognition": 3.67,
+    "Relationships": 3.33,
+    "Support": 4.33,
+    "Working Conditions": 4.33
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "23-1011.00",
@@ -2167,12 +4444,12 @@
    "job_zone": 5,
    "source_url": "https://www.onetonline.org/explore/interests/Enterprising/",
    "work_values": {
+    "Recognition": 1,
     "Achievement": 2,
     "Independence": 3,
-    "Recognition": 1,
-    "Relationships": 6,
+    "Working Conditions": 4,
     "Support": 5,
-    "Working Conditions": 4
+    "Relationships": 6
    },
    "work_values_extent_1_7": {
     "Achievement": 6.0,
@@ -2187,34 +4464,130 @@
   {
    "soc_code": "11-9021.00",
    "title": "Construction Managers",
-   "riasec": null,
+   "riasec": [
+    4.68,
+    3.18,
+    1.7,
+    2.35,
+    5.73,
+    4.8
+   ],
    "high_point_code": "ECR",
    "job_zone": 4,
-   "source_url": "https://www.onetonline.org/explore/interests/Enterprising/"
+   "source_url": "https://www.onetonline.org/explore/interests/Enterprising/",
+   "work_values": {
+    "Working Conditions": 1,
+    "Independence": 2,
+    "Achievement": 3,
+    "Support": 4,
+    "Relationships": 5,
+    "Recognition": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 5.33,
+    "Independence": 5.67,
+    "Recognition": 4.67,
+    "Relationships": 5.0,
+    "Support": 5.33,
+    "Working Conditions": 5.83
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "41-3031.00",
    "title": "Securities, Commodities, and Financial Services Sales Agents",
-   "riasec": null,
+   "riasec": [
+    1.26,
+    2.53,
+    1.29,
+    3.07,
+    6.08,
+    5.27
+   ],
    "high_point_code": "EC",
    "job_zone": 4,
-   "source_url": "https://www.onetonline.org/explore/interests/Enterprising/"
+   "source_url": "https://www.onetonline.org/explore/interests/Enterprising/",
+   "work_values": {
+    "Achievement": 1,
+    "Working Conditions": 2,
+    "Independence": 3,
+    "Relationships": 4,
+    "Recognition": 5,
+    "Support": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 5.17,
+    "Independence": 5.08,
+    "Recognition": 4.42,
+    "Relationships": 4.75,
+    "Support": 4.42,
+    "Working Conditions": 5.17
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "41-4011.00",
    "title": "Sales Representatives, Wholesale and Manufacturing, Technical and Scientific Products",
-   "riasec": null,
+   "riasec": [
+    2.8,
+    3.15,
+    1.44,
+    3.12,
+    5.27,
+    5.14
+   ],
    "high_point_code": "EC",
    "job_zone": 4,
-   "source_url": "https://www.onetonline.org/explore/interests/Enterprising/"
+   "source_url": "https://www.onetonline.org/explore/interests/Enterprising/",
+   "work_values": {
+    "Independence": 1,
+    "Achievement": 2,
+    "Working Conditions": 3,
+    "Relationships": 4,
+    "Recognition": 5,
+    "Support": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 4.67,
+    "Independence": 5.0,
+    "Recognition": 4.0,
+    "Relationships": 4.33,
+    "Support": 3.67,
+    "Working Conditions": 4.67
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "11-3061.00",
    "title": "Purchasing Managers",
-   "riasec": null,
+   "riasec": [
+    2.49,
+    1.77,
+    1.2,
+    2.7,
+    7.0,
+    5.98
+   ],
    "high_point_code": "EC",
    "job_zone": 4,
-   "source_url": "https://www.onetonline.org/explore/interests/Enterprising/"
+   "source_url": "https://www.onetonline.org/explore/interests/Enterprising/",
+   "work_values": {
+    "Working Conditions": 1,
+    "Support": 2,
+    "Independence": 3,
+    "Recognition": 4,
+    "Achievement": 5,
+    "Relationships": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 4.0,
+    "Independence": 4.67,
+    "Recognition": 4.33,
+    "Relationships": 4.0,
+    "Support": 5.0,
+    "Working Conditions": 5.33
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "15-1299.09",
@@ -2233,10 +4606,10 @@
    "work_values": {
     "Achievement": 1,
     "Independence": 2,
+    "Working Conditions": 3,
     "Recognition": 4,
     "Relationships": 5,
-    "Support": 6,
-    "Working Conditions": 3
+    "Support": 6
    },
    "work_values_extent_1_7": {
     "Achievement": 6.0,
@@ -2262,39 +4635,137 @@
    "high_point_code": "EC",
    "job_zone": 4,
    "source_url": "https://www.onetonline.org/explore/interests/Enterprising/",
-   "work_values": null
+   "work_values": null,
+   "work_values_extent_1_7": null,
+   "work_values_db": null
   },
   {
    "soc_code": "11-9041.00",
    "title": "Architectural and Engineering Managers",
-   "riasec": null,
+   "riasec": [
+    2.99,
+    4.56,
+    2.64,
+    2.95,
+    6.4,
+    4.43
+   ],
    "high_point_code": "EIC",
    "job_zone": 5,
-   "source_url": "https://www.onetonline.org/explore/interests/Enterprising/"
+   "source_url": "https://www.onetonline.org/explore/interests/Enterprising/",
+   "work_values": {
+    "Achievement": 1,
+    "Independence": 2,
+    "Working Conditions": 3,
+    "Recognition": 4,
+    "Support": 5,
+    "Relationships": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 6.0,
+    "Independence": 6.0,
+    "Recognition": 5.33,
+    "Relationships": 4.0,
+    "Support": 5.0,
+    "Working Conditions": 6.0
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "35-1011.00",
    "title": "Chefs and Head Cooks",
-   "riasec": null,
+   "riasec": [
+    4.84,
+    1.68,
+    2.72,
+    2.95,
+    5.13,
+    4.35
+   ],
    "high_point_code": "ERC",
    "job_zone": 3,
-   "source_url": "https://www.onetonline.org/explore/interests/Enterprising/"
+   "source_url": "https://www.onetonline.org/explore/interests/Enterprising/",
+   "work_values": {
+    "Independence": 1,
+    "Recognition": 2,
+    "Achievement": 3,
+    "Relationships": 4,
+    "Working Conditions": 5,
+    "Support": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 5.0,
+    "Independence": 6.0,
+    "Recognition": 5.33,
+    "Relationships": 4.67,
+    "Support": 3.67,
+    "Working Conditions": 4.5
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "41-2031.00",
    "title": "Retail Salespersons",
-   "riasec": null,
+   "riasec": [
+    3.2,
+    1.0,
+    1.98,
+    2.96,
+    6.13,
+    5.17
+   ],
    "high_point_code": "EC",
-   "job_zone": "1-2",
-   "source_url": "https://www.onetonline.org/explore/interests/Enterprising/"
+   "job_zone": 2,
+   "source_url": "https://www.onetonline.org/explore/interests/Enterprising/",
+   "work_values": {
+    "Relationships": 1,
+    "Support": 2,
+    "Achievement": 3,
+    "Independence": 4,
+    "Recognition": 5,
+    "Working Conditions": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 3.0,
+    "Independence": 3.0,
+    "Recognition": 2.67,
+    "Relationships": 5.0,
+    "Support": 4.0,
+    "Working Conditions": 2.33
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "33-1012.00",
    "title": "First-Line Supervisors of Police and Detectives",
-   "riasec": null,
+   "riasec": [
+    3.45,
+    2.34,
+    1.01,
+    3.78,
+    6.88,
+    5.09
+   ],
    "high_point_code": "EC",
-   "job_zone": "1-2",
-   "source_url": "https://www.onetonline.org/explore/interests/Enterprising/"
+   "job_zone": 2,
+   "source_url": "https://www.onetonline.org/explore/interests/Enterprising/",
+   "work_values": {
+    "Independence": 1,
+    "Recognition": 2,
+    "Relationships": 3,
+    "Working Conditions": 4,
+    "Achievement": 5,
+    "Support": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 5.0,
+    "Independence": 6.33,
+    "Recognition": 6.0,
+    "Relationships": 5.33,
+    "Support": 5.0,
+    "Working Conditions": 5.33
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "27-1024.00",
@@ -2314,9 +4785,9 @@
     "Achievement": 1,
     "Independence": 2,
     "Recognition": 3,
+    "Working Conditions": 4,
     "Relationships": 5,
-    "Support": 6,
-    "Working Conditions": 4
+    "Support": 6
    },
    "work_values_extent_1_7": {
     "Achievement": 5.67,
@@ -2331,10 +4802,34 @@
   {
    "soc_code": "27-1021.00",
    "title": "Commercial and Industrial Designers",
-   "riasec": null,
+   "riasec": [
+    4.62,
+    4.06,
+    5.54,
+    1.84,
+    3.7,
+    3.47
+   ],
    "high_point_code": "ARI",
    "job_zone": 4,
-   "source_url": "https://www.onetonline.org/explore/interests/Artistic/"
+   "source_url": "https://www.onetonline.org/explore/interests/Artistic/",
+   "work_values": {
+    "Achievement": 1,
+    "Relationships": 2,
+    "Independence": 3,
+    "Recognition": 4,
+    "Working Conditions": 5,
+    "Support": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 5.0,
+    "Independence": 4.67,
+    "Recognition": 4.67,
+    "Relationships": 5.0,
+    "Support": 4.33,
+    "Working Conditions": 4.67
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "27-1025.00",
@@ -2353,10 +4848,10 @@
    "work_values": {
     "Achievement": 1,
     "Independence": 2,
-    "Recognition": 5,
     "Relationships": 3,
-    "Support": 6,
-    "Working Conditions": 4
+    "Working Conditions": 4,
+    "Recognition": 5,
+    "Support": 6
    },
    "work_values_extent_1_7": {
     "Achievement": 5.67,
@@ -2371,18 +4866,66 @@
   {
    "soc_code": "27-1022.00",
    "title": "Fashion Designers",
-   "riasec": null,
+   "riasec": [
+    4.34,
+    2.17,
+    7.0,
+    2.35,
+    3.96,
+    2.94
+   ],
    "high_point_code": "ARE",
    "job_zone": 3,
-   "source_url": "https://www.onetonline.org/explore/interests/Artistic/"
+   "source_url": "https://www.onetonline.org/explore/interests/Artistic/",
+   "work_values": {
+    "Achievement": 1,
+    "Independence": 2,
+    "Working Conditions": 3,
+    "Recognition": 4,
+    "Relationships": 5,
+    "Support": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 5.67,
+    "Independence": 5.33,
+    "Recognition": 4.67,
+    "Relationships": 4.0,
+    "Support": 2.0,
+    "Working Conditions": 5.33
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "27-1011.00",
    "title": "Art Directors",
-   "riasec": null,
+   "riasec": [
+    2.95,
+    2.69,
+    7.0,
+    2.88,
+    5.24,
+    3.6
+   ],
    "high_point_code": "AE",
    "job_zone": 4,
-   "source_url": "https://www.onetonline.org/explore/interests/Artistic/"
+   "source_url": "https://www.onetonline.org/explore/interests/Artistic/",
+   "work_values": {
+    "Independence": 1,
+    "Achievement": 2,
+    "Working Conditions": 3,
+    "Recognition": 4,
+    "Relationships": 5,
+    "Support": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 6.0,
+    "Independence": 6.33,
+    "Recognition": 5.0,
+    "Relationships": 3.67,
+    "Support": 3.33,
+    "Working Conditions": 5.83
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "27-2042.00",
@@ -2399,12 +4942,12 @@
    "job_zone": 4,
    "source_url": "https://www.onetonline.org/explore/interests/Artistic/",
    "work_values": {
-    "Achievement": 2,
-    "Independence": 5,
-    "Recognition": 3,
     "Relationships": 1,
-    "Support": 6,
-    "Working Conditions": 4
+    "Achievement": 2,
+    "Recognition": 3,
+    "Working Conditions": 4,
+    "Independence": 5,
+    "Support": 6
    },
    "work_values_extent_1_7": {
     "Achievement": 5.33,
@@ -2419,18 +4962,66 @@
   {
    "soc_code": "27-2041.00",
    "title": "Music Directors and Composers",
-   "riasec": null,
+   "riasec": [
+    2.07,
+    2.28,
+    7.0,
+    3.04,
+    4.82,
+    2.63
+   ],
    "high_point_code": "AE",
    "job_zone": 4,
-   "source_url": "https://www.onetonline.org/explore/interests/Artistic/"
+   "source_url": "https://www.onetonline.org/explore/interests/Artistic/",
+   "work_values": {
+    "Achievement": 1,
+    "Independence": 2,
+    "Recognition": 3,
+    "Relationships": 4,
+    "Working Conditions": 5,
+    "Support": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 6.33,
+    "Independence": 5.5,
+    "Recognition": 5.17,
+    "Relationships": 4.83,
+    "Support": 3.17,
+    "Working Conditions": 4.42
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "27-2011.00",
    "title": "Actors",
-   "riasec": null,
+   "riasec": [
+    2.29,
+    2.16,
+    7.0,
+    4.08,
+    4.0,
+    1.81
+   ],
    "high_point_code": "ASE",
-   "job_zone": "1-2",
-   "source_url": "https://www.onetonline.org/explore/interests/Artistic/"
+   "job_zone": 2,
+   "source_url": "https://www.onetonline.org/explore/interests/Artistic/",
+   "work_values": {
+    "Relationships": 1,
+    "Achievement": 2,
+    "Independence": 3,
+    "Recognition": 4,
+    "Working Conditions": 5,
+    "Support": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 5.67,
+    "Independence": 4.67,
+    "Recognition": 4.67,
+    "Relationships": 6.0,
+    "Support": 2.0,
+    "Working Conditions": 4.17
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "27-3043.00",
@@ -2448,11 +5039,11 @@
    "source_url": "https://www.onetonline.org/explore/interests/Artistic/",
    "work_values": {
     "Achievement": 1,
-    "Independence": 5,
-    "Recognition": 6,
-    "Relationships": 4,
     "Support": 2,
-    "Working Conditions": 3
+    "Working Conditions": 3,
+    "Relationships": 4,
+    "Independence": 5,
+    "Recognition": 6
    },
    "work_values_extent_1_7": {
     "Achievement": 5.0,
@@ -2467,18 +5058,66 @@
   {
    "soc_code": "27-3023.00",
    "title": "News Analysts, Reporters, and Journalists",
-   "riasec": null,
+   "riasec": [
+    1.47,
+    4.16,
+    5.09,
+    2.8,
+    3.95,
+    3.64
+   ],
    "high_point_code": "AIE",
    "job_zone": 4,
-   "source_url": "https://www.onetonline.org/explore/interests/Artistic/"
+   "source_url": "https://www.onetonline.org/explore/interests/Artistic/",
+   "work_values": {
+    "Achievement": 1,
+    "Recognition": 2,
+    "Independence": 3,
+    "Relationships": 4,
+    "Working Conditions": 5,
+    "Support": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 5.67,
+    "Independence": 5.17,
+    "Recognition": 5.5,
+    "Relationships": 4.83,
+    "Support": 3.67,
+    "Working Conditions": 4.75
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "15-1255.01",
    "title": "Video Game Designers",
-   "riasec": null,
+   "riasec": [
+    2.77,
+    4.15,
+    6.38,
+    2.3,
+    3.92,
+    3.85
+   ],
    "high_point_code": "AI",
    "job_zone": 4,
-   "source_url": "https://www.onetonline.org/explore/interests/Artistic/"
+   "source_url": "https://www.onetonline.org/explore/interests/Artistic/",
+   "work_values": {
+    "Achievement": 1,
+    "Independence": 2,
+    "Working Conditions": 3,
+    "Recognition": 4,
+    "Support": 5,
+    "Relationships": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 6.0,
+    "Independence": 6.0,
+    "Recognition": 4.33,
+    "Relationships": 3.0,
+    "Support": 3.67,
+    "Working Conditions": 5.17
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "27-1014.00",
@@ -2495,12 +5134,12 @@
    "job_zone": 4,
    "source_url": "https://www.onetonline.org/explore/interests/Artistic/",
    "work_values": {
-    "Achievement": 2,
     "Independence": 1,
+    "Achievement": 2,
+    "Working Conditions": 3,
     "Recognition": 4,
     "Relationships": 5,
-    "Support": 6,
-    "Working Conditions": 3
+    "Support": 6
    },
    "work_values_extent_1_7": {
     "Achievement": 5.0,
@@ -2515,42 +5154,162 @@
   {
    "soc_code": "27-1013.00",
    "title": "Fine Artists, Including Painters, Sculptors, and Illustrators",
-   "riasec": null,
+   "riasec": [
+    4.05,
+    2.68,
+    7.0,
+    2.28,
+    2.37,
+    2.34
+   ],
    "high_point_code": "AR",
    "job_zone": 3,
-   "source_url": "https://www.onetonline.org/explore/interests/Artistic/"
+   "source_url": "https://www.onetonline.org/explore/interests/Artistic/",
+   "work_values": {
+    "Achievement": 1,
+    "Independence": 2,
+    "Recognition": 3,
+    "Working Conditions": 4,
+    "Relationships": 5,
+    "Support": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 5.67,
+    "Independence": 5.67,
+    "Recognition": 4.67,
+    "Relationships": 4.0,
+    "Support": 2.0,
+    "Working Conditions": 4.67
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "27-4021.00",
    "title": "Photographers",
-   "riasec": null,
+   "riasec": [
+    5.54,
+    2.18,
+    5.28,
+    1.94,
+    2.28,
+    3.35
+   ],
    "high_point_code": "RA",
    "job_zone": 3,
-   "source_url": "https://www.onetonline.org/explore/interests/Artistic/"
+   "source_url": "https://www.onetonline.org/explore/interests/Artistic/",
+   "work_values": {
+    "Independence": 1,
+    "Relationships": 2,
+    "Achievement": 3,
+    "Recognition": 4,
+    "Working Conditions": 5,
+    "Support": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 4.33,
+    "Independence": 5.0,
+    "Recognition": 3.67,
+    "Relationships": 4.67,
+    "Support": 2.67,
+    "Working Conditions": 3.5
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "51-9071.00",
    "title": "Jewelers and Precious Stone and Metal Workers",
-   "riasec": null,
+   "riasec": [
+    6.59,
+    2.6,
+    3.7,
+    1.03,
+    1.51,
+    3.35
+   ],
    "high_point_code": "RAC",
    "job_zone": 3,
-   "source_url": "https://www.onetonline.org/explore/interests/Artistic/"
+   "source_url": "https://www.onetonline.org/explore/interests/Artistic/",
+   "work_values": {
+    "Working Conditions": 1,
+    "Achievement": 2,
+    "Recognition": 3,
+    "Support": 4,
+    "Relationships": 5,
+    "Independence": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 3.67,
+    "Independence": 2.5,
+    "Recognition": 3.17,
+    "Relationships": 3.0,
+    "Support": 3.17,
+    "Working Conditions": 3.83
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "51-6052.00",
    "title": "Tailors, Dressmakers, and Custom Sewers",
-   "riasec": null,
+   "riasec": [
+    5.88,
+    1.16,
+    3.96,
+    1.99,
+    2.44,
+    3.13
+   ],
    "high_point_code": "RA",
-   "job_zone": "1-2",
-   "source_url": "https://www.onetonline.org/explore/interests/Artistic/"
+   "job_zone": 2,
+   "source_url": "https://www.onetonline.org/explore/interests/Artistic/",
+   "work_values": {
+    "Achievement": 1,
+    "Independence": 2,
+    "Relationships": 3,
+    "Working Conditions": 4,
+    "Recognition": 5,
+    "Support": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 4.33,
+    "Independence": 4.33,
+    "Recognition": 2.67,
+    "Relationships": 4.33,
+    "Support": 2.67,
+    "Working Conditions": 3.5
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "49-9063.00",
    "title": "Musical Instrument Repairers and Tuners",
-   "riasec": null,
+   "riasec": [
+    6.39,
+    2.64,
+    3.46,
+    1.58,
+    1.0,
+    3.54
+   ],
    "high_point_code": "RCA",
    "job_zone": 3,
-   "source_url": "https://www.onetonline.org/explore/interests/Artistic/"
+   "source_url": "https://www.onetonline.org/explore/interests/Artistic/",
+   "work_values": {
+    "Achievement": 1,
+    "Independence": 2,
+    "Working Conditions": 3,
+    "Recognition": 4,
+    "Relationships": 5,
+    "Support": 6
+   },
+   "work_values_extent_1_7": {
+    "Achievement": 4.33,
+    "Independence": 4.33,
+    "Recognition": 2.67,
+    "Relationships": 2.67,
+    "Support": 2.67,
+    "Working Conditions": 3.17
+   },
+   "work_values_db": "30.2"
   },
   {
    "soc_code": "15-1299.08",
@@ -2564,15 +5323,15 @@
     5.76
    ],
    "high_point_code": "CIR",
-   "job_zone": null,
+   "job_zone": 3,
    "source_url": "https://www.onetonline.org/link/summary/15-1299.08",
    "work_values": {
     "Achievement": 1,
     "Independence": 2,
     "Recognition": 3,
-    "Relationships": 6,
+    "Working Conditions": 4,
     "Support": 5,
-    "Working Conditions": 4
+    "Relationships": 6
    },
    "work_values_extent_1_7": {
     "Achievement": 5.67,
@@ -2596,15 +5355,15 @@
     4.81
    ],
    "high_point_code": "ICE",
-   "job_zone": null,
+   "job_zone": 4,
    "source_url": "https://www.onetonline.org/link/summary/11-9121.01",
    "work_values": {
-    "Achievement": 2,
     "Independence": 1,
+    "Achievement": 2,
+    "Working Conditions": 3,
     "Recognition": 4,
     "Relationships": 5,
-    "Support": 6,
-    "Working Conditions": 3
+    "Support": 6
    },
    "work_values_extent_1_7": {
     "Achievement": 5.0,
@@ -2628,15 +5387,15 @@
     4.78
    ],
    "high_point_code": "ICR",
-   "job_zone": null,
+   "job_zone": 5,
    "source_url": "https://www.onetonline.org/link/summary/19-1029.03",
    "work_values": {
+    "Recognition": 1,
     "Achievement": 2,
     "Independence": 3,
-    "Recognition": 1,
+    "Working Conditions": 4,
     "Relationships": 5,
-    "Support": 6,
-    "Working Conditions": 4
+    "Support": 6
    },
    "work_values_extent_1_7": {
     "Achievement": 5.67,
@@ -2660,15 +5419,15 @@
     3.46
    ],
    "high_point_code": "RC",
-   "job_zone": null,
+   "job_zone": 2,
    "source_url": "https://www.onetonline.org/link/summary/47-2031.00",
    "work_values": {
-    "Achievement": 4,
-    "Independence": 2,
-    "Recognition": 6,
-    "Relationships": 5,
     "Support": 1,
-    "Working Conditions": 3
+    "Independence": 2,
+    "Working Conditions": 3,
+    "Achievement": 4,
+    "Relationships": 5,
+    "Recognition": 6
    },
    "work_values_extent_1_7": {
     "Achievement": 3.67,
@@ -2692,15 +5451,15 @@
     4.31
    ],
    "high_point_code": "RCI",
-   "job_zone": null,
+   "job_zone": 3,
    "source_url": "https://www.onetonline.org/link/summary/49-3023.00",
    "work_values": {
-    "Achievement": 4,
     "Independence": 1,
-    "Recognition": 6,
-    "Relationships": 3,
     "Support": 2,
-    "Working Conditions": 5
+    "Relationships": 3,
+    "Achievement": 4,
+    "Working Conditions": 5,
+    "Recognition": 6
    },
    "work_values_extent_1_7": {
     "Achievement": 3.67,
@@ -2724,15 +5483,15 @@
     4.09
    ],
    "high_point_code": "RC",
-   "job_zone": null,
+   "job_zone": 3,
    "source_url": "https://www.onetonline.org/link/summary/47-2111.00",
    "work_values": {
-    "Achievement": 3,
     "Independence": 1,
-    "Recognition": 6,
-    "Relationships": 5,
     "Support": 2,
-    "Working Conditions": 4
+    "Achievement": 3,
+    "Working Conditions": 4,
+    "Relationships": 5,
+    "Recognition": 6
    },
    "work_values_extent_1_7": {
     "Achievement": 4.33,
@@ -2756,15 +5515,15 @@
     4.29
    ],
    "high_point_code": "RC",
-   "job_zone": null,
+   "job_zone": 3,
    "source_url": "https://www.onetonline.org/link/summary/49-9021.00",
    "work_values": {
-    "Achievement": 5,
-    "Independence": 2,
-    "Recognition": 6,
-    "Relationships": 3,
     "Support": 1,
-    "Working Conditions": 4
+    "Independence": 2,
+    "Relationships": 3,
+    "Working Conditions": 4,
+    "Achievement": 5,
+    "Recognition": 6
    },
    "work_values_extent_1_7": {
     "Achievement": 3.83,
@@ -2788,15 +5547,15 @@
     3.67
    ],
    "high_point_code": "RC",
-   "job_zone": null,
+   "job_zone": 2,
    "source_url": "https://www.onetonline.org/link/summary/45-2091.00",
    "work_values": {
-    "Achievement": 3,
-    "Independence": 2,
-    "Recognition": 6,
-    "Relationships": 4,
     "Support": 1,
-    "Working Conditions": 5
+    "Independence": 2,
+    "Achievement": 3,
+    "Relationships": 4,
+    "Working Conditions": 5,
+    "Recognition": 6
    },
    "work_values_extent_1_7": {
     "Achievement": 2.67,
@@ -2820,14 +5579,14 @@
     3.47
    ],
    "high_point_code": "R",
-   "job_zone": null,
+   "job_zone": 2,
    "source_url": "https://www.onetonline.org/link/summary/33-2011.00",
    "work_values": {
-    "Achievement": 3,
-    "Independence": 5,
-    "Recognition": 4,
-    "Relationships": 2,
     "Support": 1,
+    "Relationships": 2,
+    "Achievement": 3,
+    "Recognition": 4,
+    "Independence": 5,
     "Working Conditions": 6
    },
    "work_values_extent_1_7": {
@@ -2852,15 +5611,15 @@
     4.1
    ],
    "high_point_code": "RC",
-   "job_zone": null,
+   "job_zone": 2,
    "source_url": "https://www.onetonline.org/link/summary/53-3032.00",
    "work_values": {
-    "Achievement": 5,
-    "Independence": 2,
-    "Recognition": 6,
-    "Relationships": 4,
     "Support": 1,
-    "Working Conditions": 3
+    "Independence": 2,
+    "Working Conditions": 3,
+    "Relationships": 4,
+    "Achievement": 5,
+    "Recognition": 6
    },
    "work_values_extent_1_7": {
     "Achievement": 2.67,
@@ -2884,15 +5643,15 @@
     4.57
    ],
    "high_point_code": "SCE",
-   "job_zone": null,
+   "job_zone": 4,
    "source_url": "https://www.onetonline.org/link/summary/21-1093.00",
    "work_values": {
-    "Achievement": 4,
-    "Independence": 3,
-    "Recognition": 6,
     "Relationships": 1,
     "Support": 2,
-    "Working Conditions": 5
+    "Independence": 3,
+    "Achievement": 4,
+    "Working Conditions": 5,
+    "Recognition": 6
    },
    "work_values_extent_1_7": {
     "Achievement": 3.67,
@@ -2916,15 +5675,15 @@
     4.21
    ],
    "high_point_code": "ESC",
-   "job_zone": null,
+   "job_zone": 4,
    "source_url": "https://www.onetonline.org/link/summary/11-9151.00",
    "work_values": {
-    "Achievement": 4,
-    "Independence": 2,
-    "Recognition": 5,
     "Relationships": 1,
-    "Support": 6,
-    "Working Conditions": 3
+    "Independence": 2,
+    "Working Conditions": 3,
+    "Achievement": 4,
+    "Recognition": 5,
+    "Support": 6
    },
    "work_values_extent_1_7": {
     "Achievement": 5.33,
@@ -2948,15 +5707,15 @@
     4.94
    ],
    "high_point_code": "ECS",
-   "job_zone": null,
+   "job_zone": 2,
    "source_url": "https://www.onetonline.org/link/summary/41-9022.00",
    "work_values": {
     "Achievement": 1,
     "Independence": 2,
-    "Recognition": 5,
     "Relationships": 3,
-    "Support": 6,
-    "Working Conditions": 4
+    "Working Conditions": 4,
+    "Recognition": 5,
+    "Support": 6
    },
    "work_values_extent_1_7": {
     "Achievement": 5.33,
@@ -2980,9 +5739,11 @@
     5.07
    ],
    "high_point_code": "ECS",
-   "job_zone": null,
+   "job_zone": 2,
    "source_url": "https://www.onetonline.org/link/summary/41-3091.00",
-   "work_values": null
+   "work_values": null,
+   "work_values_extent_1_7": null,
+   "work_values_db": null
   },
   {
    "soc_code": "43-6011.00",
@@ -2996,15 +5757,15 @@
     6.41
    ],
    "high_point_code": "CES",
-   "job_zone": null,
+   "job_zone": 3,
    "source_url": "https://www.onetonline.org/link/summary/43-6011.00",
    "work_values": {
-    "Achievement": 4,
-    "Independence": 5,
-    "Recognition": 6,
     "Relationships": 1,
     "Support": 2,
-    "Working Conditions": 3
+    "Working Conditions": 3,
+    "Achievement": 4,
+    "Independence": 5,
+    "Recognition": 6
    },
    "work_values_extent_1_7": {
     "Achievement": 3.67,
@@ -3028,14 +5789,14 @@
     6.79
    ],
    "high_point_code": "CE",
-   "job_zone": null,
+   "job_zone": 3,
    "source_url": "https://www.onetonline.org/link/summary/13-2082.00",
    "work_values": {
-    "Achievement": 4,
-    "Independence": 2,
-    "Recognition": 5,
     "Relationships": 1,
+    "Independence": 2,
     "Support": 3,
+    "Achievement": 4,
+    "Recognition": 5,
     "Working Conditions": 6
    },
    "work_values_extent_1_7": {
@@ -3060,15 +5821,15 @@
     5.75
    ],
    "high_point_code": "CSR",
-   "job_zone": null,
+   "job_zone": 3,
    "source_url": "https://www.onetonline.org/link/summary/31-9092.00",
    "work_values": {
-    "Achievement": 3,
-    "Independence": 5,
-    "Recognition": 6,
     "Relationships": 1,
     "Support": 2,
-    "Working Conditions": 4
+    "Achievement": 3,
+    "Working Conditions": 4,
+    "Independence": 5,
+    "Recognition": 6
    },
    "work_values_extent_1_7": {
     "Achievement": 4.67,
@@ -3081,7 +5842,7 @@
    "work_values_db": "30.2"
   }
  ],
- "scale_note": "riasec_scores are O*NET Occupational Interests (data element 1.B.1.a-f, scale OI) on a 1-7 scale (higher = stronger interest), from O*NET Database 30.3 (career_interest_types.csv, dated 02/2026, Domain Source Machine Learning/Expert). high_point_code is O*NET's own First/Second/Third Interest High-Point (elements 1.B.1.g/h/i, scale IH), mapped 1=R,2=I,3=A,4=S,5=E,6=C (0 = no further high-point); verified against argmax of the numeric scores for 922/923 occupations. work_values.extent_scale_1_7 are the six O*NET Work Values (element 1.B.2.a-f, scale EX Extent) on a 1-7 scale; work_values.high_point is the First/Second/Third Work Value High-Point (elements 1.B.2.g/h/i, scale VH). Work Values come from O*NET Database 30.2 - the LAST release to include Work Values (discontinued in 30.3) - so they are ~one release older than the interests data.",
- "coverage_note": "68 occupations, all six RIASEC interest areas represented, densely weighted toward the user's data-science/ML/research/computing/medical-imaging field plus a broad spread across healthcare, skilled trades (Realistic), arts (Artistic), social services/education (Social), business/sales/law (Enterprising) and admin/finance (Conventional). Numeric RIASEC (1-7) and high-point codes were fetched for ALL 68. Work Values were fetched for 62; 6 newer/reorganized SOC codes are not rated for Work Values in O*NET 30.2 and have work_values = null (Data Scientists 15-2051.00, Software Developers 15-1252.00, Web & Digital Interface Designers 15-1255.00, Project Management Specialists 13-1082.00, Financial & Investment Analysts 13-2051.00, Sales Representatives of Services 41-3091.00).",
- "work_values_discontinuation_note": "O*NET Work Values were fully DISCONTINUED in the current O*NET Database 30.3 (no 1.B.2 elements in the 30.3 content model; work_values.csv returns HTTP 404 for 30.3 and all older CSV releases). The numeric Work Values here are therefore sourced from Database 30.2, the last release that published them (per the O*NET “What’s New” notice: Tools Used and Work Values are no longer updated; use the 30.2 files). No fabricated values are included: the 6 occupations without a 30.2 Work Values rating are returned as work_values = null rather than estimated."
+ "scale_note": "riasec holds O*NET Occupational Interests (elements 1.B.1.a-f, scale OI), 1-7, higher = stronger interest, from the O*NET 31.0 Database (Career Interest Types.txt). high_point_code is O*NET's First/Second/Third Interest High-Point (elements 1.B.1.g/h/i, scale IH), mapped 1=R, 2=I, 3=A, 4=S, 5=E, 6=C, with 0 meaning no further high point. For 187 of these 188 occupations the first high point is the highest of the six ratings. work_values_extent_1_7 holds the six O*NET Work Values (elements 1.B.2.a-f, scale EX, Extent), 1-7, from the O*NET 30.2 Database.",
+ "coverage_note": "188 occupations across all six RIASEC areas, still weighted toward the author's own field (data science, ML, research, computing, medical imaging) with a spread across healthcare, skilled trades, arts, social services and education, business, sales and law, and administration and finance. All 188 carry numeric interest ratings; 173 also carry Work Values. Common occupations such as Preschool Teachers, Except Special Education; Police and Sheriff's Patrol Officers; Couriers and Messengers; and Light Truck Drivers are in O*NET 31.0 but not in this file.",
+ "work_values_discontinuation_note": "O*NET no longer publishes Work Values: Work Values.txt is absent from the O*NET 31.0 text database and present in 30.2, so Work Values here are one release older than the interest data. Occupations 30.2 does not rate carry work_values: null, not an estimate."
 }

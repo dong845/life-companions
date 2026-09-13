@@ -2212,6 +2212,58 @@ class TestCareerValidity(unittest.TestCase):
         self.assertEqual(len(names), len(self.occ))
 
 
+class TestOccupationDataIsOnet31(unittest.TestCase):
+    """The occupation file had been compiled from O*NET OnLine pages and two database
+    releases: 120 of 188 occupations carried only a letter code, 17 had no Job Zone, 3
+    letter codes were out of date, and its notes contradicted it (they said electricians and
+    carpenters were omitted; both are in it). It is now rebuilt for the same 188 codes from
+    the O*NET 31.0 Database, with Work Values from 30.2, the last release to publish them."""
+
+    @classmethod
+    def setUpClass(cls):
+        with open(os.path.join(SKILL, "data", "career", "occupations.json"), encoding="utf-8") as f:
+            cls.doc = json.load(f)
+        cls.occ = cls.doc["occupations"]
+
+    def test_every_occupation_has_numeric_interests_and_a_job_zone(self):
+        self.assertEqual((len(self.occ), self.doc["count"]), (188, 188))
+        for o in self.occ:
+            self.assertEqual(len(o["riasec"] or []), 6, o["soc_code"])
+            self.assertTrue(all(1 <= v <= 7 for v in o["riasec"]), o["soc_code"])
+            self.assertIn(o["job_zone"], (1, 2, 3, 4, 5), o["soc_code"])
+
+    def test_the_high_point_code_leads_with_a_highest_rating(self):
+        for o in self.occ:
+            first = o["riasec"]["RIASEC".index(o["high_point_code"][0])]
+            self.assertEqual(first, max(o["riasec"]), o["soc_code"])
+
+    def test_work_value_ranks_follow_their_extent_scores(self):
+        rated = [o for o in self.occ if o["work_values"]]
+        self.assertEqual(len(rated), 173)
+        for o in rated:
+            ext = o["work_values_extent_1_7"]
+            expect = {n: i + 1 for i, n in enumerate(sorted(ext, key=lambda n: (-ext[n], n)))}
+            self.assertEqual(o["work_values"], expect, o["soc_code"])
+            self.assertEqual(o["work_values_db"], "30.2", o["soc_code"])
+        for o in self.occ:
+            if not o["work_values"]:
+                self.assertIsNone(o["work_values_extent_1_7"], o["soc_code"])
+
+    def test_the_attribution_names_both_database_versions(self):
+        for s in ("O*NET 31.0 Database", "O*NET 30.2 Database", "CC BY 4.0",
+                  "trademark of USDOL/ETA", "has not approved, endorsed, or tested"):
+            self.assertIn(s, self.doc["attribution"])
+
+    def test_scoring_has_no_code_only_group_left(self):
+        import career_match as cm
+        occ, _ = cm.load_occupations()
+        resp = {i: 1 for i in range(1, 22)}
+        for i in (5, 6, 7, 8):
+            resp[i] = 4
+        r = cm.score_person_grouped(resp, cm.load_scoring_key(), occ)
+        self.assertEqual((len(r["numeric_interests"]), r["code_only"]), (188, []))
+
+
 def _home_text(home):
     """Every byte of every file under a companion home, for residue searches."""
     out = []
@@ -2481,7 +2533,9 @@ class TestCareerScoringHasACommand(HomeCase):
         self.assertEqual(code, 0, out + err)
         r = json.loads(out)
         self.assertTrue(r["numeric_interests"])
-        self.assertTrue(r["code_only"])
+        # every shipped occupation now carries O*NET 31.0 interest ratings, so the code-only
+        # group is empty; the key stays so a code-only occupation can't be merged silently
+        self.assertEqual(r["code_only"], [])
         self.assertTrue([p for p in r["numeric_interests"] if "values" in p["components_used"]],
                         "a complete values ranking must engage the values blend")
 

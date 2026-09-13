@@ -120,13 +120,26 @@ def response_discrimination(responses, scoring_key):
     A flat answer set is a non-answer and has to be refused, not scored.
     """
     vec, _n = person_interest_vector(responses, scoring_key)
-    if not vec:
+    # a type with no answers is unmeasured, not a zero: counting it as 0 read a skipped type
+    # as strong dislike and gave the answers a shape they never had
+    measured = [v for letter, v in zip(RIASEC_ORDER, vec)
+                if _answered(responses, scoring_key, letter)]
+    if not measured:
         return 0.0
-    return max(vec) - min(vec)
+    return max(measured) - min(measured)
 
 
 # Below this spread the answers do not distinguish the six types at all.
 MIN_DISCRIMINATION = 0.08
+# assessment_items.json: the short form is two items per type. One answer is noise, and a type
+# with none can't be read at all.
+MIN_ITEMS_PER_TYPE = 2
+
+
+def _answered(responses, scoring_key, letter):
+    """How many of one type's items carry an answer (ids as int or str)."""
+    return sum(1 for i in scoring_key.get(letter, [])
+               if (responses[i] if i in responses else responses.get(str(i))) is not None)
 
 
 def person_interest_vector(responses, scoring_key):
@@ -212,6 +225,28 @@ def canonical_values_ranking(ranking):
         except (TypeError, ValueError):
             return None
     return norm if set(norm) == set(WORK_VALUES) else None
+
+
+def person_values_ranking(values):
+    """A person's work-values ranking as ({name: rank}, None), or (None, why not). Each of the
+    six must appear once, ranked 1..6 once each: all six at 1, ranks such as 99 or -4, and a
+    name given twice all used to count as a real ranking and moved occupations between bands.
+    Takes the ordered list --values gives or the {name: rank} the career form stores. The
+    occupations' own rankings go through canonical_values_ranking, which stays lenient."""
+    if isinstance(values, (list, tuple)):
+        names = [_norm_value_name(v) for v in values]
+        if None in names or sorted(names) != sorted(WORK_VALUES):
+            return None, ("the values ranking must name each of the six O*NET work values once, "
+                          "most important first, so it was NOT used: this is an interests-only read")
+        return {name: i + 1 for i, name in enumerate(names)}, None
+    ranking = canonical_values_ranking(values)
+    if ranking is None:
+        return None, ("the values ranking does not name all six O*NET work values, so it was "
+                      "NOT used: this is an interests-only read")
+    if sorted(ranking.values()) != list(range(1, len(WORK_VALUES) + 1)):
+        return None, ("the values ranking must rank the six values 1 to 6, each once, so it was "
+                      "NOT used: this is an interests-only read")
+    return ranking, None
 
 
 def _pref_vec(norm):
@@ -389,6 +424,18 @@ def score_person_grouped(responses, scoring_key, occupations, **kw):
 
     Returns {"refused": …} | {"numeric_interests": [...], "code_only": [...], "_note": …}
     """
+    thin = [f"{letter} {_answered(responses, scoring_key, letter)}/{len(scoring_key.get(letter, []))}"
+            for letter in RIASEC_ORDER
+            if _answered(responses, scoring_key, letter) < MIN_ITEMS_PER_TYPE]
+    if thin:
+        return {
+            "refused": True,
+            "reason": ("有的类型答得太少，测不出来：" + "、".join(thin)
+                       + f"（每类至少 {MIN_ITEMS_PER_TYPE} 题）。跳过的题不是「不喜欢」，是没有信息。"),
+            "_next": ("这不是「匹配度低」，是「测不出来」。请对方把没答的题补上（每类至少两题），或者"
+                      "直接聊他实际做过什么、什么时候最投入。不要拿这份回答生成排名。"),
+            "thin_types": thin,
+        }
     disc = response_discrimination(responses, scoring_key)
     if disc < MIN_DISCRIMINATION:
         return {
@@ -867,8 +914,14 @@ def _cli_score(args):
         path = os.path.join(home, "state", "modules", "career_intake.yaml")
         latest = None
         if os.path.exists(path):
-            with open(path, encoding="utf-8") as f:
-                latest = (_yaml_module().safe_load(f) or {}).get("latest")
+            try:
+                with open(path, encoding="utf-8") as f:
+                    loaded = _yaml_module().safe_load(f) or {}
+            except Exception as e:      # a hand edit or a half-written file
+                return emit({"ok": False, "error": f"{path} can't be read: {e}",
+                             "_next": ("Fix or delete that file, then run the career check again "
+                                       "(form_server.py --form career).")}, 2)
+            latest = loaded.get("latest") if isinstance(loaded, dict) else None
         if not isinstance(latest, dict) or not latest.get("answers"):
             return emit({"ok": False, "error": f"no career check on file in {home}",
                          "_next": ("Run `form_server.py --form career` and wait for the "
@@ -887,23 +940,31 @@ def _cli_score(args):
     if not isinstance(answers, dict) or not answers:
         return emit({"ok": False,
                      "error": "answers must be a non-empty {item_id: 0..4} object"}, 2)
-    clean, bad = {}, []
+    clean, bad, twice = {}, [], []
     for k, v in answers.items():
-        ok = (not isinstance(v, bool) and str(k).strip().isdigit()
-              and (isinstance(v, int) or (isinstance(v, str) and v.strip().isdigit())))
+        # ASCII digits only: str.isdigit() accepts "²", which int() then rejects with a traceback
+        ok = (not isinstance(v, bool) and re.fullmatch(r"[0-9]+", str(k).strip())
+              and (isinstance(v, int) or (isinstance(v, str) and re.fullmatch(r"[0-9]+", v.strip()))))
         if ok:
             item, val = int(str(k).strip()), int(v)
             ok = 1 <= item <= FULL_INTEREST_ITEMS and 0 <= val <= INTEREST_ITEM_MAX
         if not ok:
             bad.append(f"{k}={v!r}")
             continue
+        if item in clean:              # "1" and "01" are one item, and one answer was lost
+            twice.append(str(item))
+            continue
         clean[item] = val
     if bad:
         return emit({"ok": False,
                      "error": (f"answers must be item ids 1..{FULL_INTEREST_ITEMS} with values "
                                f"0..{INTEREST_ITEM_MAX}; got " + ", ".join(bad[:6]))}, 2)
+    if twice:
+        return emit({"ok": False,
+                     "error": ("item " + ", ".join(twice) + " is answered more than once (for "
+                               "example as \"1\" and \"01\"); give one answer per item")}, 2)
 
-    person_values = canonical_values_ranking(values) if values else None
+    person_values, values_problem = person_values_ranking(values) if values else (None, None)
     occupations, _attribution = load_occupations()
     result = score_person_grouped(clean, load_scoring_key(), occupations,
                                   person_values=person_values)
@@ -913,8 +974,7 @@ def _cli_score(args):
                "values_used": person_values is not None,
                "discrimination": result["discrimination"], "_note": result["_note"]}
     if values and person_values is None:
-        payload["values_note"] = ("the values ranking does not name all six O*NET work values, "
-                                  "so it was NOT used: this is an interests-only read")
+        payload["values_note"] = values_problem
     if args.soc:
         for group in ("numeric_interests", "code_only"):
             for row in result[group]:

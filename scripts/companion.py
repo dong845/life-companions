@@ -902,6 +902,15 @@ def cmd_cache(args):
             print(json.dumps(refusal, ensure_ascii=False, indent=2))
             raise SystemExit(3)
     data = _load_yaml(path, {})
+    # A cache is a mapping. A hand edit that left a list or a bare word crashed every later
+    # write, so the career form could never save again. Nothing is overwritten here.
+    if not isinstance(data, dict):
+        print(json.dumps({"ok": False,
+                          "error": (f"{path} holds a {type(data).__name__}, not the mapping a "
+                                    "module cache is, so nothing was changed"),
+                          "_next": "Fix or delete that file by hand, then try again."},
+                         ensure_ascii=False))
+        raise SystemExit(2)
     if args.merge_json:
         if category:
             refusal = _refuse_ungated(home, category)

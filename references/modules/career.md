@@ -154,7 +154,9 @@ occupation fits better than a numeric one.**
 answering the same value to all 21 items produced the vector [k,k,k,k,k,k] — identical
 in direction for every k — and still yielded a full ranking, always topped by whichever
 occupation sits nearest the uniform direction. `score_person_grouped` now returns
-`{"refused": true, …}` when the six type scores barely differ. Say what it says: this is
+`{"refused": true, …}` when the six type scores barely differ, and the same way when a
+type has fewer than two answers: assessment_items.json's short form is two items per type,
+and a skipped item is no information, not dislike. Say what it says: this is
 **"can't measure"**, not "low match". Offer to redo the check, or drop the instrument
 and talk about what they've actually done and when they were most absorbed.
 
@@ -175,10 +177,10 @@ person actually got:
 
 Never describe a result as values-weighted when the occupation carried no
 `work_values`; the payload's `components_used` / `weights_applied` tell you exactly
-which components fired — read them, don't assume. **A values ranking only engages if
-all six values are ranked** — an incomplete one (a form where a value was left blank)
-degrades silently to interests-only rather than erroring, so if you meant to use
-values and `components_used` shows only interests, check the ranking was complete.
+which components fired — read them, don't assume. **A values ranking only engages if it
+ranks all six values 1 to 6, each once.** An incomplete or repeated one (a value left
+blank, two values both ranked 1) degrades to interests-only rather than erroring, and the
+payload's `values_note` says why; the career form says so on its own page too.
 
 **Localization — O\*NET is US labour-market data.** The RIASEC interest-fit itself is
 not country-specific and transfers fine (a person's Investigative pull is the same in

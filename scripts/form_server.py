@@ -24,6 +24,7 @@ import datetime
 import html
 import json
 import os
+import re
 import subprocess
 import sys
 import threading
@@ -298,8 +299,13 @@ def success_page(msg):
 
 # ---------------------------------------------------------------------------
 def _run_companion(home, *args):
-    subprocess.run([sys.executable, COMPANION, "--home", home, *args],
-                   check=True, capture_output=True)
+    """Run companion.py, and when it refuses, raise with what it said: a bare
+    CalledProcessError told the person only "returned non-zero exit status 1"."""
+    r = subprocess.run([sys.executable, COMPANION, "--home", home, *args],
+                       capture_output=True, text=True)
+    if r.returncode:
+        said = (r.stdout.strip() or r.stderr.strip())[-400:]
+        raise RuntimeError(f"companion.py {args[0]} exited {r.returncode}: {said}")
 
 
 def _current_state(home):
@@ -541,24 +547,43 @@ def write_career(home, form):
     def g(k, d=""):
         v = form.get(k, [d]); return v[0] if isinstance(v, list) else v
     data = json.load(open(ITEMS_PATH, encoding="utf-8"))
-    answers = {}
+    # Only answers the scale has are stored, and the page says what it left out: q1=9 used to be
+    # saved while the page said the check was received, and a letter crashed the submit.
+    answers, dropped = {}, []
     for it in data["interest_items"]:
-        val = g(f"q{it['id']}")
-        if val != "":
+        val = str(g(f"q{it['id']}")).strip()
+        if val == "":
+            continue
+        if re.fullmatch(r"[0-4]", val):
             answers[str(it["id"])] = int(val)
-    values_rank = {}
-    for v in data["optional_work_values"]["values"]:
-        r = g(f"val_{v['value']}")
-        if r:
-            values_rank[v["value"]] = int(r)
+        else:
+            dropped.append(f"q{it['id']}")
+    # A ranking is six places used once each. Repeated or missing places used to be stored and
+    # scored as if they were a ranking.
+    ranks = {v["value"]: str(g(f"val_{v['value']}")).strip()
+             for v in data["optional_work_values"]["values"]}
+    values_rank, values_note = {}, None
+    if any(ranks.values()):
+        if sorted(ranks.values()) == [str(n) for n in range(1, len(ranks) + 1)]:
+            values_rank = {name: int(r) for name, r in ranks.items()}
+        else:
+            values_note = ("价值观排序要把六项各排一个名次（1 到 6 各用一次）；这次有重复或空着的，"
+                           "没有存，打分时只看兴趣。")
     intake = {"answers": answers, "values_rank": values_rank,
               "current_job": g("current_job").strip(), "aspiration_job": g("aspiration_job").strip(),
-              "answered": len(answers), "ts": datetime.datetime.now().isoformat(timespec="seconds")}
+              "answered": len(answers), "dropped": dropped, "values_note": values_note,
+              "ts": datetime.datetime.now().isoformat(timespec="seconds")}
     _run_companion(home, "cache", "--module", "career_intake",
                    "--merge-json", json.dumps({"latest": intake}, ensure_ascii=False))
     with open(os.path.join(home, ".form_result.json"), "w", encoding="utf-8") as f:
         json.dump({"status": "career_intake", "form": "career", **intake}, f, ensure_ascii=False)
-    return intake, f"测评收好了（{len(answers)}/21 题 + 价值观排序）。回到对话，我就用真实职业库给你算契合度。"
+    notes = ""
+    if dropped:
+        notes += f"有 {len(dropped)} 题的回答不在 0–4 之间，没存（{'、'.join(dropped)}）。"
+    if values_note:
+        notes += values_note
+    return intake, (f"测评收好了（{len(answers)}/21 题" + (" + 价值观排序" if values_rank else "")
+                    + "）。" + notes + "回到对话，我就用真实职业库给你算契合度。")
 
 
 # ---------------------------------------------------------------------------

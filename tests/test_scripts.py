@@ -4308,6 +4308,97 @@ class TestFindCallsStrongOnlyWhatTheQueryNames(unittest.TestCase):
         self.assertFalse(json.loads(out)["ok"])
 
 
+class TestCareerScoringRefusesWhatItCannotMeasure(HomeCase):
+    """Skipped interest items were scored as strong dislike: answering item 5 alone came
+    back "Strong" for Biostatisticians, although assessment_items.json says a short form needs
+    two items per type. Duplicate or impossible value ranks counted as a real ranking (all six
+    at 1, or 99 and -4), an item id like "²" or a malformed intake file ended in a traceback,
+    and {"1": 1, "01": 4} kept one of the two answers without a word. The career form stored
+    q1=9 and told the person the check was received."""
+
+    SHAPED = {str(i): (4 if i in (5, 6, 7, 8) else 1) for i in range(1, 22)}
+    VALUES = ["Independence", "Achievement", "Working Conditions", "Recognition", "Support",
+              "Relationships"]
+
+    def answers(self, payload, *extra):
+        return run("career_match.py", "--answers", json.dumps(payload), *extra, home=self.home)
+
+    def _intake(self, latest):
+        run("companion.py", "cache", "--module", "career_intake", "--merge-json",
+            json.dumps({"latest": latest}), home=self.home)
+
+    def test_a_type_with_fewer_than_two_answers_is_refused(self):
+        for payload in ({"5": 2}, {k: v for k, v in self.SHAPED.items() if int(k) < 20}):
+            code, out, err = self.answers(payload)
+            self.assertEqual(code, 3, (payload, out, err))
+            self.assertTrue(json.loads(out)["refused"], payload)
+
+    def test_two_answers_per_type_is_enough(self):
+        two_each = {str(i): (4 if i in (5, 6) else 1)
+                    for i in (1, 2, 5, 6, 9, 10, 13, 14, 16, 17, 19, 20)}
+        code, out, err = self.answers(two_each)
+        self.assertEqual(code, 0, out + err)
+
+    def test_value_ranks_must_rank_each_value_once(self):
+        repeated = ",".join(self.VALUES[:5] + ["Achievement"])
+        code, out, err = self.answers(self.SHAPED, "--values", repeated)
+        self.assertEqual(code, 0, out + err)
+        r = json.loads(out)
+        self.assertFalse(r["values_used"])
+        self.assertIn("once", r["values_note"])
+        for ranks in ({v: 1 for v in self.VALUES}, dict(zip(self.VALUES, (99, -4, 0, 7, 2, 3)))):
+            self._intake({"answers": self.SHAPED, "values_rank": ranks, "answered": 21})
+            code, out, err = run("career_match.py", "--score-intake", home=self.home)
+            self.assertEqual(code, 0, out + err)
+            self.assertFalse(json.loads(out)["values_used"], ranks)
+
+    def test_item_ids_must_be_plain_digits_and_appear_once(self):
+        for payload in (dict(self.SHAPED, **{"²": 3}), dict(self.SHAPED, **{"01": 4})):
+            code, out, err = self.answers(payload)
+            self.assertEqual(code, 2, (out, err))
+            self.assertNotIn("Traceback", err)
+            self.assertFalse(json.loads(out)["ok"])
+
+    def test_a_malformed_intake_file_is_an_error_not_a_traceback(self):
+        path = os.path.join(self.home, "state", "modules", "career_intake.yaml")
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            f.write("latest: [unclosed\n  - : :\n")
+        code, out, err = run("career_match.py", "--score-intake", home=self.home)
+        self.assertEqual(code, 2, (out, err))
+        self.assertNotIn("Traceback", err)
+
+    def test_the_career_form_keeps_only_real_answers_and_says_what_it_dropped(self):
+        import form_server
+        form = {f"q{k}": [str(v)] for k, v in self.SHAPED.items()}
+        form["q1"], form["q2"] = ["9"], ["abc"]
+        form.update({f"val_{v}": ["1"] for v in self.VALUES})
+        summary, msg = form_server.write_career(self.home, form)
+        self.assertEqual(summary["dropped"], ["q1", "q2"])
+        self.assertTrue(summary["answers"])
+        self.assertNotIn("1", summary["answers"])
+        self.assertEqual(summary["values_rank"], {})
+        self.assertTrue(summary["values_note"])
+        self.assertIn("没存", msg)
+        self.assertIn("排序", msg)
+
+    def test_a_cache_file_that_is_not_a_mapping_is_refused_not_crashed_on(self):
+        # a hand edit left the file a list: every later write crashed, and the career form
+        # could never save again, reporting only "returned non-zero exit status 1"
+        import form_server
+        path = os.path.join(self.home, "state", "modules", "career_intake.yaml")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write("- not\n- a mapping\n")
+        code, out, err = run("companion.py", "cache", "--module", "career_intake",
+                             "--merge-json", '{"latest": {}}', home=self.home)
+        self.assertEqual(code, 2, (out, err))
+        self.assertNotIn("Traceback", err)
+        with self.assertRaises(RuntimeError) as caught:
+            form_server.write_career(self.home,
+                                     {f"q{k}": [str(v)] for k, v in self.SHAPED.items()})
+        self.assertIn("career_intake.yaml", str(caught.exception))
+
+
 class TestDeps(unittest.TestCase):
     def test_doctor_reports_without_installing(self):
         rep = jrun("companion.py", "doctor")

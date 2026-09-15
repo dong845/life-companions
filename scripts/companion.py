@@ -126,8 +126,11 @@ def _merge_list(old, new):
     """Append-UNION with upsert-by-identity-key.
 
     - identical items are skipped (re-sending the full list is a safe no-op)
-    - a dict carrying a stable key (`thread`/`id`) REPLACES the item with the same
-      key (so `--merge-json` can edit a thread, not just duplicate it)
+    - a dict carrying a stable key (`thread`/`id`) UPDATES the item with the same key:
+      the fields it names change and the fields it leaves out stay. It used to replace
+      the item, so recording a follow-up with just the thread and last_nudged, as the
+      docs say to, erased the thread's action, opened date and status. `--replace-json`
+      is what prunes.
     - everything else appends (relationship incidents, moods — history accretes)
     """
     out = list(old)
@@ -141,7 +144,9 @@ def _merge_list(old, new):
             continue
         k = _item_key(x)
         if k is not None and k in index:
-            out[index[k]] = x
+            import copy
+            merged = copy.deepcopy(out[index[k]])
+            out[index[k]] = _deep_merge(merged, x) if isinstance(merged, dict) else x
         else:
             if k is not None:
                 index[k] = len(out)

@@ -129,6 +129,24 @@ class TestContinuityThreads(HomeCase):
         self.assertEqual(len(threads), 1, f"thread duplicated: {threads}")
         self.assertEqual(threads[0]["last_nudged"], "2026-08-22")
 
+    def test_a_partial_update_keeps_the_fields_it_does_not_name(self):
+        # SKILL.md and brief's note say to record a follow-up with the thread name and
+        # last_nudged; that used to replace the whole thread, and its action, opened date and
+        # status were gone from a real person's continuity file
+        run("companion.py", "continuity", "--merge-json",
+            json.dumps({"open_threads": [self.THREAD]}), home=self.home)
+        run("companion.py", "continuity", "--merge-json",
+            json.dumps({"open_threads": [{"thread": "换工作", "last_nudged": "2026-09-15"}]}),
+            home=self.home)
+        self.assertEqual(self._threads(), [dict(self.THREAD, last_nudged="2026-09-15")])
+
+    def test_replace_json_still_prunes_a_thread(self):
+        run("companion.py", "continuity", "--merge-json",
+            json.dumps({"open_threads": [self.THREAD]}), home=self.home)
+        run("companion.py", "continuity", "--replace-json",
+            json.dumps({"open_threads": [{"thread": "换工作", "status": "open"}]}), home=self.home)
+        self.assertEqual(self._threads(), [{"thread": "换工作", "status": "open"}])
+
     def test_a_different_thread_still_appends(self):
         run("companion.py", "continuity", "--merge-json",
             json.dumps({"open_threads": [self.THREAD]}), home=self.home)

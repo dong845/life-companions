@@ -1606,6 +1606,16 @@ class TestManifestsMatchReality(unittest.TestCase):
         for rel, d in self._manifests():
             self.assertNotIn("no network calls", d["description"], rel)
 
+    def test_maintainer_tools_are_disclosed(self):
+        # run_agent_evals.py drives the codex CLI, which does go online, so every shipped tool
+        # has to be named as something the skill itself never runs
+        tools = sorted(f for f in os.listdir(os.path.join(SKILL, "tools")) if f.endswith(".py"))
+        self.assertIn("run_agent_evals.py", tools)
+        for rel, d in self._manifests():
+            for name in tools:
+                self.assertIn(name, d["description"], f"{rel} does not disclose tools/{name}")
+            self.assertIn("codex", d["description"], rel)
+
     def test_versions_and_names_agree_everywhere(self):
         import yaml
         with open(os.path.join(SKILL, "SKILL.md"), encoding="utf-8") as f:

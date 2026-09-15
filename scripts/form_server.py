@@ -21,10 +21,12 @@ stamps a 印章.
 """
 import argparse
 import datetime
+import hmac
 import html
 import json
 import os
 import re
+import secrets
 import subprocess
 import sys
 import threading
@@ -164,8 +166,15 @@ def opt(name, value, title, desc, checked=False):
             f"<span class='t'>{html.escape(title)}</span>{d}</label>")
 
 
+def _form_open(token):
+    """The form tag. The page carries the server's one-time token back, and a submit without it
+    is refused."""
+    hidden = f"<input type='hidden' name='token' value='{html.escape(token)}'>" if token else ""
+    return f"<form method='post' action='/submit'>{hidden}"
+
+
 # ---------------------------------------------------------------------------
-def render_onboarding(profile, consent=None):
+def render_onboarding(profile, consent=None, token=None):
     ident = profile.get("identity", {}) or {}
     prefs = profile.get("preferences", {}) or {}
     # What was already allowed and entered opens pre-filled, so a re-submit to change one
@@ -210,7 +219,7 @@ def render_onboarding(profile, consent=None):
       <p class='lede'>花一分钟。这些只用来让往后的每一次陪伴更贴你，全部留在这台机器上。</p>
       <span class='seal-line'>{_lock_svg()} 本地保存 · 随时可删</span>
     </header>
-    <form method='post' action='/submit'>
+    {_form_open(token)}
 
       <section class='card'>
         {eyebrow('称呼与语气', 'wood')}
@@ -486,7 +495,7 @@ LIKERT = [(0, "很不喜欢"), (1, "不喜欢"), (2, "一般"), (3, "喜欢"), (
 TYPE_ZH = {"R": "动手", "I": "钻研", "A": "创造", "S": "助人", "E": "影响", "C": "条理"}
 
 
-def render_career(profile):
+def render_career(profile, token=None):
     data = json.load(open(ITEMS_PATH, encoding="utf-8"))
     items = data["interest_items"]
     ctx = (profile.get("context", {}) or {}).get("career", "")
@@ -518,7 +527,7 @@ def render_career(profile):
       <p class='lede'>这是一个基于 Holland/RIASEC 的<b>兴趣小测</b>，不是正式量表。按你会<b>“喜欢”</b>来选，
         不是“擅长”或“应该”。答完我用真实职业库算契合度——只给低/中/高，不给假百分比。</p>
     </header>
-    <form method='post' action='/submit'>
+    {_form_open(token)}
       <section class='card'>
         {eyebrow('兴趣 · 21 题', 'wood')}
         <p class='hint'>每题选一个：0 很不喜欢 → 4 很喜欢。</p>
@@ -591,6 +600,15 @@ class Handler(BaseHTTPRequestHandler):
     home = None
     form_type = "onboarding"
     done = threading.Event()
+    # While a form is open, any page in the browser can send a request to 127.0.0.1, and this
+    # server shows and writes private data. Only its own link gets an answer: the host it bound,
+    # the one-time token it printed, and on a submit its own origin. One submission is saved
+    # unless --keep-alive asked for more.
+    token = None
+    port = None
+    keep_alive = False
+    accepted = False
+    lock = threading.Lock()
 
     def _send(self, code, body, ctype="text/html; charset=utf-8"):
         b = body.encode("utf-8")
@@ -603,12 +621,24 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, *a):
         pass
 
+    def _own_host(self):
+        # a page on another name that resolves to 127.0.0.1 still sends that name as its Host
+        return self.headers.get("Host", "") in (f"127.0.0.1:{self.port}", f"localhost:{self.port}")
+
+    def _own_token(self, given):
+        return bool(self.token and given) and hmac.compare_digest(given.encode(), self.token.encode())
+
     def do_GET(self):
-        if urlparse(self.path).path not in ("/", ""):
+        url = urlparse(self.path)
+        if url.path not in ("/", ""):
             self._send(404, page("404", "<p>Not found</p>")); return
+        # the page opens pre-filled with what is stored, birth data included
+        if not self._own_host() or not self._own_token(parse_qs(url.query).get("token", [""])[0]):
+            self._send(403, page("打不开", "<p>这个链接不完整。请用对话里给你的那条完整链接打开，"
+                                          "就是末尾带 token 的那条。</p>")); return
         prof, consent = _current_state(self.home)
-        html_out = (render_career(prof) if self.form_type == "career"
-                    else render_onboarding(prof, consent))
+        html_out = (render_career(prof, self.token) if self.form_type == "career"
+                    else render_onboarding(prof, consent, self.token))
         self._send(200, html_out)
 
     def do_POST(self):
@@ -616,17 +646,29 @@ class Handler(BaseHTTPRequestHandler):
             self._send(404, page("404", "<p>Not found</p>")); return
         length = int(self.headers.get("Content-Length", 0))
         form = parse_qs(self.rfile.read(length).decode("utf-8"))
-        try:
-            if self.form_type == "career":
-                summary, msg = write_career(self.home, form)
-            else:
-                summary, msg = write_onboarding(self.home, form)
-            print("SUBMITTED " + json.dumps(summary, ensure_ascii=False), flush=True)
-            self._send(200, success_page(msg))
-            Handler.done.set()
-        except Exception as e:  # pragma: no cover
-            self._send(500, page("出错了", f"<p>保存时出错：{html.escape(str(e))}。"
-                                 f"可以回到对话，用聊天方式建档。</p>"))
+        origin = self.headers.get("Origin")
+        if (not self._own_host()
+                or (origin is not None and origin not in (f"http://127.0.0.1:{self.port}",
+                                                          f"http://localhost:{self.port}"))
+                or not self._own_token((form.pop("token", None) or [""])[0])):
+            self._send(403, page("没有保存", "<p>这次提交不是从这个表单页面发出的，所以什么都没有存。"
+                                            "请回到对话，用给你的那条链接重新打开。</p>")); return
+        with Handler.lock:
+            if Handler.accepted and not Handler.keep_alive:
+                self._send(409, page("已经提交过了", "<p>这份表单已经保存过一次，这次提交没有再存。"
+                                                   "想改什么，回到对话里说一声。</p>")); return
+            try:
+                if self.form_type == "career":
+                    summary, msg = write_career(self.home, form)
+                else:
+                    summary, msg = write_onboarding(self.home, form)
+                Handler.accepted = True
+                print("SUBMITTED " + json.dumps(summary, ensure_ascii=False), flush=True)
+                self._send(200, success_page(msg))
+                Handler.done.set()
+            except Exception as e:  # pragma: no cover
+                self._send(500, page("出错了", f"<p>保存时出错：{html.escape(str(e))}。"
+                                     f"可以回到对话，用聊天方式建档。</p>"))
 
 
 def _bind(port, tries=10):
@@ -661,7 +703,8 @@ def main():
                     help="exit if nothing is submitted within N seconds (default 900). "
                          "0 = wait forever (you must kill it yourself).")
     ap.add_argument("--keep-alive", action="store_true",
-                    help="stay up after a submit instead of shutting down")
+                    help="stay up after a submit, and keep saving submissions, instead of "
+                         "shutting down after the first")
     args = ap.parse_args()
 
     home = os.path.abspath(args.home or os.environ.get("COMPANION_HOME")
@@ -670,8 +713,11 @@ def main():
     Handler.home = home
     Handler.form_type = args.form
 
+    Handler.token = secrets.token_urlsafe(24)
+    Handler.keep_alive = args.keep_alive
     srv, port = _bind(args.port)
-    url = f"http://127.0.0.1:{port}/"
+    Handler.port = port
+    url = f"http://127.0.0.1:{port}/?token={Handler.token}"
     print(f"SERVING {url} (form={args.form}, home={home}, "
           f"auto-exit={'on submit' if not args.keep_alive else 'never'}"
           f"{f', timeout={args.timeout}s' if args.timeout else ''})", flush=True)

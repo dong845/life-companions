@@ -29,7 +29,7 @@ python3 "$D/scripts/form_server.py" --form onboarding &
 # career assessment:
 python3 "$D/scripts/form_server.py" --form career &
 ```
-It prints `SERVING http://127.0.0.1:8760/ …` and opens the browser. On submit it
+It prints `SERVING http://127.0.0.1:8760/?token=… …` and opens the browser. On submit it
 prints `SUBMITTED {...}`, writes the data, then **stops itself** and prints `DONE`.
 
 **Read the `todo` list in that `SUBMITTED` payload.** A form can only collect what it
@@ -37,16 +37,24 @@ asked; `todo` names what it could *not* finish — an unresolved timezone, birth
 coordinates still null (so no Ascendant/houses), a missing gender (so no 大运 direction).
 Finish those in chat before the reading, or you'll hit the hole later and the person
 will have to be asked twice.
-Give the user the URL too, in case the browser didn't auto-open — and read the port
-from the SERVING line rather than assuming 8760: if that port is busy it walks forward
-to the next free one.
+Give the user the URL too, in case the browser didn't auto-open, and give **the whole URL from
+the SERVING line, token included**: the page opens only for that link, and a bare
+`http://127.0.0.1:8760/` shows 打不开. Read the port from that line as well rather than assuming
+8760: if that port is busy it walks forward to the next free one.
+
+**It answers only its own page.** While a form is open, any page in the browser can send a
+request to 127.0.0.1, and this page shows and writes private data. So the page opens only with
+the one-time token from the SERVING link, under the host the server bound, and a submit needs
+the same token plus, when the browser sends one, the page's own origin. Anything else gets a 403
+and nothing is written. Once one submission is saved, another gets a 409 and is not.
 
 **It cleans up after itself**, which matters because no harness but Claude Code
 reliably lets you kill a background job on a later turn:
 - stops on submit (`DONE`),
 - stops after `--timeout` seconds with nothing submitted (default 900; exit code 3,
   message `TIMEOUT`) — then just ask if they'd rather do it in chat,
-- `--keep-alive` opts out if you really want it to persist,
+- `--keep-alive` opts out if you really want it to persist; it then keeps saving submissions,
+  each of which still needs the token,
 - `--no-open` skips the browser launch (headless / remote sessions).
 
 ## Knowing they're done

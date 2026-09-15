@@ -929,6 +929,109 @@ class TestTimezoneResolution(unittest.TestCase):
             self.assertIn(expect, self.resolve(q), q)
 
 
+class TestTheFormOnlyTakesItsOwnPage(unittest.TestCase):
+    """While a form was open, anything that could reach 127.0.0.1 could post to it: the server
+    checked the path and nothing else, then wrote what arrived into the profile and the consent
+    ledger. It now answers only the link it printed, carrying that link's one-time token, under
+    its own host and origin, and it takes one submission."""
+
+    FIELDS = {"name": "Mallory", "locale": "en", "region": "other", "city": "London",
+              "tone": "concise", "birth_consent": "on", "birth_date": "1993-04-12"}
+
+    def _serve(self, port):
+        import subprocess, urllib.parse
+        home = tempfile.mkdtemp()
+        run("companion.py", "init", home=home)
+        env = dict(os.environ, COMPANION_HOME=home, LIFE_COMPANION_NO_AUTOINSTALL="1")
+        srv = subprocess.Popen(
+            [sys.executable, os.path.join(SCRIPTS, "form_server.py"), "--form", "onboarding",
+             "--no-open", "--port", str(port), "--timeout", "25"],
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, env=env)
+        self.addCleanup(srv.stdout.close)
+        self.addCleanup(srv.wait)
+        self.addCleanup(srv.kill)
+        url = next((l.split()[1] for l in iter(srv.stdout.readline, "") if l.startswith("SERVING ")), None)
+        self.assertIsNotNone(url, "the server never printed its SERVING line")
+        parts = urllib.parse.urlsplit(url)
+        base = f"{parts.scheme}://{parts.netloc}"
+        self._wait(base + "/")
+        return home, base, url, urllib.parse.parse_qs(parts.query).get("token", [""])[0]
+
+    @staticmethod
+    def _request(url, fields=None, headers=None):
+        import urllib.request, urllib.error, urllib.parse
+        data = urllib.parse.urlencode(fields).encode() if fields is not None else None
+        try:
+            with urllib.request.urlopen(urllib.request.Request(url, data=data, headers=headers or {}),
+                                        timeout=5) as r:
+                return r.status, r.read().decode("utf-8", "replace")
+        except urllib.error.HTTPError as e:
+            return e.code, e.read().decode("utf-8", "replace")
+
+    def _wait(self, url):
+        import time, urllib.error
+        for _ in range(50):
+            try:
+                self._request(url)
+                return
+            except (urllib.error.URLError, OSError):
+                time.sleep(0.1)
+        self.fail("the form server never answered")
+
+    @staticmethod
+    def _files(home):
+        out = {}
+        for root, _dirs, names in os.walk(home):
+            for n in names:
+                with open(os.path.join(root, n), "rb") as f:
+                    out[os.path.relpath(os.path.join(root, n), home)] = f.read()
+        return out
+
+    def test_the_printed_link_carries_the_token_the_page_needs(self):
+        _home, base, url, token = self._serve(8851)
+        self.assertGreaterEqual(len(token), 16, url)
+        self.assertEqual(self._request(base + "/")[0], 403)
+        self.assertEqual(self._request(base + "/?token=" + "x" * len(token))[0], 403)
+        code, body = self._request(url)
+        self.assertEqual(code, 200)
+        form = re.search(r"<form\b.*?</form>", body, re.S)  # a browser posts only what is inside it
+        self.assertIsNotNone(form)
+        self.assertIn(f"<input type='hidden' name='token' value='{token}'>", form.group(0))
+
+    def test_a_post_without_the_token_writes_nothing(self):
+        home, base, _url, _token = self._serve(8852)
+        before = self._files(home)
+        self.assertEqual(self._request(base + "/submit", self.FIELDS)[0], 403)
+        self.assertEqual(self._request(base + "/submit", dict(self.FIELDS, token="x" * 32))[0], 403)
+        self.assertEqual(self._files(home), before)
+
+    def test_a_post_from_another_origin_writes_nothing(self):
+        home, base, _url, token = self._serve(8853)
+        before = self._files(home)
+        for origin in ("http://evil.example", "null"):
+            code, _ = self._request(base + "/submit", dict(self.FIELDS, token=token), {"Origin": origin})
+            self.assertEqual(code, 403, origin)
+        self.assertEqual(self._files(home), before)
+
+    def test_a_request_under_another_host_name_is_refused(self):
+        # DNS rebinding: a page on a name that resolves to 127.0.0.1 still sends its own Host
+        home, base, url, token = self._serve(8854)
+        host = {"Host": "rebind.example:" + base.rsplit(":", 1)[1]}
+        before = self._files(home)
+        self.assertEqual(self._request(url, headers=host)[0], 403)
+        self.assertEqual(self._request(base + "/submit", dict(self.FIELDS, token=token), host)[0], 403)
+        self.assertEqual(self._files(home), before)
+
+    def test_it_takes_one_submission(self):
+        home, base, _url, token = self._serve(8855)
+        own = {"Origin": base}
+        self.assertEqual(self._request(base + "/submit", dict(self.FIELDS, name="First", token=token), own)[0], 200)
+        self.assertEqual(self._request(base + "/submit", dict(self.FIELDS, name="Second", token=token), own)[0], 409)
+        import yaml
+        with open(os.path.join(home, "profile.yaml"), encoding="utf-8") as f:
+            self.assertEqual(yaml.safe_load(f)["identity"]["name"], "First")
+
+
 class TestOnboardingForm(unittest.TestCase):
     """The form is the PREFERRED onboarding path, so what it writes is the profile
     most people get. It used to hard-code two countries and drop everyone else's city."""
@@ -943,15 +1046,19 @@ class TestOnboardingForm(unittest.TestCase):
              "--no-open", "--port", str(port), "--timeout", "25"],
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, env=env)
         try:
+            # the page answers only the link the server printed, token included
+            url = next(l.split()[1] for l in iter(srv.stdout.readline, "") if l.startswith("SERVING "))
+            parts = urllib.parse.urlsplit(url)
+            token = urllib.parse.parse_qs(parts.query).get("token", [""])[0]
             for _ in range(50):
                 try:
-                    urllib.request.urlopen(f"http://127.0.0.1:{port}/", timeout=1).read()
+                    urllib.request.urlopen(url, timeout=1).read()
                     break
                 except Exception:
                     time.sleep(0.1)
             urllib.request.urlopen(
-                f"http://127.0.0.1:{port}/submit",
-                data=urllib.parse.urlencode(fields).encode()).read()
+                f"{parts.scheme}://{parts.netloc}/submit",
+                data=urllib.parse.urlencode(dict(fields, token=token)).encode()).read()
             out = srv.communicate(timeout=20)[0]
         finally:
             srv.kill()

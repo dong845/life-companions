@@ -4800,13 +4800,55 @@ class TestInterestFitComparesShapes(unittest.TestCase):
             self.cm.correlation_fit([0.1, 0.5, 0.9], [0.1, 0.5, 0.9, 0.2, 0.4, 0.6])
 
 
+class TestTheReadmesPointAtThingsThatExist(unittest.TestCase):
+    """The READMEs open with a hero image, a row of in-page links and a pointer to docs/internals.
+    A link to a heading that was renamed, or a relative path written from the wrong folder, still
+    renders and goes nowhere; travel-buddy shipped exactly that when its internals moved out."""
+
+    PAGES = ("README.md", "README.zh-CN.md", "docs/internals.md", "docs/internals.zh-CN.md")
+
+    @staticmethod
+    def _slug(heading):
+        # GitHub's anchor for a heading: tags dropped, lower case, punctuation dropped, spaces to hyphens
+        s = re.sub(r"<[^>]+>", "", heading).strip().lower()
+        return re.sub(r"[^\w\- ]", "", s).replace(" ", "-")
+
+    def _pages(self):
+        for rel in self.PAGES:
+            with open(os.path.join(SKILL, rel), encoding="utf-8") as f:
+                yield rel, re.sub(r"```.*?```", "", f.read(), flags=re.S)  # code blocks hold commands, not links
+
+    def test_every_in_page_link_has_a_target(self):
+        missing = []
+        for rel, text in self._pages():
+            targets = set(re.findall(r'<a id="([^"]+)"', text))
+            targets |= {self._slug(h) for h in re.findall(r"^#{1,6}\s+(.+?)\s*$", text, re.M)}
+            links = re.findall(r'href="#([^"]+)"', text) + re.findall(r"\]\(#([^)\s]+)\)", text)
+            missing += [f"{rel}: #{a}" for a in links if a not in targets]
+        self.assertEqual(missing, [])
+
+    def test_every_relative_link_and_image_exists(self):
+        missing, checked = [], 0
+        for rel, text in self._pages():
+            paths = re.findall(r'(?:href|src)="([^"#]+)', text) + re.findall(r"\]\(([^)#\s]+)", text)
+            for p in paths:
+                if re.match(r"[a-z]+:", p):
+                    continue
+                checked += 1
+                if not os.path.exists(os.path.normpath(os.path.join(SKILL, os.path.dirname(rel), p.split("?")[0]))):
+                    missing.append(f"{rel}: {p}")
+        self.assertGreater(checked, 4, "the pages carry the hero, LICENSE and each other; the parser lost them")
+        self.assertEqual(missing, [])
+
+
 class TestDocumentedCommandsMatchTheScripts(unittest.TestCase):
     """An agent that is not Claude runs the commands SKILL.md, AGENTS.md, the READMEs and
     references/ spell out, exactly as written. A flag renamed in a script but not in a doc, or a
     subcommand a doc invents, ends that run in an argparse error. Every documented command's
     script, subcommand and --flags are read back from the script's own --help."""
 
-    DOCS = ("SKILL.md", "AGENTS.md", "README.md", "README.zh-CN.md")
+    DOCS = ("SKILL.md", "AGENTS.md", "README.md", "README.zh-CN.md",
+            "docs/internals.md", "docs/internals.zh-CN.md")
     _help = {}
 
     @classmethod
